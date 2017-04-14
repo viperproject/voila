@@ -1,0 +1,5 @@
+syntax: glob
+.idea/
+project/project/
+project/target/
+target/
