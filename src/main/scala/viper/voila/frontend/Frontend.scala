@@ -4,9 +4,6 @@ import org.bitbucket.inkytonik.kiama.parsing.{Failure, Success}
 import org.bitbucket.inkytonik.kiama.util.{Messaging, PositionStore, StringSource}
 import org.bitbucket.inkytonik.kiama.util.Messaging.{message, Messages}
 
-/**
-  * Created by malte on 14-Apr-17.
-  */
 class Frontend extends PositionStore with Messaging {
   val syntaxAnalyser = new SyntaxAnalyser(positions)
 
@@ -17,8 +14,15 @@ class Frontend extends PositionStore with Messaging {
     positions.reset()
 
     syntaxAnalyser.parse(parser, StringSource(source)) match {
-      case Success(ast, _) =>
-        Right(ast)
+      case Success(ast, next) =>
+        if (next.atEnd)
+          Right(ast)
+        else
+          sys.error(
+            s"""Parser error!
+               |Parsed: $ast
+               |Next: $next
+             """.stripMargin)
       case f @ Failure(label, next) =>
         val pos = next.position
         positions.setStart(f, pos)

@@ -20,7 +20,8 @@ class ParserTests extends FunSuite with Matchers {
   private val `3` = PIntLit(BigInt(3))
   private val `true` = PTrueLit()
   private val `false` = PFalseLit()
-  private val `f` = PIdn(PIdnUse("f"))
+  private val `x` = PIdnUse("x")
+  private val `b` = PIdn(PIdnUse("b"))
   private val Emp = Vector.empty
 
   test("Parse: empty program") {
@@ -49,15 +50,11 @@ class ParserTests extends FunSuite with Matchers {
     frontend.parseExp("1 + 2 + 3") should matchPattern {
       case PAdd(PAdd(`1`, `2`), `3`) =>
     }
-
-    frontend.parseExp("f()()()") should matchPattern {
-      case PFuncApp(PFuncApp(PFuncApp(`f`, Emp), Emp), Emp) =>
-    }
   }
 
   test("Parser: right associativity") {
-    frontend.parseExp("-+!true") should matchPattern {
-      case PUnaryMinus(PUnaryPlus(PNot(`true`))) =>
+    frontend.parseExp("!!+1") should matchPattern {
+      case PNot(PNot(`1`)) =>
     }
   }
 
@@ -72,28 +69,32 @@ class ParserTests extends FunSuite with Matchers {
   }
 
   test("Parser: associativity and precedence") {
-    frontend.parseExp("-f()()-1") should matchPattern {
-      case PSub(PUnaryMinus(PFuncApp(PFuncApp(`f`, Emp), Emp)), `1`) =>
+    frontend.parseExp("-x()-1") should matchPattern {
+      case PSub(PSub(`0`, PFuncApp(`x`, Emp)), `1`) =>
     }
   }
 
   test("Parser: conditionals") {
-    frontend.parseExp("f ? true : f ? false : 1 == 2") should matchPattern {
-      case PConditional(`f`, `true`, PConditional(`f`, `false`, PEquals(`1`, `2`))) =>
+    frontend.parseExp("b ? true : b ? false : 1 == 2") should matchPattern {
+      case PConditional(`b`, `true`, PConditional(`b`, `false`, PEquals(`1`, `2`))) =>
     }
 
-    frontend.parseExp("f ? f ? false : true : f ? true : false") should matchPattern {
-      case PConditional(`f`, PConditional(`f`, `false`, `true`), PConditional(`f`, `true`, `false`)) =>
+    frontend.parseExp("b ? b ? false : true : b ? true : false") should matchPattern {
+      case PConditional(`b`, PConditional(`b`, `false`, `true`), PConditional(`b`, `true`, `false`)) =>
     }
   }
 
   test("Parser: assignments") {
-    frontend.parseStmt("[x] := 0;") should matchPattern {
-      case PHeapWrite(PIdnUse("x"), `0`) =>
+    frontend.parseStmt("x := 0;") should matchPattern {
+      case PAssign(`x`, `0`) =>
     }
 
-    frontend.parseStmt("x := 0;") should matchPattern {
-      case PAssign(PIdnUse("x"), `0`) =>
+    frontend.parseStmt("[x] := 0;") should matchPattern {
+      case PHeapWrite(`x`, `0`) =>
+    }
+
+    frontend.parseStmt("v := [x];") should matchPattern {
+      case PHeapRead(`x`, PIdnUse("v")) =>
     }
   }
 }

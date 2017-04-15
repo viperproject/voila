@@ -18,7 +18,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   lazy val program: Parser[PProgram] =
-    (procedure*) ^^ PProgram
+    (procedure+) ^^ PProgram
 
   lazy val procedure: Parser[PProcedure] =
     typ ~
@@ -29,18 +29,17 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val formalArgs: Parser[Vector[PVarDecl]] =
     repsep(formalArg, ",")
 
-  lazy val formalArg: Parser[PVarDecl] = varDeclaration
+  lazy val formalArg: Parser[PVarDecl] =
+    typ ~ idndef ^^ { case tpe ~ id => PVarDecl(id, tpe) }
 
-  lazy val varDeclaration: Parser[PVarDecl] =
-    typ ~ idndef <~ ";" ^^ { case tpe ~ id => PVarDecl(id, tpe) }
-
-    lazy val statement: Parser[PStatement] =
-      "{" ~> (statement*) <~ "}" ^^ PBlock |
-      "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
-      "while" ~> ("(" ~> expression <~ ")") ~ statement ^^ PWhile |
-      ("[" ~> idnuse <~ "]") ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
-      idnuse ~ (":=" ~> "[" ~> idnuse <~ "]") <~ ";" ^^ PHeapRead |
-      idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
+  lazy val statement: Parser[PStatement] =
+    "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
+    "while" ~> ("(" ~> expression <~ ")") ~ statement ^^ PWhile |
+    ("[" ~> idnuse <~ "]") ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
+    "{" ~> (statement*) <~ "}" ^^ PBlock |
+//    typ ~ idndef <~ ";" ^^ { case tpe ~ id => PVarDecl(id, tpe) } |
+    idnuse ~ (":=" ~> "[" ~> idnuse <~ "]") <~ ";" ^^ { case lhs ~ rhs => PHeapRead(rhs, lhs) } |
+    idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
 
   /* Operator precedences and associativity taken from
    * http://en.cppreference.com/w/cpp/language/operator_precedence
@@ -62,6 +61,14 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val exp9: PackratParser[PExpression] = /* Left associative*/
     exp9 ~ ("==" ~> exp6) ^^ PEquals |
+    exp9 ~ ("!=" ~> exp6) ^^ { case lhs ~ rhs => PNot(PEquals(lhs, rhs)) } |
+    exp8
+
+  lazy val exp8: PackratParser[PExpression] = /* Left associative*/
+    exp8 ~ ("<" ~> exp6) ^^ PLess |
+    exp8 ~ ("<=" ~> exp6) ^^ PAtMost |
+    exp8 ~ (">" ~> exp6) ^^ PGreater |
+    exp8 ~ (">=" ~> exp6) ^^ PAtLeast |
     exp6
 
   lazy val exp6: PackratParser[PExpression] = /* Left associative */
@@ -70,19 +77,16 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     exp3
 
   lazy val exp3: PackratParser[PExpression] = /* Right associative */
-    "+" ~> exp3 ^^ PUnaryPlus |
-    "-" ~> exp3 ^^ PUnaryMinus |
+    "+" ~> exp3 |
+    "-" ~> exp3 ^^ (e => PSub(PIntLit(0), e)) |
     "!" ~> exp3 ^^ PNot |
-    exp2
-
-  lazy val exp2: PackratParser[PExpression] = /* Left associative */
-    exp2 ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PFuncApp(callee, args) } |
     exp0
 
   lazy val exp0: PackratParser[PExpression] =
     "true" ^^ (_ => PTrueLit()) |
     "false" ^^ (_ => PFalseLit()) |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
+    idnuse ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PFuncApp(callee, args) } |
     idnuse ^^ PIdn |
     "(" ~> expression <~ ")"
 
@@ -91,7 +95,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val typ: Parser[PType] =
     "void" ^^ (_ => PVoidType()) |
-    "int" ^^ (_ => PVoidType()) |
+    "int" ^^ (_ => PIntType()) |
     "bool" ^^ (_ => PBoolType())
 
   lazy val idndef: Parser[PIdnDef] =
