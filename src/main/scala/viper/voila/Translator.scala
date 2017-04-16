@@ -13,17 +13,23 @@ trait Translator[F, T] {
   def translate(source: F): T
 }
 
-class PProgramToViperTranslator() extends Translator[PProgram, vpr.Program] {
-  val returnVarName = "ret"
-  val heapFieldName = "$h"
+class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
+    extends Translator[VoilaTree, vpr.Program] {
 
-  def translate(program: PProgram): vpr.Program = {
+  val returnVarName = "ret"
+
+  val heapAccessTranslator = new HeapAccessTranslatorComponent(this)
+
+  def translate(tree: VoilaTree): vpr.Program = {
+    val fields = heapAccessTranslator.heapLocations(tree)
+    val methods = tree.root.procedures map translate
+
     vpr.Program(
       domains = Nil,
-      fields = Nil,
+      fields = fields,
       functions = Nil,
       predicates = Nil,
-      methods = program.procedures map translate)()
+      methods = methods)()
   }
 
   def translate(procedure: PProcedure): vpr.Method = {
@@ -39,9 +45,12 @@ class PProgramToViperTranslator() extends Translator[PProgram, vpr.Program] {
       formalReturns = formalReturns,
       _pres = Nil,
       _posts = Nil,
-      _locals = Nil,
+      _locals = procedure.locals map translate,
       _body = vpr.Seqn(procedure.body map translate)())()
   }
+
+  def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
+    vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
 
   def translate(statement: PStatement): vpr.Stmt = statement match {
     case PBlock(stmts) =>
@@ -50,20 +59,13 @@ class PProgramToViperTranslator() extends Translator[PProgram, vpr.Program] {
       vpr.If(translate(cond), translate(thn), translate(els))()
     case PWhile(cond, body) =>
       vpr.While(translate(cond), Nil, Nil, translate(body))()
-    case PAssign(id, rhs) =>
+    case PAssign(lhs, rhs) =>
       /* TODO: Use correct type */
-      vpr.LocalVarAssign(vpr.LocalVar(id.name)(typ = vpr.Int), translate(rhs))()
-    case PHeapRead(id, lhs) =>
-      /* TODO: Use correct type */
-      val rcvr = vpr.LocalVar(id.name)(typ = vpr.Int)
-      val fld = vpr.Field(heapFieldName, typ = vpr.Int)()
-      val lv = vpr.LocalVar(lhs.name)(typ = vpr.Int)
-      vpr.LocalVarAssign(lv, vpr.FieldAccess(rcvr, fld)())()
-    case PHeapWrite(id, rhs) =>
-      /* TODO: Use correct type */
-      val rcvr = vpr.LocalVar(id.name)(typ = vpr.Int)
-      val fld = vpr.Field(heapFieldName, typ = vpr.Int)()
-      vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translate(rhs))()
+      vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
+    case read: PHeapRead =>
+      heapAccessTranslator.translate(read)
+    case write: PHeapWrite =>
+      heapAccessTranslator.translate(write)
   }
 
   def translate(expression: PExpression): vpr.Exp = expression match {
@@ -85,17 +87,61 @@ class PProgramToViperTranslator() extends Translator[PProgram, vpr.Program] {
       /* TODO: Use correct type */
       /* TODO: Use correct formal args  */
       vpr.FuncApp(id.name, args map translate)(vpr.NoPosition, vpr.NoInfo, typ = vpr.Int, formalArgs = Nil, vpr.NoTrafos)
-    case PIdn(id) =>
+    case PIdnExp(id) =>
       /* TODO: Use correct type */
       vpr.LocalVar(id.name)(typ = vpr.Int)
   }
 
-  def translate(declaration: PVarDecl): vpr.LocalVarDecl =
+  def translate(declaration: PLocalVariableDecl): vpr.LocalVarDecl =
     vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
 
   def translateNonVoid(typ: PType): vpr.Type = typ match {
     case PIntType() => vpr.Int
     case PBoolType() => vpr.Bool
-    case PVoidType() => sys.error("Cannot translate type 'void'")
+    case PRefType(_) => vpr.Ref
+    case unsupported@(_: PVoidType | _: PUnknownType) =>
+      sys.error(s"Cannot translate type '$unsupported'")
+  }
+}
+
+class HeapAccessTranslatorComponent(translator: PProgramToViperTranslator) {
+  private val semanticAnalyser = translator.semanticAnalyser
+
+  private def heapLocationAsField(typ: PType): vpr.Field =
+    vpr.Field(s"$$h_$typ", translator.translateNonVoid(typ))()
+
+  private def referencedType(id: PIdnUse): PType = {
+    val entity = semanticAnalyser.entity(id).asInstanceOf[WelldefinedEntity]
+    val decl = entity.declaration.asInstanceOf[PTypedDeclaration]
+    val typ = decl.typ.asInstanceOf[PRefType]
+
+    typ.referencedType
+  }
+
+  def heapLocations(tree: VoilaTree): Vector[vpr.Field] = {
+    tree.nodes.collect {
+      case access: PHeapAccess => heapLocationAsField(referencedType(access.location))
+    }.distinct
+  }
+
+  def translate(read: PHeapRead): vpr.Stmt = {
+    val voilaType = referencedType(read.location)
+    val viperType = translator.translateNonVoid(voilaType)
+
+    val rcvr = vpr.LocalVar(read.location.name)(typ = vpr.Ref)
+    val fld = heapLocationAsField(voilaType)
+    val lv = vpr.LocalVar(read.lhs.name)(typ = viperType)
+
+    vpr.LocalVarAssign(lv, vpr.FieldAccess(rcvr, fld)())()
+  }
+
+  def translate(write: PHeapWrite): vpr.Stmt = {
+    val voilaType = referencedType(write.location)
+    val viperType = translator.translateNonVoid(voilaType)
+
+    val rcvr = vpr.LocalVar(write.location.name)(typ = vpr.Ref)
+    val fld = heapLocationAsField(voilaType)
+
+    vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translator.translate(write.rhs))()
   }
 }

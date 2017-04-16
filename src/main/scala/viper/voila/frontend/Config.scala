@@ -6,11 +6,14 @@
 
 package viper.voila.frontend
 
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.StrictLogging
 import org.rogach.scallop.{Scallop, ScallopConf, ScallopOption, exceptions}
 import viper.voila.VoilaConstants
 
-class Config(arguments: Seq[String], logger: Logger) extends ScallopConf(arguments) {
+class Config(arguments: Seq[String])
+    extends ScallopConf(arguments)
+       with StrictLogging {
+
   version(VoilaConstants.versionMessage)
 
   banner(s"""Usage: ${VoilaConstants.toolName} [OPTION]

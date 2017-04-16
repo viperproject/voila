@@ -10,7 +10,7 @@ import java.lang.reflect.Constructor
 import org.bitbucket.inkytonik.kiama.output.PrettyExpression
 import viper.silver.ast.utility.Rewriter.Rewritable
 
-sealed abstract class PAstNode extends Rewritable {
+sealed abstract class PAstNode extends Rewritable with Product {
   private val constructor: Constructor[_] = this.getClass.getConstructors.head
 
   def duplicate(children: Seq[AnyRef]): Rewritable = {
@@ -39,17 +39,23 @@ sealed trait PDeclaration extends PAstNode {
   def id: PIdnDef
 }
 
-case class PVarDecl(id: PIdnDef, typ: PType) extends PDeclaration
+sealed trait PTypedDeclaration extends PDeclaration {
+  def typ: PType
+}
+
+case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
+case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 
 /*
  * Members
  */
 
 case class PProcedure(id: PIdnDef,
-                      args: Vector[PVarDecl],
+                      args: Vector[PFormalArgumentDecl],
                       typ: PType,
+                      locals: Vector[PLocalVariableDecl],
                       body: Vector[PStatement])
-    extends PDeclaration
+    extends PTypedDeclaration
 
 /*
  * Statements
@@ -60,12 +66,17 @@ sealed trait PStatement extends PAstNode
 case class PBlock(stmts: Vector[PStatement]) extends PStatement
 case class PIf(cond: PExpression, thn: PStatement, els: PStatement) extends PStatement
 case class PWhile(cond: PExpression, body: PStatement) extends PStatement
-case class PAssign(id: PIdnUse, rhs: PExpression) extends PStatement
-case class PHeapRead(id: PIdnUse, lhs: PIdnUse) extends PStatement
-case class PHeapWrite(id: PIdnUse, rhs: PExpression) extends PStatement
+case class PAssign(lhs: PIdnUse, rhs: PExpression) extends PStatement
+
+sealed trait PHeapAccess extends PStatement {
+  def location: PIdnUse
+}
+
+case class PHeapWrite(location: PIdnUse, rhs: PExpression) extends PHeapAccess
+case class PHeapRead(lhs: PIdnUse, location: PIdnUse) extends PHeapAccess
 
 /*
- *
+ * Expressions
  */
 
 sealed trait PExpression extends PAstNode with PrettyExpression
@@ -99,17 +110,9 @@ case class PAtLeast(left: PExpression, right: PExpression) extends PBinOp
 
 case class PAdd(left: PExpression, right: PExpression) extends PBinOp
 case class PSub(left: PExpression, right: PExpression) extends PBinOp
-//case class PUnaryMinus(operand: PExpression) extends PUnOp
-//case class PUnaryPlus(operand: PExpression) extends PUnOp
 
-case class PIdn(name: PIdnUse) extends PExpression
-
-sealed trait PApp extends PExpression {
-  def id: PIdnUse
-  def args: Vector[PExpression]
-}
-
-case class PFuncApp(id: PIdnUse, args: Vector[PExpression]) extends PApp
+case class PIdnExp(id: PIdnUse) extends PExpression
+case class PFuncApp(id: PIdnUse, args: Vector[PExpression]) extends PExpression with PCall
 
 /*
  * Types
@@ -117,14 +120,36 @@ case class PFuncApp(id: PIdnUse, args: Vector[PExpression]) extends PApp
 
 sealed trait PType extends PAstNode
 
-case class PVoidType() extends PType {
-  override def toString = "void"
-}
-
 case class PIntType() extends PType {
   override def toString = "int"
 }
 
 case class PBoolType() extends PType {
   override def toString = "bool"
+}
+
+case class PRefType(referencedType: PType) extends PType {
+  override def toString = s"$referencedType*"
+}
+
+case class PVoidType() extends PType {
+  override def toString = "void"
+}
+
+case class PUnknownType() extends PType {
+  override def toString = "<unknown>"
+}
+
+/*
+ * Miscellaneous
+ */
+
+sealed trait PCall extends PAstNode {
+  def id: PIdnUse
+  def args: Vector[PExpression]
+}
+
+object PCall {
+  def unapply(call: PCall): Option[(PIdnUse, Vector[PExpression])] =
+    Some((call.id, call.args))
 }

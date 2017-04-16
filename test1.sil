@@ -1,0 +1,8 @@
+field $h_int: Int
+
+method test(x: Ref)
+{
+  var v: Int
+  v := x.$h_int
+  x.$h_int := v + 1
+}

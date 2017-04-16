@@ -39,6 +39,7 @@ class ParserTests extends FunSuite with Matchers {
       PProcedure(PIdnDef("proc"),
                  Emp,
                  PVoidType(),
+                 Emp,
                  Emp)
 
     frontend.parse(src) should matchPattern {

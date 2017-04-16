@@ -11,6 +11,9 @@ import org.bitbucket.inkytonik.kiama.parsing.Parsers
 import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
+  override val whitespace: Parser[String] =
+    """(\s|(//.*\s*\n))*""".r
+
   val reservedWords = Set(
     "true", "false",
     "void", "int", "bool",
@@ -21,25 +24,27 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     (procedure+) ^^ PProgram
 
   lazy val procedure: Parser[PProcedure] =
-    typ ~
+    typeOrVoid ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
-    ("{" ~> (statement*) <~ "}") ^^ {
-      case tpe ~ id ~ args ~ body => PProcedure(id, args, tpe, body) }
+    ("{" ~> (varDeclStmt*))  ~ ((statement*) <~ "}") ^^ {
+      case tpe ~ id ~ args ~ locals ~ body => PProcedure(id, args, tpe, locals, body) }
 
-  lazy val formalArgs: Parser[Vector[PVarDecl]] =
+  lazy val formalArgs: Parser[Vector[PFormalArgumentDecl]] =
     repsep(formalArg, ",")
 
-  lazy val formalArg: Parser[PVarDecl] =
-    typ ~ idndef ^^ { case tpe ~ id => PVarDecl(id, tpe) }
+  lazy val formalArg: Parser[PFormalArgumentDecl] =
+    typ ~ idndef ^^ { case tpe ~ id => PFormalArgumentDecl(id, tpe) }
 
   lazy val statement: Parser[PStatement] =
     "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
     "while" ~> ("(" ~> expression <~ ")") ~ statement ^^ PWhile |
     ("[" ~> idnuse <~ "]") ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     "{" ~> (statement*) <~ "}" ^^ PBlock |
-//    typ ~ idndef <~ ";" ^^ { case tpe ~ id => PVarDecl(id, tpe) } |
-    idnuse ~ (":=" ~> "[" ~> idnuse <~ "]") <~ ";" ^^ { case lhs ~ rhs => PHeapRead(rhs, lhs) } |
+    idnuse ~ (":=" ~> "[" ~> idnuse <~ "]") <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
+
+  lazy val varDeclStmt: Parser[PLocalVariableDecl] =
+    typ ~ idndef <~ ";" ^^ { case tpe ~ id => PLocalVariableDecl(id, tpe) }
 
   /* Operator precedences and associativity taken from
    * http://en.cppreference.com/w/cpp/language/operator_precedence
@@ -87,15 +92,20 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "false" ^^ (_ => PFalseLit()) |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     idnuse ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PFuncApp(callee, args) } |
-    idnuse ^^ PIdn |
+    idnuse ^^ PIdnExp |
     "(" ~> expression <~ ")"
 
   lazy val expressionList: Parser[Vector[PExpression]] =
     repsep(expression, ",")
 
-  lazy val typ: Parser[PType] =
+  lazy val typeOrVoid: Parser[PType] =
     "void" ^^ (_ => PVoidType()) |
+    typ
+
+  lazy val typ: Parser[PType] =
+    "int*" ^^ (_ => PRefType(PIntType())) |
     "int" ^^ (_ => PIntType()) |
+    "bool*" ^^ (_ => PRefType(PBoolType())) |
     "bool" ^^ (_ => PBoolType())
 
   lazy val idndef: Parser[PIdnDef] =
@@ -103,9 +113,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val idnuse: Parser[PIdnUse] =
     identifier ^^ PIdnUse
-
-  override val whitespace: Parser[String] =
-    """(\s|\(\*(?:.|[\n\r])*?\*\))*""".r
 
   lazy val identifier: Parser[String] =
     "[a-zA-Z][a-zA-Z0-9]*".r into (s => {

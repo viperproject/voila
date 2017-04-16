@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import scala.util.{Left, Right}
 import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.io.FileUtils
-import viper.voila.frontend.{Config, Frontend}
+import viper.voila.frontend.{Config, Frontend, SemanticAnalyser, VoilaTree}
 import viper.silver.ast.pretty.FastPrettyPrinter
 
 object VoilaConstants {
@@ -22,35 +22,68 @@ object VoilaConstants {
   val versionMessage = s"${VoilaConstants.toolName} ${VoilaConstants.toolVersion} ${VoilaConstants.toolCopyright}"
 }
 
-object Voila extends App with StrictLogging {
-  val config = new Config(args, logger)
+object Voila extends StrictLogging {
+  def main(args: Array[String]) {
+    val config = new Config(args)
 
-  val inputFile = new File(config.inputFile())
-  val outputFile = new File(config.outputFile())
+    val inputFile = new File(config.inputFile())
+    val outputFile = new File(config.outputFile())
 
-  logger.info(VoilaConstants.versionMessage)
-  logger.debug(s"Reading source program from file ${config.inputFile()}")
+    logger.info(VoilaConstants.versionMessage)
 
-  val frontend = new Frontend()
+    if (!inputFile.isFile) exitWithError(s"${config.inputFile()} is not a file")
+    if (!inputFile.canRead) exitWithError(s"Cannot read from ${config.inputFile()}")
+    if (!outputFile.canWrite) exitWithError(s"Cannot write to ${config.outputFile()}")
 
-  frontend.parse(FileUtils.readFileToString(inputFile, UTF_8)) match {
-    case Left(messages) =>
-      logger.error(s"Parsing ${config.inputFile()} failed with ${messages.length} error(s):")
-      messages foreach (m => logger.error(s"  $m"))
-      sys.exit(1)
+    logger.debug(s"Reading source program from file ${config.inputFile()}")
 
-    case Right(voilaProgram) =>
-      val translator = new PProgramToViperTranslator()
-      val viperProgram = translator.translate(voilaProgram)
+    val frontend = new Frontend()
 
-      logger.debug(s"Writing generated program to file ${config.outputFile()}")
+    frontend.parse(FileUtils.readFileToString(inputFile, UTF_8)) match {
+      case Left(messages) =>
+        frontend.reportErrors(
+          s"Parsing ${config.inputFile()} failed with ${messages.length} error(s):",
+          messages)
+        //      logger.error(s"Parsing ${config.inputFile()} failed with ${messages.length} error(s):")
+        //      messages foreach (m => logger.error(s"  $m"))
+        sys.exit(1)
 
-      FileUtils.writeStringToFile(
-        outputFile,
-        FastPrettyPrinter.pretty(viperProgram),
-        UTF_8)
+      case Right(program) =>
+        /* TODO: Move semantic analysis to the frontend */
+
+        val tree = new VoilaTree(program)
+        val semanticAnalyser = new SemanticAnalyser(tree)
+        val messages = semanticAnalyser.errors
+
+        if (messages.nonEmpty) {
+          frontend.reportErrors(
+            s"Type-checking ${config.inputFile()} failed with ${messages.length} error(s):",
+            messages)
+          //        if (logger.underlying.isErrorEnabled) {
+          //          messages.sorted(frontend.messageOrdering)
+          //                  .foreach(m => logger.error(frontend.formatMessage(m)))
+          //        }
+          sys.exit(1)
+        }
+
+        val translator = new PProgramToViperTranslator(semanticAnalyser)
+        val viperProgram = translator.translate(tree)
+
+        logger.debug(s"Writing generated program to file ${config.outputFile()}")
+
+        FileUtils.writeStringToFile(
+          outputFile,
+          FastPrettyPrinter.pretty(viperProgram),
+          UTF_8)
+    }
+
+    logger.info("Done")
+    sys.exit(0)
   }
 
-  logger.info("Done")
-  sys.exit(0)
+  def exitWithError(message: String, exitCode: Int = 1): Unit = {
+    logger.error(message)
+
+    sys.exit(exitCode)
+  }
 }
