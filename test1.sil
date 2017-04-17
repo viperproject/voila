@@ -1,8 +1,14 @@
-field $h_int: Int
+predicate U(a: Ref, x: Ref) {
+  true
+}
 
-method test(x: Ref)
+predicate L(a: Ref, x: Ref) {
+  true
+}
+
+method unlock(a: Ref, s: Int, x: Ref)
+  requires L(a, x)
+  requires (s in Set(1))
+  ensures U(a, x)
 {
-  var v: Int
-  v := x.$h_int
-  x.$h_int := v + 1
 }

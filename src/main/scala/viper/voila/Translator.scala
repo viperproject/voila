@@ -16,41 +16,73 @@ trait Translator[F, T] {
 class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
     extends Translator[VoilaTree, vpr.Program] {
 
-  val returnVarName = "ret"
+  private val returnVarName = "ret"
+
+  private def intSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo, errT: vpr.ErrorTrafo =vpr.NoTrafos) =
+    vpr.FuncApp.apply("IntSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty, errT)
+
+  private def natSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo, errT: vpr.ErrorTrafo = vpr.NoTrafos) =
+    vpr.FuncApp("NatSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty, errT)
 
   val heapAccessTranslator = new HeapAccessTranslatorComponent(this)
 
   def translate(tree: VoilaTree): vpr.Program = {
     val fields = heapAccessTranslator.heapLocations(tree)
+    val predicates = tree.root.predicates map translate
     val methods = tree.root.procedures map translate
 
     vpr.Program(
       domains = Nil,
       fields = fields,
       functions = Nil,
-      predicates = Nil,
+      predicates = predicates,
       methods = methods)()
   }
 
+  def translate(member: PMember): vpr.Member =
+    member match {
+      case p: PPredicate => translate(p)
+      case p: PProcedure => translate(p)
+    }
+
+  def translate(predicate: PPredicate): vpr.Predicate = {
+    vpr.Predicate(
+      name = predicate.id.name,
+      formalArgs = predicate.formalArgs map translate,
+      _body = Some(translate(predicate.body)))()
+  }
+
   def translate(procedure: PProcedure): vpr.Method = {
-    val formalReturns: Seq[vpr.LocalVarDecl] =
+    val formalReturns =
       procedure.typ match {
         case PVoidType() => Nil
         case other => Seq(vpr.LocalVarDecl(returnVarName, translateNonVoid(procedure.typ))())
       }
 
+    val pres = (
+         procedure.pres.map(translate)
+      ++ procedure.inters.map(translate))
+
     vpr.Method(
       name = procedure.id.name,
-      formalArgs = procedure.args map translate,
+      formalArgs = procedure.formalArgs map translate,
       formalReturns = formalReturns,
-      _pres = Nil,
-      _posts = Nil,
+      _pres = pres,
+      _posts = procedure.posts map translate,
       _locals = procedure.locals map translate,
       _body = vpr.Seqn(procedure.body map translate)())()
   }
 
   def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
     vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
+
+  def translate(interference: InterferenceClause): vpr.AnySetContains = {
+    /* TODO: Use correct type */
+    val lv = vpr.LocalVar(interference.variable.name)(typ = vpr.Int)
+    val set = translate(interference.set)
+
+    vpr.AnySetContains(lv, set)()
+  }
 
   def translate(statement: PStatement): vpr.Stmt = statement match {
     case PBlock(stmts) =>
@@ -83,13 +115,22 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
     case PAdd(left, right) => vpr.Add(translate(left), translate(right))()
     case PSub(left, right) => vpr.Sub(translate(left), translate(right))()
     case PConditional(cond, thn, els) => vpr.CondExp(translate(cond), translate(thn), translate(els))()
-    case PFuncApp(id, args) =>
-      /* TODO: Use correct type */
-      /* TODO: Use correct formal args  */
-      vpr.FuncApp(id.name, args map translate)(vpr.NoPosition, vpr.NoInfo, typ = vpr.Int, formalArgs = Nil, vpr.NoTrafos)
+    case PCallExp(id, args) =>
+      semanticAnalyser.entity(id) match {
+        case PredicateEntity(decl) =>
+          vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+        case other =>
+          sys.error(s"Not yet supported: $other")
+      }
+//      /* TODO: Use correct type */
+//      /* TODO: Use correct formal args  */
+//      vpr.FuncApp(id.name, args map translate)(vpr.NoPosition, vpr.NoInfo, typ = vpr.Int, formalArgs = Nil, vpr.NoTrafos)
     case PIdnExp(id) =>
       /* TODO: Use correct type */
       vpr.LocalVar(id.name)(typ = vpr.Int)
+    case PExplicitSet(elements) => vpr.ExplicitSet(elements map translate)()
+    case PIntSet() => intSet()
+    case PNatSet() => natSet()
   }
 
   def translate(declaration: PLocalVariableDecl): vpr.LocalVarDecl =
@@ -99,6 +140,7 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
     case PIntType() => vpr.Int
     case PBoolType() => vpr.Bool
     case PRefType(_) => vpr.Ref
+    case PRegionIdType() => vpr.Ref
     case unsupported@(_: PVoidType | _: PUnknownType) =>
       sys.error(s"Cannot translate type '$unsupported'")
   }
@@ -111,7 +153,7 @@ class HeapAccessTranslatorComponent(translator: PProgramToViperTranslator) {
     vpr.Field(s"$$h_$typ", translator.translateNonVoid(typ))()
 
   private def referencedType(id: PIdnUse): PType = {
-    val entity = semanticAnalyser.entity(id).asInstanceOf[WelldefinedEntity]
+    val entity = semanticAnalyser.entity(id).asInstanceOf[RegularEntity]
     val decl = entity.declaration.asInstanceOf[PTypedDeclaration]
     val typ = decl.typ.asInstanceOf[PRefType]
 

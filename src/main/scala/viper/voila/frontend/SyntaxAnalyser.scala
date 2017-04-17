@@ -21,19 +21,44 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   lazy val program: Parser[PProgram] =
-    (procedure+) ^^ PProgram
+    ((predicate | procedure)+) ^^ (members => {
+      val predicates = members collect { case p: PPredicate => p }
+      val procedures = members collect { case p: PProcedure => p }
+
+      PProgram(predicates, procedures)
+    })
 
   lazy val procedure: Parser[PProcedure] =
     typeOrVoid ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
+    (("requires" ~> expression <~ ";")*) ~
+    (("ensures" ~> expression <~ ";")*) ~
+    (interference*) ~
     ("{" ~> (varDeclStmt*))  ~ ((statement*) <~ "}") ^^ {
-      case tpe ~ id ~ args ~ locals ~ body => PProcedure(id, args, tpe, locals, body) }
+      case tpe ~ id ~ args ~ pres ~ posts ~ inters ~ locals ~ body =>
+        PProcedure(id, args, tpe, pres, posts, inters, locals, body)
+    }
+
+  lazy val predicate: Parser[PPredicate] =
+    ("predicate" ~> idndef) ~
+    ("(" ~> formalArgs <~ ")") ~
+    ("{" ~> expression <~ "}") ^^ {
+      case id ~ args ~ body => PPredicate(id, args, body)
+    }
 
   lazy val formalArgs: Parser[Vector[PFormalArgumentDecl]] =
     repsep(formalArg, ",")
 
   lazy val formalArg: Parser[PFormalArgumentDecl] =
     typ ~ idndef ^^ { case tpe ~ id => PFormalArgumentDecl(id, tpe) }
+
+  lazy val interference: Parser[InterferenceClause] =
+    ("interference" ~> idnuse <~ "in") ~ setLiteral ~ ("on" ~> idnuse  <~ ";") ^^ InterferenceClause
+
+  lazy val setLiteral: Parser[PLiteral] =
+    "Set" ~> "(" ~> expressionList <~ ")" ^^ PExplicitSet |
+    "Int" ^^ (_ => PIntSet()) |
+    "Nat" ^^ (_=> PNatSet())
 
   lazy val statement: Parser[PStatement] =
     "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
@@ -91,7 +116,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "true" ^^ (_ => PTrueLit()) |
     "false" ^^ (_ => PFalseLit()) |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
-    idnuse ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PFuncApp(callee, args) } |
+    idnuse ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PCallExp(callee, args) } |
     idnuse ^^ PIdnExp |
     "(" ~> expression <~ ")"
 
@@ -106,7 +131,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "int*" ^^ (_ => PRefType(PIntType())) |
     "int" ^^ (_ => PIntType()) |
     "bool*" ^^ (_ => PRefType(PBoolType())) |
-    "bool" ^^ (_ => PBoolType())
+    "bool" ^^ (_ => PBoolType()) |
+    "id" ^^ (_ => PRegionIdType())
 
   lazy val idndef: Parser[PIdnDef] =
     identifier ^^ PIdnDef

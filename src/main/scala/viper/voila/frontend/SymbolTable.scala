@@ -13,13 +13,14 @@ import org.bitbucket.inkytonik.kiama.util.Entity
 
 class SymbolTable() extends Environments
 
-sealed abstract class WelldefinedEntity extends Entity with Product {
+sealed abstract class RegularEntity extends Entity with Product {
   def declaration: PDeclaration
 }
 
-case class ProcedureEntity(declaration: PProcedure) extends WelldefinedEntity
+case class ProcedureEntity(declaration: PProcedure) extends RegularEntity
+case class PredicateEntity(declaration: PPredicate) extends RegularEntity
 
-sealed trait VariableEntity extends WelldefinedEntity {
+sealed trait VariableEntity extends RegularEntity {
   def declaration: PTypedDeclaration
 }
 

@@ -1,0 +1,29 @@
+region Lock(id a, int* x, int v)
+  guards { duplicable G; }
+//  interpretations {
+//    0: x |-> 0;
+//    1: x |-> 1;
+//  }
+  interpretation {
+    x |-> v
+  }
+  actions {
+    G: 0 ~> Set(0, 1);
+    G: 1 ~> Set(1, 0);
+  }
+
+predicate U(id a, int* x) {
+  true // Lock(a, x) && Lock_AbstractState(a, x) == 0 && Lock_G(a)
+}
+
+predicate L(id a, int* x) {
+  true // Lock(a, x) && Lock_AbstractState(a, x) == 1 && Lock_G(a)
+}
+
+void unlock(id a, int s, int* x)
+  requires L(a, x);
+  ensures U(a, x);
+  interference s in Set(1) on a;
+{
+
+}

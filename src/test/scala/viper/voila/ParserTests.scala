@@ -71,7 +71,7 @@ class ParserTests extends FunSuite with Matchers {
 
   test("Parser: associativity and precedence") {
     frontend.parseExp("-x()-1") should matchPattern {
-      case PSub(PSub(`0`, PFuncApp(`x`, Emp)), `1`) =>
+      case PSub(PSub(`0`, PCallExp(`x`, Emp)), `1`) =>
     }
   }
 

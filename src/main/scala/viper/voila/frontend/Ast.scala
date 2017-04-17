@@ -18,7 +18,7 @@ sealed abstract class PAstNode extends Rewritable with Product {
   }
 }
 
-case class PProgram(procedures: Vector[PProcedure]) extends PAstNode
+case class PProgram(predicates: Vector[PPredicate], procedures: Vector[PProcedure]) extends PAstNode
 
 /*
  * Identifiers
@@ -50,12 +50,22 @@ case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
  * Members
  */
 
+sealed trait PMember extends PDeclaration
+
 case class PProcedure(id: PIdnDef,
-                      args: Vector[PFormalArgumentDecl],
+                      formalArgs: Vector[PFormalArgumentDecl],
                       typ: PType,
+                      pres: Vector[PExpression],
+                      posts: Vector[PExpression],
+                      inters: Vector[InterferenceClause],
                       locals: Vector[PLocalVariableDecl],
                       body: Vector[PStatement])
-    extends PTypedDeclaration
+    extends PMember with PTypedDeclaration
+
+case class PPredicate(id: PIdnDef,
+                      formalArgs: Vector[PFormalArgumentDecl],
+                      body: PExpression)
+    extends PMember
 
 /*
  * Statements
@@ -112,7 +122,11 @@ case class PAdd(left: PExpression, right: PExpression) extends PBinOp
 case class PSub(left: PExpression, right: PExpression) extends PBinOp
 
 case class PIdnExp(id: PIdnUse) extends PExpression
-case class PFuncApp(id: PIdnUse, args: Vector[PExpression]) extends PExpression with PCall
+case class PCallExp(id: PIdnUse, args: Vector[PExpression]) extends PExpression with PCall
+
+case class PExplicitSet(args: Vector[PExpression]) extends PLiteral
+case class PIntSet() extends PLiteral
+case class PNatSet() extends PLiteral
 
 /*
  * Types
@@ -132,6 +146,10 @@ case class PRefType(referencedType: PType) extends PType {
   override def toString = s"$referencedType*"
 }
 
+case class PRegionIdType() extends PType {
+  override def toString = "id"
+}
+
 case class PVoidType() extends PType {
   override def toString = "void"
 }
@@ -143,6 +161,8 @@ case class PUnknownType() extends PType {
 /*
  * Miscellaneous
  */
+
+case class InterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse) extends PAstNode
 
 sealed trait PCall extends PAstNode {
   def id: PIdnUse

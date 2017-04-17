@@ -50,11 +50,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
              lhs,
              s"Type error: expected a reference type, but found ${lhsDecl.typ}",
              !lhsDecl.typ.isInstanceOf[PRefType])
-//          ++
-//             message(
-//               rhs,
-//               s"Type error: expected ${referencedType(lhsDecl.typ)} but got ${typ(rhs)}",
-//               !isCompatible(typ(rhs), referencedType(lhsDecl.typ))))
         }
 
       case exp: PExpression => (
@@ -69,19 +64,30 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   case _: ProcedureEntity =>
                     message(id, "Cannot refer to procedures directly")
                 }
+
               case PCall(id, args) =>
                 checkUse(entity(id)) {
                   case ProcedureEntity(decl) =>
-                    message(
-                      id,
-                        s"Wrong number of arguments for '${decl.id.name}', got ${args.length} "
-                      + s"but expected ${decl.args.length}",
-                      decl.args.length != args.length)
+                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
+
+                  case PredicateEntity(decl) =>
+                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
+
                   case _ =>
                     message(id, s"Cannot call ${id.name}")
                 }
           })
     }
+
+  private def reportArgumentLengthMismatch(id: PIdnNode,
+                                           formalArgs: Vector[PFormalArgumentDecl],
+                                           args: Vector[PExpression]) = {
+    message(
+      id,
+        s"Wrong number of arguments for '${id.name}', got ${args.length} "
+      + s"but expected ${formalArgs.length}",
+      formalArgs.length != args.length)
+  }
 
   /**
     * Are two types compatible?  If either of them are unknown then we
@@ -103,6 +109,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) =>
         p match {
           case decl: PProcedure => ProcedureEntity(decl)
+          case decl: PPredicate => PredicateEntity(decl)
           case decl: PFormalArgumentDecl => ArgumentEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
           case _ => UnknownEntity()
@@ -118,7 +125,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       // At a scope-introducing node, get the final value of the
       // defining environment, so that all of the definitions of
       // that scope are present.
-      case tree.lastChild.pair(_: PProgram | _: PProcedure, c) =>
+      case tree.lastChild.pair(_: PProgram | _: PMember, c) =>
         defenv(c)
 
       // Otherwise, ask our parent so we work out way up to the
@@ -142,18 +149,22 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   def defenvin(in: PAstNode => Environment): PAstNode ==> Environment = {
     // At the root, get a new empty environment
     case program: PProgram =>
-      rootenv()
+      val topLevelBindings = (
+           program.predicates.map(p => p.id.name -> PredicateEntity(p))
+        ++ program.procedures.map(p => p.id.name -> ProcedureEntity(p)))
+
+      rootenv(topLevelBindings: _*)
 
     // At a nested scope region, create a new empty scope inside the outer
     // environment
-    case scope@(_: PProcedure) =>
+    case scope@(_: PMember) =>
       enter(in(scope))
   }
 
   def defenvout(out: PAstNode => Environment): PAstNode ==> Environment = {
     // When leaving a nested scope region, remove the innermost scope from
     // the environment
-    case scope@(_: PProcedure) =>
+    case scope@(_: PMember) =>
       leave(out(scope))
 
     // At a defining occurrence of an identifier, check to see if it's already
