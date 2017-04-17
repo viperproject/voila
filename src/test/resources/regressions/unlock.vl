@@ -1,4 +1,4 @@
-region Lock(id a, int* x, int v)
+region Lock(id a, int* x)
   guards { duplicable G; }
 //  interpretations {
 //    0: x |-> 0;
@@ -6,6 +6,9 @@ region Lock(id a, int* x, int v)
 //  }
   interpretation {
     x |-> v
+  }
+  abstraction {
+    [x]
   }
   actions {
     G: 0 ~> Set(0, 1);
