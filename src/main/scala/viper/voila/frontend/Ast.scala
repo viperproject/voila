@@ -6,17 +6,13 @@
 
 package viper.voila.frontend
 
-import java.lang.reflect.Constructor
 import org.bitbucket.inkytonik.kiama.output.PrettyExpression
-import viper.silver.ast.utility.Rewriter.Rewritable
 
-sealed abstract class PAstNode extends Rewritable with Product {
-  private val constructor: Constructor[_] = this.getClass.getConstructors.head
+/*
+ * Top-level nodes
+ */
 
-  def duplicate(children: Seq[AnyRef]): Rewritable = {
-    constructor.newInstance(children).asInstanceOf[Rewritable]
-  }
-}
+sealed abstract class PAstNode extends Product
 
 case class PProgram(predicates: Vector[PPredicate], procedures: Vector[PProcedure]) extends PAstNode
 

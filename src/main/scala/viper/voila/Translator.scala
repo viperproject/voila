@@ -18,11 +18,11 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
 
   private val returnVarName = "ret"
 
-  private def intSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo, errT: vpr.ErrorTrafo =vpr.NoTrafos) =
-    vpr.FuncApp.apply("IntSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty, errT)
+  private def intSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo) =
+    vpr.FuncApp.apply("IntSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty)
 
-  private def natSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo, errT: vpr.ErrorTrafo = vpr.NoTrafos) =
-    vpr.FuncApp("NatSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty, errT)
+  private def natSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo) =
+    vpr.FuncApp("NatSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty)
 
   val heapAccessTranslator = new HeapAccessTranslatorComponent(this)
 
@@ -118,7 +118,7 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
     case PCallExp(id, args) =>
       semanticAnalyser.entity(id) match {
         case PredicateEntity(decl) =>
-          vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+          vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo)
         case other =>
           sys.error(s"Not yet supported: $other")
       }

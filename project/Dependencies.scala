@@ -10,5 +10,5 @@ object Dependencies {
   lazy val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0"
   lazy val commonsIO = "commons-io" % "commons-io" % "2.5"
 
-  lazy val silverSrc = RootProject(new java.io.File("../transformations/silver"))
+  lazy val silverSrc = RootProject(new java.io.File("../silver"))
 }
