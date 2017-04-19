@@ -37,7 +37,6 @@ object Voila extends StrictLogging {
 
     if (!inputFile.isFile) exitWithError(s"${config.inputFile()} is not a file")
     if (!inputFile.canRead) exitWithError(s"Cannot read from ${config.inputFile()}")
-    if (!outputFile.canWrite) exitWithError(s"Cannot write to ${config.outputFile()}")
 
     logger.debug(s"Reading source program from file ${config.inputFile()}")
 
