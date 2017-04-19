@@ -7,7 +7,7 @@
 package viper.voila.frontend
 
 import com.typesafe.scalalogging.StrictLogging
-import org.rogach.scallop.{Scallop, ScallopConf, ScallopOption, exceptions}
+import org.rogach.scallop.{Scallop, ScallopConf, ScallopOption, exceptions, singleArgConverter}
 import viper.voila.VoilaConstants
 
 class Config(arguments: Seq[String])
@@ -16,20 +16,37 @@ class Config(arguments: Seq[String])
 
   version(VoilaConstants.versionMessage)
 
-  banner(s"""Usage: ${VoilaConstants.toolName} [OPTION]
-           |
-           |Options:
-           |""".stripMargin)
+  banner(s"""Usage: ${VoilaConstants.toolName} [OPTIONS] -i <input-file> -o <output-file>
+            |
+            |Options:
+            |""".stripMargin)
+
+  /*
+   * Command-line options
+   */
 
   val inputFile: ScallopOption[String] = opt[String](
     name = "inputFile",
     descr = "Voila program to verify is read from this file",
-    required = true)
+    required = true
+  )
 
   val outputFile: ScallopOption[String] = opt[String](
     name = "outputFile",
     descr = "Generated Viper program is written to this file",
-    required = true)
+    required = true
+  )
+
+  val logLevel: ScallopOption[String] = opt[String](
+    name = "logLevel",
+    descr = "One of the log levels ALL, TRACE, DEBUG, INFO, WARN, ERROR, OFF (default: OFF)",
+    default = Some("WARN"),
+    noshort = true
+  )(singleArgConverter(level => level.toUpperCase))
+
+  /*
+   * Exception handling
+   */
 
   override def onError(e: Throwable): Unit = {
     e match {
@@ -58,5 +75,6 @@ class Config(arguments: Seq[String])
     logger.info(forBuilder.help)
   }
 
+  /* Immediately finalise command-line parsing */
   verify()
 }

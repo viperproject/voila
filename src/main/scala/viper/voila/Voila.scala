@@ -8,9 +8,11 @@ package viper.voila
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
+import ch.qos.logback.classic.{Level, Logger}
 import scala.util.{Left, Right}
 import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.io.FileUtils
+import org.slf4j.LoggerFactory
 import viper.voila.frontend.{Config, Frontend, SemanticAnalyser, VoilaTree}
 import viper.silver.ast.pretty.FastPrettyPrinter
 
@@ -25,6 +27,8 @@ object VoilaConstants {
 object Voila extends StrictLogging {
   def main(args: Array[String]) {
     val config = new Config(args)
+
+    setLogLevelsFromConfig(config)
 
     val inputFile = new File(config.inputFile())
     val outputFile = new File(config.outputFile())
@@ -85,5 +89,10 @@ object Voila extends StrictLogging {
     logger.error(message)
 
     sys.exit(exitCode)
+  }
+
+  private def setLogLevelsFromConfig(config: Config) {
+    val logger = LoggerFactory.getLogger(this.getClass.getPackage.getName).asInstanceOf[Logger]
+    logger.setLevel(Level.toLevel(config.logLevel()))
   }
 }

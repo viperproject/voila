@@ -15,7 +15,7 @@ lazy val root =
       libraryDependencies += scalaTest % Test,
       libraryDependencies += kiama,
       libraryDependencies += scallop,
-//      libraryDependencies += logbackClassic,
+      libraryDependencies += logbackClassic,
       libraryDependencies += scalaLogging,
       libraryDependencies += commonsIO,
 
