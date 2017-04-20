@@ -23,15 +23,18 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case decl: PIdnDef if entity(decl) == MultipleEntity() =>
         message(decl, s"${decl.name} is declared more than once")
 
-      case decl: PIdnUse if entity(decl) == UnknownEntity() =>
-        message(decl, s"${decl.name} is not declared")
+      case use: PIdnUse if entity(use) == UnknownEntity() =>
+        message(use, s"${use.name} is not declared")
+
+      case exp: PExpression if typ(exp) == PUnknownType() =>
+        message(exp, s"$exp could not be typed")
 
       case PAssign(lhs, _) if !entity(lhs).isInstanceOf[LocalVariableEntity] =>
         message(lhs, s"Cannot assign to ${lhs.name}")
 
       case PHeapRead(lhs, rhs) =>
-        checkUse(entity(lhs)) { case VariableEntity(lhsDecl) =>
-          checkUse(entity(rhs)) { case VariableEntity(rhsDecl) => (
+        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
+          checkUse(entity(rhs)) { case TypedVariableEntity(rhsDecl) => (
                message(
                  rhs,
                  s"Type error: expected a reference type, but found ${rhsDecl.typ}",
@@ -45,7 +48,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         }
 
       case PHeapWrite(lhs, rhs) =>
-        checkUse(entity(lhs)) { case VariableEntity(lhsDecl) =>
+        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
            message(
              lhs,
              s"Type error: expected a reference type, but found ${lhsDecl.typ}",
@@ -110,8 +113,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         p match {
           case decl: PProcedure => ProcedureEntity(decl)
           case decl: PPredicate => PredicateEntity(decl)
+          case decl: PRegion => RegionEntity(decl)
+          case decl: PGuardDecl => GuardEntity(decl)
           case decl: PFormalArgumentDecl => ArgumentEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
+          case decl: PLogicalVariableDecl => LogicalVariableEntity(decl)
           case _ => UnknownEntity()
         }
     }
@@ -150,7 +156,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     // At the root, get a new empty environment
     case program: PProgram =>
       val topLevelBindings = (
-           program.predicates.map(p => p.id.name -> PredicateEntity(p))
+           program.regions.map(r => r.id.name -> RegionEntity(r))
+        ++ program.predicates.map(p => p.id.name -> PredicateEntity(p))
         ++ program.procedures.map(p => p.id.name -> ProcedureEntity(p)))
 
       rootenv(topLevelBindings: _*)
@@ -195,6 +202,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       // at the node. Return `UnknownEntity` if the identifier is
       // not defined.
       case n =>
+        println(s"Looking up $n")
         lookup(env(n), n.name, UnknownEntity())
     }
 
@@ -232,13 +240,17 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case PIdnExp(id) =>
         entity(id) match {
-          case VariableEntity(decl) => actualType(decl.typ)
+          case TypedVariableEntity(decl) => actualType(decl.typ)
           case _ => PUnknownType()
         }
 
       case _: PAdd | _: PSub => PIntType()
       case _: PAnd | _: POr | _: PNot => PBoolType()
       case _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
+
+      case _: PPointsTo => PBoolType()
+
+      case _: PSetExp => PSetType()
 
 //          case CallExp(_, i, _) =>
 //              entity(i) match {
@@ -266,13 +278,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case tree.parent(PHeapRead(id, _)) =>
         entity(id) match {
-          case VariableEntity(decl) => referencedType(decl.typ)
+          case TypedVariableEntity(decl) => referencedType(decl.typ)
           case _ => PUnknownType()
         }
 
       case tree.parent(PHeapWrite(id, _)) =>
         entity(id) match {
-          case VariableEntity(decl) => referencedType(decl.typ)
+          case TypedVariableEntity(decl) => referencedType(decl.typ)
           case _ => PUnknownType()
         }
 

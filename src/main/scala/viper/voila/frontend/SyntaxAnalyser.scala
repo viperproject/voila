@@ -12,21 +12,50 @@ import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   override val whitespace: Parser[String] =
-    """(\s|(//.*\s*\n))*""".r
+    //"""(\s|(//.*\s*\n)|/\*.*\*/)*""".r
+    """(\s|(//.*\s*\n)|\(\*(?:.|[\n\r])*?\*\))*""".r
 
   val reservedWords = Set(
     "true", "false",
-    "void", "int", "bool",
+    "void", "int", "bool", "id", "Set",
+    "region", "guards", "duplicable", "interpretation", "abstraction", "actions",
+    "predicate",
+    "interference", "in", "on",
     "if", "else", "while"
   )
 
   lazy val program: Parser[PProgram] =
-    ((predicate | procedure)+) ^^ (members => {
+    ((region | predicate | procedure)+) ^^ (members => {
+      val region = members collect { case p: PRegion => p }
       val predicates = members collect { case p: PPredicate => p }
       val procedures = members collect { case p: PProcedure => p }
 
-      PProgram(predicates, procedures)
+      PProgram(region, predicates, procedures)
     })
+
+  lazy val region: Parser[PRegion] =
+    ("region" ~> idndef) ~
+    ("(" ~> formalArg) ~ ((("," ~> formalArgs)?) <~ ")") ~
+    ("guards" ~> "{" ~> (guard+) <~ "}") ~
+    ("interpretation" ~> "{" ~> expression <~ "}") ~
+    ("state" ~> "{" ~> expression <~ "}") ~
+    ("actions" ~> "{" ~> (action+) <~ "}") ^^ {
+      case id ~ regionId ~ optArgs ~ guards ~ interpretation ~ abstraction ~ actions =>
+        PRegion(
+          id,
+          regionId,
+          optArgs.getOrElse(Vector.empty),
+          guards,
+          interpretation,
+          abstraction,
+          actions)
+    }
+
+  lazy val guard: Parser[PGuardDecl] =
+    ("duplicable"?) ~ idndef <~ ";" ^^ { case optDup ~ id => PGuardDecl(id, optDup.isDefined) }
+
+  lazy val action: Parser[PAction] =
+    (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction
 
   lazy val procedure: Parser[PProcedure] =
     typeOrVoid ~
@@ -52,20 +81,15 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val formalArg: Parser[PFormalArgumentDecl] =
     typ ~ idndef ^^ { case tpe ~ id => PFormalArgumentDecl(id, tpe) }
 
-  lazy val interference: Parser[InterferenceClause] =
-    ("interference" ~> idnuse <~ "in") ~ setLiteral ~ ("on" ~> idnuse  <~ ";") ^^ InterferenceClause
-
-  lazy val setLiteral: Parser[PLiteral] =
-    "Set" ~> "(" ~> expressionList <~ ")" ^^ PExplicitSet |
-    "Int" ^^ (_ => PIntSet()) |
-    "Nat" ^^ (_=> PNatSet())
+  lazy val interference: Parser[PInterferenceClause] =
+    ("interference" ~> idnuse <~ "in") ~ setLiteral ~ ("on" ~> idnuse  <~ ";") ^^ PInterferenceClause
 
   lazy val statement: Parser[PStatement] =
     "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
     "while" ~> ("(" ~> expression <~ ")") ~ statement ^^ PWhile |
-    ("[" ~> idnuse <~ "]") ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
+    ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     "{" ~> (statement*) <~ "}" ^^ PBlock |
-    idnuse ~ (":=" ~> "[" ~> idnuse <~ "]") <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
+    idnuse ~ (":=" ~> "*" ~> idnuse) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
@@ -115,10 +139,18 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val exp0: PackratParser[PExpression] =
     "true" ^^ (_ => PTrueLit()) |
     "false" ^^ (_ => PFalseLit()) |
+    "?" ~> idndef ^^ PLogicalVariableDecl |
+    setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     idnuse ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PCallExp(callee, args) } |
+    (idnuse <~ "|->") ~ expression ^^ PPointsTo |
     idnuse ^^ PIdnExp |
     "(" ~> expression <~ ")"
+
+  lazy val setLiteral: Parser[PLiteral] =
+    "Set" ~> "(" ~> expressionList <~ ")" ^^ PExplicitSet |
+    "Int" ^^ (_ => PIntSet()) |
+    "Nat" ^^ (_=> PNatSet())
 
   lazy val expressionList: Parser[Vector[PExpression]] =
     repsep(expression, ",")

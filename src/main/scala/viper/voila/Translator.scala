@@ -14,8 +14,12 @@ trait Translator[F, T] {
 }
 
 class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
-    extends Translator[VoilaTree, vpr.Program] {
+    extends Translator[VoilaTree, vpr.Program]
+       with MainTranslatorComponent
+       with HeapAccessTranslatorComponent
+       with RegionTranslatorComponent
 
+trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   private val returnVarName = "ret"
 
   private def intSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo) =
@@ -24,23 +28,34 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
   private def natSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo) =
     vpr.FuncApp("NatSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty)
 
-  val heapAccessTranslator = new HeapAccessTranslatorComponent(this)
+//  val heapAccessTranslator = new HeapAccessTranslatorComponent(this)
+//  val regionTranslator = new RegionTranslatorComponent(this)
 
   def translate(tree: VoilaTree): vpr.Program = {
-    val fields = heapAccessTranslator.heapLocations(tree)
-    val predicates = tree.root.predicates map translate
-    val methods = tree.root.procedures map translate
+    val members: Vector[vpr.Member] = (
+         heapLocations(tree)
+      ++ (tree.root.regions flatMap translate)
+      ++ (tree.root.predicates map translate)
+      ++ (tree.root.procedures map translate)
+    )
+
+    val fields = members collect { case f: vpr.Field => f }
+    val predicates = members collect { case f: vpr.Predicate => f }
+    val functions = members collect { case f: vpr.Function => f }
+    val methods = members collect { case f: vpr.Method => f }
 
     vpr.Program(
       domains = Nil,
       fields = fields,
-      functions = Nil,
       predicates = predicates,
-      methods = methods)()
+      functions = functions,
+      methods = methods
+    )()
   }
 
   def translate(member: PMember): vpr.Member =
     member match {
+      case r: PRegion => translate(r)
       case p: PPredicate => translate(p)
       case p: PProcedure => translate(p)
     }
@@ -49,7 +64,8 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
     vpr.Predicate(
       name = predicate.id.name,
       formalArgs = predicate.formalArgs map translate,
-      _body = Some(translate(predicate.body)))()
+      _body = Some(translate(predicate.body))
+    )()
   }
 
   def translate(procedure: PProcedure): vpr.Method = {
@@ -61,7 +77,8 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
 
     val pres = (
          procedure.pres.map(translate)
-      ++ procedure.inters.map(translate))
+      ++ procedure.inters.map(translate)
+    )
 
     vpr.Method(
       name = procedure.id.name,
@@ -70,13 +87,14 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
       _pres = pres,
       _posts = procedure.posts map translate,
       _locals = procedure.locals map translate,
-      _body = vpr.Seqn(procedure.body map translate)())()
+      _body = vpr.Seqn(procedure.body map translate)()
+    )()
   }
 
   def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
     vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
 
-  def translate(interference: InterferenceClause): vpr.AnySetContains = {
+  def translate(interference: PInterferenceClause): vpr.AnySetContains = {
     /* TODO: Use correct type */
     val lv = vpr.LocalVar(interference.variable.name)(typ = vpr.Int)
     val set = translate(interference.set)
@@ -95,9 +113,9 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
       /* TODO: Use correct type */
       vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
     case read: PHeapRead =>
-      heapAccessTranslator.translate(read)
+      translate(read)
     case write: PHeapWrite =>
-      heapAccessTranslator.translate(write)
+      translate(write)
   }
 
   def translate(expression: PExpression): vpr.Exp = expression match {
@@ -131,6 +149,7 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
     case PExplicitSet(elements) => vpr.ExplicitSet(elements map translate)()
     case PIntSet() => intSet()
     case PNatSet() => natSet()
+    case pointsTo: PPointsTo => translate(pointsTo)
   }
 
   def translate(declaration: PLocalVariableDecl): vpr.LocalVarDecl =
@@ -146,11 +165,64 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
   }
 }
 
-class HeapAccessTranslatorComponent(translator: PProgramToViperTranslator) {
-  private val semanticAnalyser = translator.semanticAnalyser
+trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
+  def translate(region: PRegion): Vector[vpr.Member] = {
+    val formalRegionArg = translate(region.regionId)
+    val formalRegularArgs = region.formalArgs map translate
 
+    val regionStateType = translateNonVoid(semanticAnalyser.typ(region.state))
+    val formalStateArg = vpr.LocalVarDecl("$s", regionStateType)()
+
+    val regionPredicateName = region.id.name
+
+    /* predicate region(id, args) { interpretation } */
+    val regionPredicate =
+      vpr.Predicate(
+        name = regionPredicateName,
+        formalArgs = formalRegionArg +: formalRegularArgs,
+        _body = Some(translate(region.interpretation))
+      )()
+
+    /* acc(region(id, args)) */
+    val regionPredicateAccess =
+      vpr.PredicateAccessPredicate(
+        loc = vpr.PredicateAccess(
+                  args = formalRegionArg.localVar +: formalRegularArgs.map(_.localVar),
+                  predicateName = regionPredicateName
+              )(pos = vpr.NoPosition, info = vpr.NoInfo),
+        perm = vpr.FullPerm()()
+      )()
+
+    val stateFunctionBody =
+      vpr.Unfolding(
+        acc = regionPredicateAccess,
+        body = translate(region.state)
+      )()
+
+    /* function region_state(id, args)
+     *   requires region(id, args)
+     * { state }
+     */
+    val stateFunction =
+      vpr.Function(
+        name = s"${region.id.name}_state",
+        formalArgs = formalRegionArg +: formalRegularArgs,
+        typ = regionStateType,
+        _pres = Vector(regionPredicateAccess),
+        _posts = Vector.empty,
+        _body = Some(stateFunctionBody)
+      )()
+
+    Vector(
+      regionPredicate,
+      stateFunction
+    )
+  }
+}
+
+trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   private def heapLocationAsField(typ: PType): vpr.Field =
-    vpr.Field(s"$$h_$typ", translator.translateNonVoid(typ))()
+    vpr.Field(s"$$h_$typ", translateNonVoid(typ))()
 
   private def referencedType(id: PIdnUse): PType = {
     val entity = semanticAnalyser.entity(id).asInstanceOf[RegularEntity]
@@ -163,12 +235,13 @@ class HeapAccessTranslatorComponent(translator: PProgramToViperTranslator) {
   def heapLocations(tree: VoilaTree): Vector[vpr.Field] = {
     tree.nodes.collect {
       case access: PHeapAccess => heapLocationAsField(referencedType(access.location))
+      case pointsTo: PPointsTo => heapLocationAsField(referencedType(pointsTo.id))
     }.distinct
   }
 
   def translate(read: PHeapRead): vpr.Stmt = {
     val voilaType = referencedType(read.location)
-    val viperType = translator.translateNonVoid(voilaType)
+    val viperType = translateNonVoid(voilaType)
 
     val rcvr = vpr.LocalVar(read.location.name)(typ = vpr.Ref)
     val fld = heapLocationAsField(voilaType)
@@ -179,11 +252,21 @@ class HeapAccessTranslatorComponent(translator: PProgramToViperTranslator) {
 
   def translate(write: PHeapWrite): vpr.Stmt = {
     val voilaType = referencedType(write.location)
-    val viperType = translator.translateNonVoid(voilaType)
+    val viperType = translateNonVoid(voilaType)
 
     val rcvr = vpr.LocalVar(write.location.name)(typ = vpr.Ref)
     val fld = heapLocationAsField(voilaType)
 
-    vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translator.translate(write.rhs))()
+    vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translate(write.rhs))()
+  }
+
+  def translate(pointsTo: PPointsTo): vpr.Exp = {
+    val voilaType = referencedType(pointsTo.id)
+
+    val rcvr = vpr.LocalVar(pointsTo.id.name)(typ = vpr.Ref)
+    val fld = heapLocationAsField(voilaType)
+    val fldacc = vpr.FieldAccess(rcvr, fld)()
+
+    vpr.FieldAccessPredicate(fldacc, vpr.FullPerm()())()
   }
 }

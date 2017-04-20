@@ -14,7 +14,10 @@ import org.bitbucket.inkytonik.kiama.output.PrettyExpression
 
 sealed abstract class PAstNode extends Product
 
-case class PProgram(predicates: Vector[PPredicate], procedures: Vector[PProcedure]) extends PAstNode
+case class PProgram(regions: Vector[PRegion],
+                    predicates: Vector[PPredicate],
+                    procedures: Vector[PProcedure])
+    extends PAstNode
 
 /*
  * Identifiers
@@ -41,6 +44,8 @@ sealed trait PTypedDeclaration extends PDeclaration {
 
 case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
+case class PGuardDecl(id: PIdnDef, duplicable: Boolean) extends PDeclaration
+case class PLogicalVariableDecl(id: PIdnDef) extends PDeclaration with PExpression
 
 /*
  * Members
@@ -48,15 +53,30 @@ case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 
 sealed trait PMember extends PDeclaration
 
+case class PRegion(id: PIdnDef,
+                   regionId: PFormalArgumentDecl,
+                   formalArgs: Vector[PFormalArgumentDecl],
+                   guards: Vector[PGuardDecl],
+                   interpretation: PExpression,
+                   state: PExpression,
+                   action: Vector[PAction])
+    extends PMember
+
+
+case class PAction(guard: PIdnUse, from: PExpression, to: PExpression) extends PAstNode
+
 case class PProcedure(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
                       typ: PType,
                       pres: Vector[PExpression],
                       posts: Vector[PExpression],
-                      inters: Vector[InterferenceClause],
+                      inters: Vector[PInterferenceClause],
                       locals: Vector[PLocalVariableDecl],
                       body: Vector[PStatement])
     extends PMember with PTypedDeclaration
+
+case class PInterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse)
+    extends PAstNode
 
 case class PPredicate(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
@@ -120,9 +140,13 @@ case class PSub(left: PExpression, right: PExpression) extends PBinOp
 case class PIdnExp(id: PIdnUse) extends PExpression
 case class PCallExp(id: PIdnUse, args: Vector[PExpression]) extends PExpression with PCall
 
-case class PExplicitSet(args: Vector[PExpression]) extends PLiteral
-case class PIntSet() extends PLiteral
-case class PNatSet() extends PLiteral
+sealed trait PSetExp extends PExpression
+
+case class PExplicitSet(args: Vector[PExpression]) extends PSetExp with PLiteral
+case class PIntSet() extends PSetExp with PLiteral
+case class PNatSet() extends PSetExp with PLiteral
+
+case class PPointsTo(id: PIdnUse, value: PExpression) extends PExpression
 
 /*
  * Types
@@ -130,35 +154,22 @@ case class PNatSet() extends PLiteral
 
 sealed trait PType extends PAstNode
 
-case class PIntType() extends PType {
-  override def toString = "int"
-}
-
-case class PBoolType() extends PType {
-  override def toString = "bool"
-}
+case class PIntType() extends PType { override def toString = "int" }
+case class PBoolType() extends PType { override def toString = "bool" }
+case class PSetType() extends PType { override def toString = "bool" }
 
 case class PRefType(referencedType: PType) extends PType {
   override def toString = s"$referencedType*"
 }
 
-case class PRegionIdType() extends PType {
-  override def toString = "id"
-}
+case class PRegionIdType() extends PType { override def toString = "id" }
+case class PVoidType() extends PType { override def toString = "void" }
 
-case class PVoidType() extends PType {
-  override def toString = "void"
-}
-
-case class PUnknownType() extends PType {
-  override def toString = "<unknown>"
-}
+case class PUnknownType() extends PType { override def toString = "<unknown>" }
 
 /*
  * Miscellaneous
  */
-
-case class InterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse) extends PAstNode
 
 sealed trait PCall extends PAstNode {
   def id: PIdnUse
