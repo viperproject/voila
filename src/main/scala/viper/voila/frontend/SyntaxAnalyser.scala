@@ -138,11 +138,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val exp0: PackratParser[PExpression] =
     "true" ^^ (_ => PTrueLit()) |
     "false" ^^ (_ => PFalseLit()) |
-    "?" ~> idndef ^^ PLogicalVariableDecl |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     idnuse ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PCallExp(callee, args) } |
-    (idnuse <~ "|->") ~ expression ^^ PPointsTo |
+    (idnuse <~ "|->") ~ binderOrExpression ^^ PPointsTo |
     idnuse ^^ PIdnExp |
     "(" ~> expression <~ ")"
 
@@ -150,6 +149,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Set" ~> "(" ~> expressionList <~ ")" ^^ PExplicitSet |
     "Int" ^^ (_ => PIntSet()) |
     "Nat" ^^ (_=> PNatSet())
+
+  lazy val binderOrExpression: Parser[Either[PLogicalVariableDecl, PExpression]] =
+    "?" ~> idndef ^^ (id => Left(PLogicalVariableDecl(id))) |
+    expression ^^ (exp => Right(exp))
 
   lazy val expressionList: Parser[Vector[PExpression]] =
     repsep(expression, ",")

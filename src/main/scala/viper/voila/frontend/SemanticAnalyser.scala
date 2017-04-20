@@ -47,7 +47,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           }
         }
 
-      case PHeapWrite(lhs, rhs) =>
+      case PHeapWrite(lhs, _) =>
         checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
            message(
              lhs,
@@ -166,6 +166,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     // environment
     case scope@(_: PMember) =>
       enter(in(scope))
+
+//    case pp: PPointsTo =>
+//      println(s"pp = $pp")
+//      println(s"in(pp) = ${in(pp)}")
+//      in(pp)
   }
 
   def defenvout(out: PAstNode => Environment): PAstNode ==> Environment = {
@@ -178,6 +183,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     // been defined in this scope. If so, change its entity to MultipleEntity,
     // otherwise use the entity appropriate for this definition.
     case idef: PIdnDef =>
+//      println(s"idef = $idef")
+//      println(s"out(idef) = ${out(idef)}")
       defineIfNew(out(idef), idef.name, definedEntity(idef))
   }
 
@@ -202,7 +209,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       // at the node. Return `UnknownEntity` if the identifier is
       // not defined.
       case n =>
-        println(s"Looking up $n")
+//        println(s"Looking up $n")
+//        println(s"  env($n): ${env(n)}")
+        println(s"Lookup of $n: ${lookup(env(n), n.name, UnknownEntity())}")
         lookup(env(n), n.name, UnknownEntity())
     }
 
@@ -239,8 +248,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PTrueLit | _: PFalseLit => PBoolType()
 
       case PIdnExp(id) =>
+        println(s"PIdnExp(id) = PIdnExp($id)")
+        println(s"entity(id) = ${entity(id)}")
         entity(id) match {
-          case TypedVariableEntity(decl) => actualType(decl.typ)
+          case TypedVariableEntity(decl) =>
+            println(s"actualType(decl.typ) = ${actualType(decl.typ)}")
+            actualType(decl.typ)
           case _ => PUnknownType()
         }
 
@@ -252,6 +265,20 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case _: PPointsTo => PBoolType()
 
+      case tree.parent.pair(_: PLogicalVariableDecl, pointsTo: PPointsTo) =>
+        entity(pointsTo.id) match {
+          case TypedVariableEntity(decl) => referencedType(decl.typ)
+          case _ => PUnknownType()
+        }
+
+//      case logicalVarDecl: PLogicalVariableDecl =>
+//        tree.parent(logicalVarDecl) match {
+//          case pp: PPointsTo =>
+//            ???
+//        }
+//        ???
+
+
 //          case CallExp(_, i, _) =>
 //              entity(i) match {
 //                  case MethodEntity(decl) =>
@@ -261,6 +288,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 //              }
 
       case _ => PUnknownType()
+    }
+
+  lazy val typOfBinder: PLogicalVariableDecl => PType =
+    attr {
+      case tree.parent(pointsTo: PPointsTo) =>
+        pointsTo.id
     }
 
   /**
@@ -297,16 +330,16 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 //        println(s"pp = $pp")
 //        ???
 
-      case e @ tree.parent(pp: PPointsTo) =>
-        println("Hit e!")
-        println(s"e = $e")
-        println(s"pp = $pp")
-        ???
-
-      case decl: PLogicalVariableDecl =>
-        println("Hit PLogicalVariableDecl!")
-        println(s"decl = $decl")
-        ???
+//      case e @ tree.parent(pp: PPointsTo) =>
+//        println("Hit e!")
+//        println(s"e = $e")
+//        println(s"pp = $pp")
+//        ???
+//
+//      case decl: PLogicalVariableDecl =>
+//        println("Hit PLogicalVariableDecl!")
+//        println(s"decl = $decl")
+//        ???
 
 //      case tree.parent(tree.parent.pair(decl: PLogicalVariableDecl, PPointsTo(id, _))) =>
 //        println("Hit funny thing!")

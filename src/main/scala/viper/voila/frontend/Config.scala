@@ -40,7 +40,7 @@ class Config(arguments: Seq[String])
   val logLevel: ScallopOption[String] = opt[String](
     name = "logLevel",
     descr = "One of the log levels ALL, TRACE, DEBUG, INFO, WARN, ERROR, OFF (default: OFF)",
-    default = Some("WARN"),
+    default = Some("INFO"),
     noshort = true
   )(singleArgConverter(level => level.toUpperCase))
 

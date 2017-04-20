@@ -45,7 +45,7 @@ sealed trait PTypedDeclaration extends PDeclaration {
 case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 case class PGuardDecl(id: PIdnDef, duplicable: Boolean) extends PDeclaration
-case class PLogicalVariableDecl(id: PIdnDef) extends PDeclaration with PExpression
+case class PLogicalVariableDecl(id: PIdnDef) extends PDeclaration
 
 /*
  * Members
@@ -146,7 +146,8 @@ case class PExplicitSet(args: Vector[PExpression]) extends PSetExp with PLiteral
 case class PIntSet() extends PSetExp with PLiteral
 case class PNatSet() extends PSetExp with PLiteral
 
-case class PPointsTo(id: PIdnUse, value: PExpression) extends PExpression
+case class PPointsTo(id: PIdnUse, value: Either[PLogicalVariableDecl, PExpression])
+    extends PExpression
 
 /*
  * Types
