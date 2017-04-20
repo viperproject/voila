@@ -1,7 +1,7 @@
 region Lock(id a, int* x)
   guards { duplicable G; }
-  // interpretation { x |-> ?v }
-  interpretation { x |-> 0 }
+  interpretation { x |-> ?v }
+  // interpretation { x |-> 0 }
   // abstraction { v }
   state { true }
   actions {

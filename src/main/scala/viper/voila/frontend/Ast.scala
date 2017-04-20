@@ -156,7 +156,7 @@ sealed trait PType extends PAstNode
 
 case class PIntType() extends PType { override def toString = "int" }
 case class PBoolType() extends PType { override def toString = "bool" }
-case class PSetType() extends PType { override def toString = "bool" }
+case class PSetType(elementType: PType) extends PType { override def toString = "set" }
 
 case class PRefType(referencedType: PType) extends PType {
   override def toString = s"$referencedType*"

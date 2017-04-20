@@ -12,7 +12,6 @@ import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   override val whitespace: Parser[String] =
-    //"""(\s|(//.*\s*\n)|/\*.*\*/)*""".r
     """(\s|(//.*\s*\n)|\(\*(?:.|[\n\r])*?\*\))*""".r
 
   val reservedWords = Set(

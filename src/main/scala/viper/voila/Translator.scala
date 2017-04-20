@@ -28,9 +28,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   private def natSet(pos: vpr.Position = vpr.NoPosition, info: vpr.Info = vpr.NoInfo) =
     vpr.FuncApp("NatSet", Vector.empty)(pos, info, vpr.SetType(vpr.Int), Vector.empty)
 
-//  val heapAccessTranslator = new HeapAccessTranslatorComponent(this)
-//  val regionTranslator = new RegionTranslatorComponent(this)
-
   def translate(tree: VoilaTree): vpr.Program = {
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
@@ -47,8 +44,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.Program(
       domains = Nil,
       fields = fields,
-      predicates = predicates,
       functions = functions,
+      predicates = predicates,
       methods = methods
     )()
   }
@@ -140,9 +137,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case other =>
           sys.error(s"Not yet supported: $other")
       }
-//      /* TODO: Use correct type */
-//      /* TODO: Use correct formal args  */
-//      vpr.FuncApp(id.name, args map translate)(vpr.NoPosition, vpr.NoInfo, typ = vpr.Int, formalArgs = Nil, vpr.NoTrafos)
     case PIdnExp(id) =>
       /* TODO: Use correct type */
       vpr.LocalVar(id.name)(typ = vpr.Int)
@@ -150,6 +144,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PIntSet() => intSet()
     case PNatSet() => natSet()
     case pointsTo: PPointsTo => translate(pointsTo)
+    case other: PLogicalVariableDecl =>
+      sys.error(s"Not yet supported: $other")
   }
 
   def translate(declaration: PLocalVariableDecl): vpr.LocalVarDecl =
@@ -158,6 +154,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translateNonVoid(typ: PType): vpr.Type = typ match {
     case PIntType() => vpr.Int
     case PBoolType() => vpr.Bool
+    case PSetType(elementType) => vpr.SetType(translateNonVoid(elementType))
     case PRefType(_) => vpr.Ref
     case PRegionIdType() => vpr.Ref
     case unsupported@(_: PVoidType | _: PUnknownType) =>
@@ -267,6 +264,9 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     val fld = heapLocationAsField(voilaType)
     val fldacc = vpr.FieldAccess(rcvr, fld)()
 
-    vpr.FieldAccessPredicate(fldacc, vpr.FullPerm()())()
+    vpr.And(
+      vpr.FieldAccessPredicate(fldacc, vpr.FullPerm()())(),
+      vpr.EqCmp(fldacc, translate(pointsTo.value))()
+    )()
   }
 }

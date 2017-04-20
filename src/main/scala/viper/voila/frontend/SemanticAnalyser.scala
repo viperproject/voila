@@ -248,9 +248,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PAnd | _: POr | _: PNot => PBoolType()
       case _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
 
-      case _: PPointsTo => PBoolType()
+      case _: PSetExp => PSetType(PUnknownType())
 
-      case _: PSetExp => PSetType()
+      case _: PPointsTo => PBoolType()
 
 //          case CallExp(_, i, _) =>
 //              entity(i) match {
@@ -291,6 +291,29 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(_: PAdd | _: PSub) => PIntType()
       case tree.parent(_: PAnd | _: POr | _: PNot) => PBoolType()
       case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => PIntType()
+
+//      case pp: PPointsTo =>
+//        println("Hit PPointsTo!")
+//        println(s"pp = $pp")
+//        ???
+
+      case e @ tree.parent(pp: PPointsTo) =>
+        println("Hit e!")
+        println(s"e = $e")
+        println(s"pp = $pp")
+        ???
+
+      case decl: PLogicalVariableDecl =>
+        println("Hit PLogicalVariableDecl!")
+        println(s"decl = $decl")
+        ???
+
+//      case tree.parent(tree.parent.pair(decl: PLogicalVariableDecl, PPointsTo(id, _))) =>
+//        println("Hit funny thing!")
+//        println(s"id = $id")
+//        println(s"decl = $decl")
+//        ???
+
 
 //        case e @ tree.parent(CallExp(base, u, _)) if base eq e =>
 //            UnknownType()
