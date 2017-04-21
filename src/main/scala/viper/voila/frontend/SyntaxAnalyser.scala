@@ -60,12 +60,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val procedure: Parser[PProcedure] =
     typeOrVoid ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
+    (interference*) ~
     (("requires" ~> expression <~ ";")*) ~
     (("ensures" ~> expression <~ ";")*) ~
-    (interference*) ~
     ("{" ~> (varDeclStmt*))  ~ ((statement*) <~ "}") ^^ {
-      case tpe ~ id ~ args ~ pres ~ posts ~ inters ~ locals ~ body =>
-        PProcedure(id, args, tpe, pres, posts, inters, locals, body)
+      case tpe ~ id ~ args ~ inters ~ pres ~ posts ~ locals ~ body =>
+        PProcedure(id, args, tpe, inters, pres, posts, locals, body)
     }
 
   lazy val predicate: Parser[PPredicate] =

@@ -42,8 +42,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val functions = members collect { case f: vpr.Function => f }
     val methods = members collect { case f: vpr.Method => f }
 
-    println(methods)
-
     vpr.Program(
       domains = Nil,
       fields = fields,

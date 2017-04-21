@@ -64,9 +64,9 @@ case class PAction(guard: PIdnUse, from: PExpression, to: PExpression) extends P
 case class PProcedure(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
                       typ: PType,
+                      inters: Vector[PInterferenceClause],
                       pres: Vector[PExpression],
                       posts: Vector[PExpression],
-                      inters: Vector[PInterferenceClause],
                       locals: Vector[PLocalVariableDecl],
                       body: Vector[PStatement])
     extends PMember with PDeclaration
