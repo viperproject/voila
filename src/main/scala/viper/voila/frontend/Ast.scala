@@ -55,7 +55,7 @@ case class PRegion(id: PIdnDef,
                    guards: Vector[PGuardDecl],
                    interpretation: PExpression,
                    state: PExpression,
-                   action: Vector[PAction])
+                   actions: Vector[PAction])
     extends PMember
 
 

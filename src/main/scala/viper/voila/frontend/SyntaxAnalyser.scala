@@ -25,7 +25,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   lazy val program: Parser[PProgram] =
-    ((region | predicate | procedure)*) ^^ (members => {
+    ((region | predicate | procedure)+) ^^ (members => {
       val region = members collect { case p: PRegion => p }
       val predicates = members collect { case p: PPredicate => p }
       val procedures = members collect { case p: PProcedure => p }

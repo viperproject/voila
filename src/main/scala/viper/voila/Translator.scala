@@ -42,6 +42,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val functions = members collect { case f: vpr.Function => f }
     val methods = members collect { case f: vpr.Method => f }
 
+    println(methods)
+
     vpr.Program(
       domains = Nil,
       fields = fields,
@@ -191,6 +193,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def guardPotentiallyHeldFunctionName(guard: PGuardDecl, region: PRegion): String =
     s"${region.id.name}_${guard.id.name}_potentiallyHeldByEnvironment"
 
+def guardTransitiveClosureFunctionName(guard: PGuardDecl, region: PRegion): String =
+    s"${region.id.name}_${guard.id.name}_transitiveClosure"
+
 //  def guards(tree: VoilaTree): Vector[vpr.Predicate] = {
 //    tree.root.regions flatMap (region =>
 //      region.guards map (guard =>
@@ -229,6 +234,10 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           _body = None
         )())
 
+    /* function region_G_potentiallyHeldByEnvironment(r: RegionId, p: Perm)
+     *   {...}
+     * for each guard G
+     */
     val guardPotentiallyHeldFunctions =
       region.guards map (guard => {
         val formalArgs =
@@ -245,6 +254,39 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           name = guardPotentiallyHeldFunctionName(guard, region),
           formalArgs = formalArgs,
           typ = vpr.Bool,
+          _pres = Vector.empty,
+          _posts = Vector.empty,
+          _body = Some(body)
+        )()})
+
+    val guardTransitiveClosureFunctions =
+      region.guards map (guard => {
+        val fromTyp = translateNonVoid(semanticAnalyser.typ(region.actions.head.from))
+        val toTyp = translateNonVoid(semanticAnalyser.typ(region.actions.head.to))
+
+        val formalArgs =
+          Vector(
+            vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))(),
+            vpr.LocalVarDecl("$from", fromTyp)()
+          )
+
+        val body = {
+          val from = formalArgs(1).localVar
+          val fromSet = vpr.ExplicitSet(Vector(from))()
+
+          region.actions.foldLeft(fromSet: vpr.Exp)((acc, action) => {
+            vpr.CondExp(
+              cond = vpr.EqCmp(from, translate(action.from))(),
+              thn = translate(action.to),
+              els = acc
+            )()
+          })
+        }
+
+        vpr.Function(
+          name = guardTransitiveClosureFunctionName(guard, region),
+          formalArgs = formalArgs,
+          typ = toTyp,
           _pres = Vector.empty,
           _posts = Vector.empty,
           _body = Some(body)
@@ -282,6 +324,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     (   guardPredicates
      ++ guardPotentiallyHeldFunctions
+     ++ guardTransitiveClosureFunctions
      ++  Vector(
             regionPredicate,
             stateFunction))
@@ -347,14 +390,8 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   private def heapLocationAsField(typ: PType): vpr.Field =
     vpr.Field(s"$$h_$typ", translateNonVoid(typ))()
 
-  private def referencedType(id: PIdnNode): PType = {
+  private def referencedType(id: PIdnNode): PType =
     semanticAnalyser.referencedType(semanticAnalyser.typeOfIdn(id))
-//    val entity = semanticAnalyser.entity(id).asInstanceOf[RegularEntity]
-//    val decl = entity.declaration.asInstanceOf[PTypedDeclaration]
-//    val typ = decl.typ.asInstanceOf[PRefType]
-//
-//    typ.referencedType
-  }
 
   def heapLocations(tree: VoilaTree): Vector[vpr.Field] = {
     tree.nodes.collect {
