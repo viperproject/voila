@@ -8,6 +8,7 @@ package viper.voila.frontend
 
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
+import org.bitbucket.inkytonik.kiama.rewriting.Rewriter._
 import org.bitbucket.inkytonik.kiama.util.{Entity, MultipleEntity, UnknownEntity}
 import org.bitbucket.inkytonik.kiama.util.Messaging.{check, checkUse, collectMessages, Messages, message}
 
@@ -109,28 +110,44 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     message(id, "Cannot refer to procedures directly")
                 }
 
-              case PCall(id, args) =>
+              case PPredicateExp(id, args) =>
                 checkUse(entity(id)) {
-                  case ProcedureEntity(decl) =>
-                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
-
                   case PredicateEntity(decl) =>
-                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
+                    reportArgumentLengthMismatch(decl.id, decl.formalArgs.length, args.length)
+
+                  case RegionEntity(decl) =>
+                    /* A region predicate has the following arguments: region id, regular arguments,
+                     * state. Hence, the provided argument count should be formal arguments + 2.
+                     */
+                    reportArgumentLengthMismatch(decl.id, decl.formalArgs.length + 2, args.length)
 
                   case _ =>
                     message(id, s"Cannot call ${id.name}")
                 }
+
+//              case PCall(id, args) =>
+//                checkUse(entity(id)) {
+//                  case ProcedureEntity(decl) =>
+//                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
+//
+//                  case PredicateEntity(decl) =>
+//                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
+//
+//                  case _ =>
+//                    message(id, s"Cannot call ${id.name}")
+//                }
           })
     }
 
   private def reportArgumentLengthMismatch(id: PIdnNode,
-                                           formalArgs: Vector[PFormalArgumentDecl],
-                                           args: Vector[PExpression]) = {
+                                           formalArgCount: Int,
+                                           actualArgCount: Int) = {
+
     message(
       id,
-        s"Wrong number of arguments for '${id.name}', got ${args.length} "
-      + s"but expected ${formalArgs.length}",
-      formalArgs.length != args.length)
+        s"Wrong number of arguments for '${id.name}', got $actualArgCount "
+      + s"but expected $formalArgCount",
+      formalArgCount != actualArgCount)
   }
 
   /**
@@ -155,7 +172,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case decl: PProcedure => ProcedureEntity(decl)
           case decl: PPredicate => PredicateEntity(decl)
           case decl: PRegion => RegionEntity(decl)
-          case decl: PGuardDecl => GuardEntity(decl)
+          case decl: PGuardDecl => GuardEntity(decl, tree.parent.pair.unapply(decl).get._2.asInstanceOf[PRegion])
           case decl: PFormalArgumentDecl => ArgumentEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
           case decl: PLogicalVariableDecl => LogicalVariableEntity(decl)
@@ -201,7 +218,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         ++ program.predicates.map(p => p.id.name -> PredicateEntity(p))
         ++ program.procedures.map(p => p.id.name -> ProcedureEntity(p)))
 
-      rootenv(topLevelBindings: _*)
+      val guardBindings =
+        program.regions.flatMap(region =>
+          region.guards.map(guard =>
+            s"${guard.id.name}@${region.id.name}" -> GuardEntity(guard, region)))
+
+      rootenv(topLevelBindings ++ guardBindings :_*)
 
     // At a nested scope region, create a new empty scope inside the outer
     // environment
@@ -229,32 +251,51 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       defineIfNew(out(idef), idef.name, definedEntity(idef))
   }
 
+  /**********************************************************
+   *  TODO: Modify environment computation such that a PPredicateExp
+   *          Region(a, ...)
+   *        adds a binding from a to Region to the environment
+   */
+
   /**
     * The program entity referred to by an identifier definition or use.
     */
   lazy val entity: PIdnNode => Entity =
     attr {
-//      // If we are looking at an identifier used as a method call,
-//      // we need to look it up in the environment of the class of
-//      // the object it is being called on. E.g., `o.m` needs to
-//      // look for `m` in the class of `o`, not in local environment.
-//      case tree.parent.pair(IdnUse(i), CallExp(base, _, _)) =>
-//          tipe(base) match {
-//              case ReferenceType(decl) =>
-//                  findMethod(decl, i)
-//              case t =>
-//                  UnknownEntity()
-//          }
+      case g @ tree.parent(PGuardExp(guardId, regionId)) if guardId eq g =>
+        val region = usedWithRegion(regionId)
+        val guardAtRegion = s"${guardId.name}@${region.id.name}"
 
-      // Otherwise, just look the identifier up in the environment
-      // at the node. Return `UnknownEntity` if the identifier is
-      // not defined.
+        lookup(env(guardId), guardAtRegion, UnknownEntity())
+
       case n =>
-//        println(s"Looking up $n")
-//        println(s"  env($n): ${env(n)}")
-//        println(s"Lookup of $n: ${lookup(env(n), n.name, UnknownEntity())}")
         lookup(env(n), n.name, UnknownEntity())
     }
+
+
+  lazy val usedWithRegion: PIdnNode => PRegion =
+    attr(id => enclosingScope(id)(id) match {
+      case Some(scope) =>
+        val regions =
+          collect[Vector, PRegion] {
+            case PPredicateExp(region, PIdnExp(`id`) +: _) =>
+              entity(region) match { case RegionEntity(decl) => decl }
+          }
+
+        regions(scope).head
+
+      case None =>
+        ???
+    })
+
+    lazy val enclosingScope: PAstNode => PAstNode => Option[PMember] =
+      paramAttr { node => {
+          case member: PMember =>
+            Some(member)
+          case tree.parent(p) =>
+            enclosingScope(node)(p)
+        }
+      }
 
   /**
     * Return the internal type of a syntactic type. In most cases they
@@ -342,9 +383,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PAnd | _: POr | _: PNot => PBoolType()
       case _: PEquals | _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
 
-      case _: PSetExp => PSetType(PUnknownType())
+      case _: PIntSet | _: PNatSet => PSetType(PIntType())
+      case PExplicitSet(elements) => PSetType(typ(elements.head))
 
-      case _: PPointsTo => PBoolType()
+      case _: PPointsTo | _: PPredicateExp | _: PGuardExp => PBoolType()
 
       case tree.parent.pair(_: PLogicalVariableDecl, pointsTo: PPointsTo) =>
         referencedType(typeOfIdn(pointsTo.id))

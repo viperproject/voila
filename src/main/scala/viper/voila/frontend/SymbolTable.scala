@@ -24,7 +24,7 @@ object RegularEntity {
 case class ProcedureEntity(declaration: PProcedure) extends RegularEntity
 case class PredicateEntity(declaration: PPredicate) extends RegularEntity
 case class RegionEntity(declaration: PRegion) extends RegularEntity
-case class GuardEntity(declaration: PGuardDecl) extends RegularEntity
+case class GuardEntity(declaration: PGuardDecl, region: PRegion) extends RegularEntity
 
 //sealed trait VariableEntity extends RegularEntity {
 //  def declaration: PDeclaration

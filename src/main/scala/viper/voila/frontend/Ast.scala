@@ -134,7 +134,9 @@ case class PAdd(left: PExpression, right: PExpression) extends PBinOp
 case class PSub(left: PExpression, right: PExpression) extends PBinOp
 
 case class PIdnExp(id: PIdnUse) extends PExpression
-case class PCallExp(id: PIdnUse, args: Vector[PExpression]) extends PExpression with PCall
+
+case class PPredicateExp(id: PIdnUse, args: Vector[PExpression])
+    extends PExpression
 
 sealed trait PSetExp extends PExpression
 
@@ -144,6 +146,8 @@ case class PNatSet() extends PSetExp with PLiteral
 
 case class PPointsTo(id: PIdnUse, value: Either[PLogicalVariableDecl, PExpression])
     extends PExpression
+
+case class PGuardExp(guard: PIdnUse, regionId: PIdnUse) extends PExpression
 
 /*
  * Types
@@ -167,13 +171,3 @@ case class PUnknownType() extends PType { override def toString = "<unknown>" }
 /*
  * Miscellaneous
  */
-
-sealed trait PCall extends PAstNode {
-  def id: PIdnUse
-  def args: Vector[PExpression]
-}
-
-object PCall {
-  def unapply(call: PCall): Option[(PIdnUse, Vector[PExpression])] =
-    Some((call.id, call.args))
-}

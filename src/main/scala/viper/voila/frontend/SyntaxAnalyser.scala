@@ -12,7 +12,8 @@ import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   override val whitespace: Parser[String] =
-    """(\s|(//.*\s*\n)|\(\*(?:.|[\n\r])*?\*\))*""".r
+    """(\s|(//.*\s*\n))*""".r
+//    """(\s|(//.*\s*\n)|\(\*(?:.|[\n\r])*?\*\))*""".r
 
   val reservedWords = Set(
     "true", "false",
@@ -24,7 +25,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   lazy val program: Parser[PProgram] =
-    ((region | predicate | procedure)+) ^^ (members => {
+    ((region | predicate | procedure)*) ^^ (members => {
       val region = members collect { case p: PRegion => p }
       val predicates = members collect { case p: PPredicate => p }
       val procedures = members collect { case p: PProcedure => p }
@@ -140,13 +141,16 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "false" ^^ (_ => PFalseLit()) |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
-    idnuse ~ ("(" ~> expressionList <~ ")") ^^ { case callee ~ args => PCallExp(callee, args) } |
+    idnuse ~ ("(" ~> listOfExpressions <~ ")") ^^ {
+      case callee ~ args => PPredicateExp(callee, args)
+    } |
     (idnuse <~ "|->") ~ binderOrExpression ^^ PPointsTo |
+    (idnuse <~ "@") ~ idnuse ^^ PGuardExp |
     idnuse ^^ PIdnExp |
     "(" ~> expression <~ ")"
 
   lazy val setLiteral: Parser[PLiteral] =
-    "Set" ~> "(" ~> expressionList <~ ")" ^^ PExplicitSet |
+    "Set" ~> "(" ~> listOfExpressions <~ ")" ^^ PExplicitSet |
     "Int" ^^ (_ => PIntSet()) |
     "Nat" ^^ (_=> PNatSet())
 
@@ -154,8 +158,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "?" ~> idndef ^^ (id => Left(PLogicalVariableDecl(id))) |
     expression ^^ (exp => Right(exp))
 
-  lazy val expressionList: Parser[Vector[PExpression]] =
+  lazy val listOfExpressions: Parser[Vector[PExpression]] =
     repsep(expression, ",")
+
+//  lazy val listOfBindersOrExpressions: Parser[Vector[Either[PLogicalVariableDecl, PExpression]]] =
+//    repsep(binderOrExpression, ",")
 
   lazy val typeOrVoid: Parser[PType] =
     "void" ^^ (_ => PVoidType()) |

@@ -12,16 +12,14 @@ predicate U(id a, int* x) {
   Lock(a, x, 0) && G@a
 }
 
-/*
-predicate L(id a, int* x) {
-  Lock(a, x, 1) && G@a
-}
+// predicate L(id a, int* x) {
+  // Lock(a, x, 1) && G@a
+// }
 
-void unlock(id a, int s, int* x)
-  requires L(a, x);
-  ensures U(a, x);
-  interference s in Set(1) on a;
-{
+// void unlock(id a, int s, int* x)
+  // requires L(a, x);
+  // ensures U(a, x);
+  // interference s in Set(1) on a;
+// {
 
-}
-*/
+// }

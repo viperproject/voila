@@ -32,6 +32,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(tree: VoilaTree): vpr.Program = {
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
+      ++ guards(tree)
       ++ (tree.root.regions flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
@@ -131,13 +132,30 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PAdd(left, right) => vpr.Add(translate(left), translate(right))()
     case PSub(left, right) => vpr.Sub(translate(left), translate(right))()
     case PConditional(cond, thn, els) => vpr.CondExp(translate(cond), translate(thn), translate(els))()
-    case PCallExp(id, args) =>
+    case PExplicitSet(elements) => vpr.ExplicitSet(elements map translate)()
+    case PIntSet() => intSet()
+    case PNatSet() => natSet()
+
+    case pointsTo: PPointsTo => translate(pointsTo)
+
+    case PPredicateExp(id, args) =>
       semanticAnalyser.entity(id) match {
         case _: PredicateEntity =>
+//          val vprArgs = args map {
+//            case Left(_: PLogicalVariableDecl) => ???
+//            case Right(exp) => translate(exp)
+////            case entity: LogicalVariableEntity => translateUseOf(entity.declaration)
+//          }
+
           vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo)
+
+        case RegionEntity(decl) =>
+          translateUseOf(decl, args)
+
         case other =>
           sys.error(s"Not yet supported: $other")
       }
+
     case PIdnExp(id) =>
       semanticAnalyser.entity(id) match {
         case entity: LogicalVariableEntity => translateUseOf(entity.declaration)
@@ -145,10 +163,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           /* TODO: Use correct type */
           vpr.LocalVar(id.name)(typ = vpr.Int)
       }
-    case PExplicitSet(elements) => vpr.ExplicitSet(elements map translate)()
-    case PIntSet() => intSet()
-    case PNatSet() => natSet()
-    case pointsTo: PPointsTo => translate(pointsTo)
+
+    case guard: PGuardExp => translate(guard)
+
   }
 
   def translate(declaration: PLocalVariableDecl): vpr.LocalVarDecl =
@@ -166,6 +183,24 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 }
 
 trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
+  def regionStateFunctionName(region: PRegion): String =
+    s"${region.id.name}_state"
+
+  def regionGuardName(guard: PGuardDecl, region: PRegion): String =
+    s"${region.id.name}_${guard.id.name}"
+
+  def guards(tree: VoilaTree): Vector[vpr.Predicate] = {
+    tree.root.regions flatMap (region =>
+      region.guards map (guard =>
+        vpr.Predicate(
+          name = regionGuardName(guard, region),
+          formalArgs = Vector(vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))()),
+          _body = None
+        )()
+      )
+    )
+  }
+
   def translate(region: PRegion): Vector[vpr.Member] = {
     val formalRegionArg = translate(region.regionId)
     val formalRegularArgs = region.formalArgs map translate
@@ -205,7 +240,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
      */
     val stateFunction =
       vpr.Function(
-        name = s"${region.id.name}_state",
+        name = regionStateFunctionName(region),
         formalArgs = formalRegionArg +: formalRegularArgs,
         typ = regionStateType,
         _pres = Vector(regionPredicateAccess),
@@ -217,6 +252,61 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       regionPredicate,
       stateFunction
     )
+  }
+
+  def translateUseOf(region: PRegion, args: Vector[PExpression]): vpr.Exp = {
+    val vprRegionId = translate(args.head)
+
+    val (vprRegularArgs, Seq(vprStateValue)) =
+      args.tail.map(translate).splitAt(args.length - 2)
+
+    val vprRegionArguments = vprRegionId +: vprRegularArgs
+
+    val vprRegionArgumentDecls =
+      /* TODO: Needed in order to construct an instance of vpr.FuncApp.
+       *       Should be taken from the declaration of the region state function.
+       */
+      vprRegionArguments.map(a => vpr.LocalVarDecl("x", a.typ)())
+
+    val vprStateConstraint =
+      vpr.EqCmp(
+        vpr.FuncApp(
+          funcname = regionStateFunctionName(region),
+          args = vprRegionArguments
+        )(
+          pos = vpr.NoPosition,
+          info = vpr.NoInfo,
+          typ = vprStateValue.typ,
+          formalArgs = vprRegionArgumentDecls
+        ),
+        vprStateValue
+      )()
+
+    val vprRegionAccess =
+      vpr.PredicateAccess(
+        args = vprRegionArguments,
+        predicateName = region.id.name
+      )(vpr.NoPosition, vpr.NoInfo)
+
+    vpr.And(vprRegionAccess, vprStateConstraint)()
+  }
+
+  def translate(guardExp: PGuardExp): vpr.Exp = {
+    semanticAnalyser.entity(guardExp.guard) match {
+      case GuardEntity(guardDecl, region) =>
+        val name = regionGuardName(guardDecl, region)
+
+        val guardPredicateAccess =
+          vpr.PredicateAccessPredicate(
+            loc = vpr.PredicateAccess(
+                    args = Vector(translate(PIdnExp(guardExp.regionId))),
+                    predicateName = name
+                  )(pos = vpr.NoPosition, info = vpr.NoInfo),
+            perm = vpr.FullPerm()()
+          )()
+
+        guardPredicateAccess
+    }
   }
 }
 
