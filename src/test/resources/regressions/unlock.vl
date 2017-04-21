@@ -1,26 +1,18 @@
-predicate PQ(int* x) {
-  (x |-> ?v) && (v > 0)
-}
-
-/*
 region Lock(id a, int* x)
   guards { duplicable G; }
-  interpretation { x |-> ?v && v > 0 }
-  // interpretation { x |-> 0 }
-  // abstraction { v }
-  state { true }
+  interpretation {
+    x |-> ?v && (v == 0 || v == 1) 
+  }
+  state { v }
   actions {
     G: 0 ~> Set(0, 1);
   }
-*/
 
-
-
-/*
 predicate U(id a, int* x) {
   Lock(a, x, 0) && G@a
 }
 
+/*
 predicate L(id a, int* x) {
   Lock(a, x, 1) && G@a
 }

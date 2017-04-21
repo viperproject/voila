@@ -33,27 +33,68 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         message(lhs, s"Cannot assign to ${lhs.name}")
 
       case PHeapRead(lhs, rhs) =>
-        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
-          checkUse(entity(rhs)) { case TypedVariableEntity(rhsDecl) => (
-               message(
-                 rhs,
-                 s"Type error: expected a reference type, but found ${rhsDecl.typ}",
-                 !rhsDecl.typ.isInstanceOf[PRefType])
-            ++
-               message(
-                 rhs,
-                 s"Type error: expected ${lhsDecl.typ}* but got ${rhsDecl.typ}",
-                 !isCompatible(referencedType(rhsDecl.typ), lhsDecl.typ)))
-          }
+        check(entity(lhs)) {
+          case LocalVariableEntity(lhsDecl) =>
+            val rhsTyp = typeOfIdn(rhs)
+
+            message(
+              rhs,
+              s"Type error: expected ${lhsDecl.typ}* but got $rhsTyp",
+              !isCompatible(referencedType(rhsTyp), lhsDecl.typ))
+//            entity(rhs) match {
+//              case RegularEntity(rhsDecl) =>
+//                val rhsType = typ
+//                val messages1 =
+//                  message(
+//                    rhs,
+//                    s"Type error: expected a reference type, but found ${rhsDecl.typ}",
+//                    !rhsDecl.typ.isInstanceOf[PRefType])
+//
+//                val messages2 =
+//                  message(
+//                    rhs,
+//                    s"Type error: expected ${lhsDecl.typ}* but got ${rhsDecl.typ}",
+//                    !isCompatible(referencedType(rhsDecl.typ), lhsDecl.typ))
+//
+//                messages1 ++ messages2
+//            }
+
+
+          case other =>
+            message(lhs, s"Type error: expected a local variable, but found $other")
         }
 
+//        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
+//          checkUse(entity(rhs)) { case TypedVariableEntity(rhsDecl) => (
+//               message(
+//                 rhs,
+//                 s"Type error: expected a reference type, but found ${rhsDecl.typ}",
+//                 !rhsDecl.typ.isInstanceOf[PRefType])
+//            ++
+//               message(
+//                 rhs,
+//                 s"Type error: expected ${lhsDecl.typ}* but got ${rhsDecl.typ}",
+//                 !isCompatible(referencedType(rhsDecl.typ), lhsDecl.typ)))
+//          }
+//        }
+
       case PHeapWrite(lhs, _) =>
-        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
-           message(
-             lhs,
-             s"Type error: expected a reference type, but found ${lhsDecl.typ}",
-             !lhsDecl.typ.isInstanceOf[PRefType])
+        typeOfIdn(lhs) match {
+          case _: PRefType =>
+            message(lhs, "????????????????", false)
+            /* TODO: Check compatibility of LHS and RHS? */
+          case otherType =>
+            message(
+              lhs,
+              s"Type error: expected a reference type, but found $otherType")
         }
+
+//        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
+//           message(
+//             lhs,
+//             s"Type error: expected a reference type, but found ${lhsDecl.typ}",
+//             !lhsDecl.typ.isInstanceOf[PRefType])
+//        }
 
       case exp: PExpression => (
            message(
@@ -211,7 +252,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case n =>
 //        println(s"Looking up $n")
 //        println(s"  env($n): ${env(n)}")
-        println(s"Lookup of $n: ${lookup(env(n), n.name, UnknownEntity())}")
+//        println(s"Lookup of $n: ${lookup(env(n), n.name, UnknownEntity())}")
         lookup(env(n), n.name, UnknownEntity())
     }
 
@@ -239,6 +280,45 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ => PUnknownType()
     }
 
+  lazy val typeOfIdn: PIdnNode => PType =
+    attr(entity(_) match {
+      case ArgumentEntity(decl) => decl.typ
+      case LocalVariableEntity(decl) => decl.typ
+      case ProcedureEntity(decl) => decl.typ
+      case LogicalVariableEntity(decl) =>
+//        println("\n[typeOfIdn]")
+//        println(s"  decl = $decl")
+        val t = typeOfLogicalVariable(decl)
+//        println(s"  typeOfLogicalVariable = $t")
+        t
+      case _ => PUnknownType()
+    })
+
+//  def typeOfIdn(idn: PIdnNode): PType =
+//    entity(idn) match {
+//      case ArgumentEntity(decl) => decl.typ
+//      case LocalVariableEntity(decl) => decl.typ
+//      case ProcedureEntity(decl) => decl.typ
+//      case LogicalVariableEntity(decl) =>
+//        println("\n[typeOfIdn]")
+//        println(s"  decl = $decl")
+//        val t = typeOfLogicalVariable(decl)
+//        println(s"  typeOfLogicalVariable = $t")
+//        t
+//      case _ => PUnknownType()
+//    }
+
+  lazy val typeOfLogicalVariable: PLogicalVariableDecl => PType =
+    attr {
+      case tree.parent(pointsTo: PPointsTo) =>
+        referencedType(typeOfIdn(pointsTo.id))
+    }
+
+  lazy val boundTo: PLogicalVariableDecl => PIdnNode =
+    attr {
+      case tree.parent(pointsTo: PPointsTo) => pointsTo.id
+    }
+
   /**
     * What is the type of an expression?
     */
@@ -248,28 +328,26 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PTrueLit | _: PFalseLit => PBoolType()
 
       case PIdnExp(id) =>
-        println(s"PIdnExp(id) = PIdnExp($id)")
-        println(s"entity(id) = ${entity(id)}")
-        entity(id) match {
-          case TypedVariableEntity(decl) =>
-            println(s"actualType(decl.typ) = ${actualType(decl.typ)}")
-            actualType(decl.typ)
-          case _ => PUnknownType()
-        }
+//        println(s"PIdnExp(id) = PIdnExp($id)")
+//        println(s"entity(id) = ${entity(id)}")
+        actualType(typeOfIdn(id))
+//        entity(id) match {
+//          case TypedVariableEntity(decl) =>
+//            println(s"actualType(decl.typ) = ${actualType(decl.typ)}")
+//            actualType(decl.typ)
+//          case _ => PUnknownType()
+//        }
 
       case _: PAdd | _: PSub => PIntType()
       case _: PAnd | _: POr | _: PNot => PBoolType()
-      case _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
+      case _: PEquals | _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
 
       case _: PSetExp => PSetType(PUnknownType())
 
       case _: PPointsTo => PBoolType()
 
       case tree.parent.pair(_: PLogicalVariableDecl, pointsTo: PPointsTo) =>
-        entity(pointsTo.id) match {
-          case TypedVariableEntity(decl) => referencedType(decl.typ)
-          case _ => PUnknownType()
-        }
+        referencedType(typeOfIdn(pointsTo.id))
 
 //      case logicalVarDecl: PLogicalVariableDecl =>
 //        tree.parent(logicalVarDecl) match {
@@ -290,12 +368,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ => PUnknownType()
     }
 
-  lazy val typOfBinder: PLogicalVariableDecl => PType =
-    attr {
-      case tree.parent(pointsTo: PPointsTo) =>
-        pointsTo.id
-    }
-
   /**
     * What is the expected type of an expression?
     */
@@ -310,16 +382,22 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         }
 
       case tree.parent(PHeapRead(id, _)) =>
-        entity(id) match {
-          case TypedVariableEntity(decl) => referencedType(decl.typ)
-          case _ => PUnknownType()
-        }
+        referencedType(typeOfIdn(id))
+//        entity(id) match {
+//          case TypedVariableEntity(decl) => referencedType(decl.typ)
+//          case _ => PUnknownType()
+//        }
 
       case tree.parent(PHeapWrite(id, _)) =>
-        entity(id) match {
-          case TypedVariableEntity(decl) => referencedType(decl.typ)
-          case _ => PUnknownType()
-        }
+        referencedType(typeOfIdn(id))
+//        entity(id) match {
+//          case TypedVariableEntity(decl) => referencedType(decl.typ)
+//          case _ => PUnknownType()
+//        }
+
+      case e @ tree.parent(PEquals(lhs, rhs)) if e eq rhs =>
+        /* The expected type of the RHS of an equality is the type of the LHS */
+        typ(lhs)
 
       case tree.parent(_: PAdd | _: PSub) => PIntType()
       case tree.parent(_: PAnd | _: POr | _: PNot) => PBoolType()

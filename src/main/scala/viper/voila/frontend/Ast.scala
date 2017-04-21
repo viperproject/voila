@@ -38,12 +38,8 @@ sealed trait PDeclaration extends PAstNode {
   def id: PIdnDef
 }
 
-sealed trait PTypedDeclaration extends PDeclaration {
-  def typ: PType
-}
-
-case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
-case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
+case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PDeclaration
+case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PGuardDecl(id: PIdnDef, duplicable: Boolean) extends PDeclaration
 case class PLogicalVariableDecl(id: PIdnDef) extends PDeclaration
 
@@ -73,7 +69,7 @@ case class PProcedure(id: PIdnDef,
                       inters: Vector[PInterferenceClause],
                       locals: Vector[PLocalVariableDecl],
                       body: Vector[PStatement])
-    extends PMember with PTypedDeclaration
+    extends PMember with PDeclaration
 
 case class PInterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse)
     extends PAstNode

@@ -6,6 +6,7 @@
 
 package viper.voila
 
+import viper.silver.ast.FieldAccess
 import viper.voila.frontend._
 import viper.silver.{ast => vpr}
 
@@ -138,8 +139,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           sys.error(s"Not yet supported: $other")
       }
     case PIdnExp(id) =>
-      /* TODO: Use correct type */
-      vpr.LocalVar(id.name)(typ = vpr.Int)
+      semanticAnalyser.entity(id) match {
+        case entity: LogicalVariableEntity => translateUseOf(entity.declaration)
+        case _ =>
+          /* TODO: Use correct type */
+          vpr.LocalVar(id.name)(typ = vpr.Int)
+      }
     case PExplicitSet(elements) => vpr.ExplicitSet(elements map translate)()
     case PIntSet() => intSet()
     case PNatSet() => natSet()
@@ -219,12 +224,13 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   private def heapLocationAsField(typ: PType): vpr.Field =
     vpr.Field(s"$$h_$typ", translateNonVoid(typ))()
 
-  private def referencedType(id: PIdnUse): PType = {
-    val entity = semanticAnalyser.entity(id).asInstanceOf[RegularEntity]
-    val decl = entity.declaration.asInstanceOf[PTypedDeclaration]
-    val typ = decl.typ.asInstanceOf[PRefType]
-
-    typ.referencedType
+  private def referencedType(id: PIdnNode): PType = {
+    semanticAnalyser.referencedType(semanticAnalyser.typeOfIdn(id))
+//    val entity = semanticAnalyser.entity(id).asInstanceOf[RegularEntity]
+//    val decl = entity.declaration.asInstanceOf[PTypedDeclaration]
+//    val typ = decl.typ.asInstanceOf[PRefType]
+//
+//    typ.referencedType
   }
 
   def heapLocations(tree: VoilaTree): Vector[vpr.Field] = {
@@ -271,5 +277,19 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.FieldAccessPredicate(fldacc, vpr.FullPerm()())(),
       fldvalcnstr
     )()
+  }
+
+  def translateUseOf(declaration: PLogicalVariableDecl): FieldAccess = {
+//    println("\n[translateUseOf]")
+//    println(s"  declaration = $declaration")
+    val boundTo = semanticAnalyser.boundTo(declaration)
+    val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
+//    val voilaType = referencedType(entity.declaration.id)
+//    println(s"  voilaType = $voilaType")
+
+    val rcvr = vpr.LocalVar(boundTo.name)(typ = vpr.Ref)
+    val fld = heapLocationAsField(voilaType)
+
+    vpr.FieldAccess(rcvr, fld)()
   }
 }
