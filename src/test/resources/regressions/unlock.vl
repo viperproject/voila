@@ -6,20 +6,21 @@ region Lock(id a, int* x)
   state { v }
   actions {
     G: 0 ~> Set(0, 1);
+    G: 1 ~> Set(1, 0);
   }
 
 predicate U(id a, int* x) {
   Lock(a, x, 0) && G@a
 }
 
-// predicate L(id a, int* x) {
-  // Lock(a, x, 1) && G@a
-// }
+predicate L(id a, int* x) {
+  Lock(a, x, 1) && G@a
+}
 
 // void unlock(id a, int s, int* x)
+  // interference s in Set(1) on a;
   // requires L(a, x);
   // ensures U(a, x);
-  // interference s in Set(1) on a;
 // {
 
 // }

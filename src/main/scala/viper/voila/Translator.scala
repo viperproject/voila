@@ -32,7 +32,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(tree: VoilaTree): vpr.Program = {
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
-      ++ guards(tree)
       ++ (tree.root.regions flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
@@ -186,20 +185,23 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def regionStateFunctionName(region: PRegion): String =
     s"${region.id.name}_state"
 
-  def regionGuardName(guard: PGuardDecl, region: PRegion): String =
+  def guardPredicateName(guard: PGuardDecl, region: PRegion): String =
     s"${region.id.name}_${guard.id.name}"
 
-  def guards(tree: VoilaTree): Vector[vpr.Predicate] = {
-    tree.root.regions flatMap (region =>
-      region.guards map (guard =>
-        vpr.Predicate(
-          name = regionGuardName(guard, region),
-          formalArgs = Vector(vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))()),
-          _body = None
-        )()
-      )
-    )
-  }
+  def guardPotentiallyHeldFunctionName(guard: PGuardDecl, region: PRegion): String =
+    s"${region.id.name}_${guard.id.name}_potentiallyHeldByEnvironment"
+
+//  def guards(tree: VoilaTree): Vector[vpr.Predicate] = {
+//    tree.root.regions flatMap (region =>
+//      region.guards map (guard =>
+//        vpr.Predicate(
+//          name = regionGuardName(guard, region),
+//          formalArgs = Vector(vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))()),
+//          _body = None
+//        )()
+//      )
+//    )
+//  }
 
   def translate(region: PRegion): Vector[vpr.Member] = {
     val formalRegionArg = translate(region.regionId)
@@ -217,6 +219,36 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         formalArgs = formalRegionArg +: formalRegularArgs,
         _body = Some(translate(region.interpretation))
       )()
+
+    /* predicate region_G(r: RegionId) for each guard G */
+    val guardPredicates =
+      region.guards map (guard =>
+        vpr.Predicate(
+          name = guardPredicateName(guard, region),
+          formalArgs = Vector(vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))()),
+          _body = None
+        )())
+
+    val guardPotentiallyHeldFunctions =
+      region.guards map (guard => {
+        val formalArgs =
+          Vector(
+            vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))(),
+            vpr.LocalVarDecl("$p", vpr.Perm)()
+          )
+
+        val body =
+          if (guard.duplicable) vpr.TrueLit()()
+          else vpr.EqCmp(formalArgs(1).localVar, vpr.NoPerm()())()
+
+        vpr.Function(
+          name = guardPotentiallyHeldFunctionName(guard, region),
+          formalArgs = formalArgs,
+          typ = vpr.Bool,
+          _pres = Vector.empty,
+          _posts = Vector.empty,
+          _body = Some(body)
+        )()})
 
     /* acc(region(id, args)) */
     val regionPredicateAccess =
@@ -248,10 +280,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         _body = Some(stateFunctionBody)
       )()
 
-    Vector(
-      regionPredicate,
-      stateFunction
-    )
+    (   guardPredicates
+     ++ guardPotentiallyHeldFunctions
+     ++  Vector(
+            regionPredicate,
+            stateFunction))
   }
 
   def translateUseOf(region: PRegion, args: Vector[PExpression]): vpr.Exp = {
@@ -294,7 +327,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(guardExp: PGuardExp): vpr.Exp = {
     semanticAnalyser.entity(guardExp.guard) match {
       case GuardEntity(guardDecl, region) =>
-        val name = regionGuardName(guardDecl, region)
+        val name = guardPredicateName(guardDecl, region)
 
         val guardPredicateAccess =
           vpr.PredicateAccessPredicate(
