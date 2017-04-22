@@ -87,10 +87,24 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val statement: Parser[PStatement] =
     "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
     "while" ~> ("(" ~> expression <~ ")") ~ statement ^^ PWhile |
+    "fold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PFold |
+    "unfold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PUnfold |
     ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
+    makeAtomic |
+    updateRegion |
     "{" ~> (statement*) <~ "}" ^^ PBlock |
     idnuse ~ (":=" ~> "*" ~> idnuse) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
+
+  lazy val makeAtomic: Parser[PMakeAtomic] =
+    "make_atomic" ~>
+    ("using" ~> predicateExp) ~ ("with" ~> guardExp <~ ";") ~
+    ("{" ~> statement <~ "}") ^^ PMakeAtomic
+
+  lazy val updateRegion: Parser[PUpdateRegion] =
+    "update_region" ~>
+    ("using" ~> predicateExp <~ ";") ~
+    ("{" ~> statement <~ "}") ^^ PUpdateRegion
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
     typ ~ idndef <~ ";" ^^ { case tpe ~ id => PLocalVariableDecl(id, tpe) }
@@ -141,13 +155,19 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "false" ^^ (_ => PFalseLit()) |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
-    idnuse ~ ("(" ~> listOfExpressions <~ ")") ^^ {
-      case callee ~ args => PPredicateExp(callee, args)
-    } |
+    predicateExp |
     (idnuse <~ "|->") ~ binderOrExpression ^^ PPointsTo |
-    (idnuse <~ "@") ~ idnuse ^^ PGuardExp |
+    guardExp |
     idnuse ^^ PIdnExp |
     "(" ~> expression <~ ")"
+
+  lazy val predicateExp: Parser[PPredicateExp] =
+    idnuse ~ ("(" ~> listOfExpressions <~ ")") ^^ {
+      case callee ~ args => PPredicateExp(callee, args)
+    }
+
+  lazy val guardExp: Parser[PGuardExp] =
+    (idnuse <~ "@") ~ idnuse ^^ PGuardExp
 
   lazy val setLiteral: Parser[PLiteral] =
     "Set" ~> "(" ~> listOfExpressions <~ ")" ^^ PExplicitSet |

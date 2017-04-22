@@ -14,6 +14,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.io.FileUtils
 import org.slf4j.LoggerFactory
 import viper.voila.frontend.{Config, Frontend, SemanticAnalyser, VoilaTree}
+import viper.voila.translator.PProgramToViperTranslator
 import viper.silver.ast.pretty.FastPrettyPrinter
 
 object VoilaConstants {

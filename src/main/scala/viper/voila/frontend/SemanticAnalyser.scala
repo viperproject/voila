@@ -277,12 +277,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     attr(id => enclosingScope(id)(id) match {
       case Some(scope) =>
         val regions =
-          collect[Vector, PRegion] {
+          collect[Vector, Option[PRegion]] {
             case PPredicateExp(region, PIdnExp(`id`) +: _) =>
-              entity(region) match { case RegionEntity(decl) => decl }
+              entity(region) match {
+                case RegionEntity(decl) => Some(decl)
+                case _ => None
+              }
           }
 
-        regions(scope).head
+        regions(scope).flatten.head
 
       case None =>
         ???

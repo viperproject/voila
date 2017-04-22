@@ -22,5 +22,17 @@ void unlock(int s, id a, int* x)
   requires L(a, x);
   ensures U(a, x);
 {
-  *x := 0;
+  unfold L(a, x);
+  
+  make_atomic
+    using Lock(a, x, s) with G@a;
+  {
+    update_region
+      using Lock(a, x, s);
+    {
+      *x := 0;
+    }
+  }
+  
+  fold U(a, x);
 }

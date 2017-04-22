@@ -97,6 +97,22 @@ sealed trait PHeapAccess extends PStatement {
 case class PHeapWrite(location: PIdnUse, rhs: PExpression) extends PHeapAccess
 case class PHeapRead(lhs: PIdnUse, location: PIdnUse) extends PHeapAccess
 
+sealed trait PGhostStatement extends PStatement
+
+case class PFold(predicate: PIdnUse, arguments: Vector[PExpression])
+    extends PGhostStatement with PPredicateAccess
+
+case class PUnfold(predicate: PIdnUse, arguments: Vector[PExpression])
+    extends PGhostStatement with PPredicateAccess
+
+sealed trait PRuleStatement extends PStatement
+
+case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+    extends PRuleStatement
+
+case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
+    extends PRuleStatement
+
 /*
  * Expressions
  */
@@ -135,8 +151,8 @@ case class PSub(left: PExpression, right: PExpression) extends PBinOp
 
 case class PIdnExp(id: PIdnUse) extends PExpression
 
-case class PPredicateExp(id: PIdnUse, args: Vector[PExpression])
-    extends PExpression
+case class PPredicateExp(predicate: PIdnUse, arguments: Vector[PExpression])
+    extends PExpression with PPredicateAccess
 
 sealed trait PSetExp extends PExpression
 
@@ -171,3 +187,13 @@ case class PUnknownType() extends PType { override def toString = "<unknown>" }
 /*
  * Miscellaneous
  */
+
+sealed trait PPredicateAccess extends PAstNode {
+  def predicate: PIdnUse
+  def arguments: Vector[PExpression]
+}
+
+object PPredicateAccess {
+  def unapply(acc: PPredicateAccess): Option[(PIdnUse, Vector[PExpression])] =
+    Some((acc.predicate, acc.arguments))
+}
