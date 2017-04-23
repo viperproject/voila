@@ -22,6 +22,24 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def diamondAccess(rcvr: vpr.Exp): FieldAccessPredicate =
     vpr.FieldAccessPredicate(diamondLocation(rcvr), vpr.FullPerm()())()
 
+  def stepFromField(typ: PType): Field =
+    vpr.Field(s"$$stepFrom_$typ", translateNonVoid(typ))()
+
+  def stepFromLocation(rcvr: vpr.Exp, typ: PType): FieldAccess =
+    vpr.FieldAccess(rcvr, stepFromField(typ))()
+
+  def stepFromAccess(rcvr: vpr.Exp, typ: PType): FieldAccessPredicate =
+    vpr.FieldAccessPredicate(stepFromLocation(rcvr, typ), vpr.FullPerm()())()
+
+  def stepToField(typ: PType): Field =
+    vpr.Field(s"$$stepTo_$typ", translateNonVoid(typ))()
+
+  def stepToLocation(rcvr: vpr.Exp, typ: PType): FieldAccess =
+    vpr.FieldAccess(rcvr, stepToField(typ))()
+
+  def stepToAccess(rcvr: vpr.Exp, typ: PType): FieldAccessPredicate =
+    vpr.FieldAccessPredicate(stepToLocation(rcvr, typ), vpr.FullPerm()())()
+
   val intSet: FuncApp =
     vpr.FuncApp.apply("IntSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty)
 
@@ -38,6 +56,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
       ++ Vector(diamondField)
+      ++ tree.root.regions.flatMap(region => {
+           val typ = semanticAnalyser.typ(region.state)
+
+           Vector(stepFromField(typ), stepToField(typ))
+         }).distinct
       ++ (tree.root.regions flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
@@ -115,17 +138,36 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(statement: PStatement): vpr.Stmt = statement match {
     case PBlock(stmts) =>
       vpr.Seqn(stmts map translate)()
+
     case PIf(cond, thn, els) =>
-      vpr.If(translate(cond), translate(thn), translate(els))()
+      val vprIf =
+        vpr.If(translate(cond), translate(thn), translate(els))()
+
+      surroundWithSectionComments(statement.statementName, vprIf)
+
     case PWhile(cond, body) =>
-      vpr.While(translate(cond), Nil, Nil, translate(body))()
+      val vprWhile =
+        vpr.While(translate(cond), Nil, Nil, translate(body))()
+
+      surroundWithSectionComments(statement.statementName, vprWhile)
+
     case PAssign(lhs, rhs) =>
-      /* TODO: Use correct type */
-      vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
+      val vprAssign =
+        /* TODO: Use correct type */
+        vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
+
+      surroundWithSectionComments(statement.statementName, vprAssign)
+
     case read: PHeapRead =>
-      translate(read)
+      val vprRead = translate(read)
+
+      surroundWithSectionComments(statement.statementName, vprRead)
+
     case write: PHeapWrite =>
-      translate(write)
+      val vprWrite = translate(write)
+
+      surroundWithSectionComments(statement.statementName, vprWrite)
+
     case stmt @ PPredicateAccess(predicate, arguments) =>
       val vprArguments =
         semanticAnalyser.entity(predicate) match {
@@ -149,9 +191,39 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case _: PFold => vpr.Fold(acc)()
         case _: PUnfold => vpr.Unfold(acc)()
       }
+
     case stmt: PMakeAtomic => translate(stmt)
     case stmt: PUpdateRegion => translate(stmt)
   }
+
+//  protected def statementSectionComments(statement: PStatement): (vpr.Seqn, vpr.Seqn, vpr.Seqn) = {
+//    val noComment = vpr.Seqn(Vector.empty)()
+//
+//    val (statementName, commentType) =
+//      statement match {
+//        case PBlock(stmts) =>
+//          return (noComment, noComment, noComment)
+//
+//        case _: PIf => ("if-then-else", 3)
+//        case _: PWhile => ("while", 2)
+//        case _: PAssign => ("assign", 2)
+//        case _: PHeapRead => ("heap-read", 2)
+//        case _: PHeapWrite => ("heap-write", 2)
+//        case _: PMakeAtomic => ("make-atomic", 2)
+//        case _: PUpdateRegion => ("update-region", 2)
+//        case _: PGhostStatement => ("ghost statement", 1)
+//      }
+//
+//    commentType match {
+//      case 3 =>
+//    }
+//
+//    //      val ruleName = "make-atomic"
+//    //    val beginComment = sectionComment(ruleName, SectionMarker.Begin)
+//    //    val endComment = sectionComment(ruleName, SectionMarker.End)
+//  }
+
+
 
   def translate(expression: PExpression): vpr.Exp = expression match {
     case PTrueLit() => vpr.TrueLit()()

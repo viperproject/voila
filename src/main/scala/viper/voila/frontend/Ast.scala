@@ -83,35 +83,65 @@ case class PPredicate(id: PIdnDef,
  * Statements
  */
 
-sealed trait PStatement extends PAstNode
+sealed trait PStatement extends PAstNode {
+  def statementName: String
+}
 
-case class PBlock(stmts: Vector[PStatement]) extends PStatement
-case class PIf(cond: PExpression, thn: PStatement, els: PStatement) extends PStatement
-case class PWhile(cond: PExpression, body: PStatement) extends PStatement
-case class PAssign(lhs: PIdnUse, rhs: PExpression) extends PStatement
+case class PBlock(stmts: Vector[PStatement]) extends PStatement {
+  val statementName = "seq-comp"
+}
+
+case class PIf(cond: PExpression, thn: PStatement, els: PStatement) extends PStatement {
+  val statementName = "if-then-else"
+}
+
+case class PWhile(cond: PExpression, body: PStatement) extends PStatement {
+  val statementName = "while"
+}
+
+case class PAssign(lhs: PIdnUse, rhs: PExpression) extends PStatement {
+  val statementName = "assign"
+}
 
 sealed trait PHeapAccess extends PStatement {
   def location: PIdnUse
 }
 
-case class PHeapWrite(location: PIdnUse, rhs: PExpression) extends PHeapAccess
-case class PHeapRead(lhs: PIdnUse, location: PIdnUse) extends PHeapAccess
+case class PHeapWrite(location: PIdnUse, rhs: PExpression) extends PHeapAccess {
+  val statementName = "heap-write"
+}
+
+case class PHeapRead(lhs: PIdnUse, location: PIdnUse) extends PHeapAccess {
+  val statementName = "heap-read"
+}
 
 sealed trait PGhostStatement extends PStatement
 
 case class PFold(predicate: PIdnUse, arguments: Vector[PExpression])
     extends PGhostStatement with PPredicateAccess
+{
+  val statementName = "fold"
+}
 
 case class PUnfold(predicate: PIdnUse, arguments: Vector[PExpression])
     extends PGhostStatement with PPredicateAccess
+{
+  val statementName = "unfold"
+}
 
 sealed trait PRuleStatement extends PStatement
 
 case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
     extends PRuleStatement
+{
+  val statementName = "make-atomic"
+}
 
 case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
     extends PRuleStatement
+{
+  val statementName = "update-region"
+}
 
 /*
  * Expressions

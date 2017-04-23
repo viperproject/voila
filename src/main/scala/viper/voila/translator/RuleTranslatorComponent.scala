@@ -10,34 +10,39 @@ import viper.voila.frontend._
 import viper.silver.{ast => vpr}
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
-  sealed trait SectionMarker
-  object SectionMarker {
-    case object Begin extends SectionMarker { override val toString = "BEGIN" }
-    case object Mid extends SectionMarker { override val toString = "MID" }
-    case object End extends SectionMarker { override val toString = "END" }
-  }
+  private var lastPreUpdateRegionLabel: vpr.Label = _
+  private var preUpdateRegionCounter = 0
 
-  def sectionComment(section: String, marker: SectionMarker): vpr.Seqn = {
-    val pattern = "-"
-    val rep = 7
-    val prefix = s"${pattern * rep} $section $marker"
-    val comment = s"$prefix ${pattern * (rep - prefix.length - 1)}"
-    val info = vpr.SimpleInfo(Vector("", comment))
+  def freshPreUpdateRegionLabel(): vpr.Label = {
+    preUpdateRegionCounter += 1
 
-    vpr.Seqn(Vector.empty)(info = info)
+    val label =
+      vpr.Label(
+        s"pre_region_update_$preUpdateRegionCounter",
+        Vector.empty
+      )()
+
+    lastPreUpdateRegionLabel = label
+
+    label
   }
 
   def translate(makeAtomic: PMakeAtomic): vpr.Stmt = {
-    val ruleName = "make-atomic"
-    val beginComment = sectionComment(ruleName, SectionMarker.Begin)
-    val endComment = sectionComment(ruleName, SectionMarker.Begin)
-
     val region =
       semanticAnalyser.entity(makeAtomic.regionPredicate.predicate).asInstanceOf[RegionEntity]
                       .declaration
 
-    val regionArguments =
+    val guard =
+      semanticAnalyser.entity(makeAtomic.guard.guard).asInstanceOf[GuardEntity]
+                      .declaration
+
+    val regionType = semanticAnalyser.typ(region.state)
+
+    val regionArgs =
       makeAtomic.regionPredicate.arguments.init
+
+    val vprRegionArgs @ (vprRegionIdArg +: vprRegularArgs :+ _) =
+      makeAtomic.regionPredicate.arguments map translate
 
     val inhaleDiamond =
       vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId)))()
@@ -45,28 +50,139 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val exhaleGuard =
       vpr.Exhale(translate(makeAtomic.guard))()
 
+    val interference = semanticAnalyser.interferenceSpecifications(makeAtomic)(makeAtomic).head
+
     val havoc =
       havocRegion(
         region,
-        regionArguments,
-        semanticAnalyser.interferenceSpecifications(makeAtomic)(makeAtomic).head.set,
+        regionArgs,
+        interference.set,
         tmpVar(semanticAnalyser.typ(region.state)).localVar)
 
-    vpr.Seqn(
-      Vector(
-        beginComment,
-        inhaleDiamond,
-        exhaleGuard,
-        havoc,
-        endComment)
-    )()
+    val ruleBody = translate(makeAtomic.body)
+
+    val vprAtomicityContextX = translate(interference.set)
+
+    val checkUpdatePermitted = {
+      val checkFrom =
+        vpr.Assert(
+          vpr.AnySetContains(
+            stepFromLocation(vprRegionIdArg, regionType),
+            vprAtomicityContextX
+          )()
+        )()
+
+      val checkTo =
+        vpr.Assert(
+          vpr.AnySetContains(
+            stepToLocation(vprRegionIdArg, regionType),
+            vpr.FuncApp(
+              guardTransitiveClosureFunction(guard, region),
+              Vector(vprRegionIdArg, stepFromLocation(vprRegionIdArg, regionType))
+            )()
+          )()
+        )()
+
+      vpr.Seqn(
+        Vector(
+          checkFrom,
+          checkTo)
+      )()
+    }
+
+    val result =
+      vpr.Seqn(
+        Vector(
+          inhaleDiamond,
+          exhaleGuard,
+          havoc,
+          ruleBody,
+          checkUpdatePermitted)
+      )()
+
+    surroundWithSectionComments(makeAtomic.statementName, result)
   }
 
   def translate(updateRegion: PUpdateRegion): vpr.Stmt = {
-    val ruleName = "update-region"
-    val beginComment = sectionComment(ruleName, SectionMarker.Begin)
-    val endComment = sectionComment(ruleName, SectionMarker.Begin)
+    val region =
+      semanticAnalyser.entity(updateRegion.regionPredicate.predicate).asInstanceOf[RegionEntity]
+                      .declaration
 
-    vpr.Seqn(Vector(beginComment, endComment))()
+    val regionType = semanticAnalyser.typ(region.state)
+
+    val vprArgs @ (vprRegionIdArg +: vprRegularArgs :+ _) =
+      updateRegion.regionPredicate.arguments map translate
+
+    val exhaleDiamond =
+      vpr.Exhale(diamondAccess(vprRegionIdArg))()
+
+    val label = freshPreUpdateRegionLabel()
+
+    val unfoldRegionPredicate =
+      vpr.Unfold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()
+
+    val ruleBody = translate(updateRegion.body)
+
+    val foldRegionPredicate =
+      vpr.Fold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()
+
+    val currentState =
+      vpr.FuncApp(
+        regionStateFunction(region),
+        vprRegionIdArg +: vprRegularArgs
+      )()
+
+    val oldState =
+      vpr.LabelledOld(
+        currentState,
+        lastPreUpdateRegionLabel.name
+      )()
+
+    val stateChanged = vpr.NeCmp(currentState, oldState)()
+
+    val obtainTrackingResource = {
+      val stepFrom = stepFromAccess(vprRegionIdArg, regionType)
+      val stepTo = stepToAccess(vprRegionIdArg, regionType)
+
+      val inhaleFromTo =
+        vpr.Inhale(
+          vpr.And(
+            stepFrom,
+            stepTo
+          )()
+        )()
+
+      val initFrom = vpr.FieldAssign(stepFrom.loc, oldState)()
+      val initTo = vpr.FieldAssign(stepTo.loc, currentState)()
+
+      vpr.Seqn(
+        Vector(
+          inhaleFromTo,
+          initFrom,
+          initTo)
+      )()
+    }
+
+    val inhaleDiamond = vpr.Inhale(diamondAccess(vprRegionIdArg))()
+
+    val postRegionUpdate =
+      vpr.If(
+        stateChanged,
+        obtainTrackingResource,
+        inhaleDiamond
+      )()
+
+    val result =
+      vpr.Seqn(
+        Vector(
+          exhaleDiamond,
+          label,
+          unfoldRegionPredicate,
+          ruleBody,
+          foldRegionPredicate,
+          postRegionUpdate)
+      )()
+
+    surroundWithSectionComments(updateRegion.statementName, result)
   }
 }

@@ -250,7 +250,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                   tmpVar: vpr.LocalVar)
                  : vpr.Seqn =
   {
-    val vprArgs @ Seq(vprRegionIdArg, vprRegularArgs) = arguments map translate
+    val vprArgs @ (vprRegionIdArg +: _) = arguments map translate
     val vprCxtX = translate(atomicityContextX)
 
     val comment =

@@ -19,3 +19,4 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
        with HeapAccessTranslatorComponent
        with RegionTranslatorComponent
        with RuleTranslatorComponent
+       with CommentsComponent

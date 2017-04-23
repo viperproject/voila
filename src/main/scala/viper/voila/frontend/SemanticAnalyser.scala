@@ -307,6 +307,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         interferenceSpecifications(node)(p)
     }}
 
+  lazy val enclosingMakeAtomic: PAstNode => PAstNode => PMakeAtomic =
+    paramAttr { node => {
+      case makeAtomic: PMakeAtomic =>
+        makeAtomic
+      case tree.parent(p) =>
+        enclosingMakeAtomic(node)(p)
+    }}
+
   /**
     * Return the internal type of a syntactic type. In most cases they
     * are the same. The exception is class types since the class type
