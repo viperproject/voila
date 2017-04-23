@@ -6,44 +6,43 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{Field, FieldAccess, FieldAccessPredicate, FuncApp}
 import viper.voila.frontend._
 import viper.silver.{ast => vpr}
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   val returnVarName = "ret"
 
-  val diamondField: Field =
+  val diamondField: vpr.Field =
     vpr.Field("$diamond", vpr.Int)()
 
-  def diamondLocation(rcvr: vpr.Exp): FieldAccess =
+  def diamondLocation(rcvr: vpr.Exp): vpr.FieldAccess =
     vpr.FieldAccess(rcvr, diamondField)()
 
-  def diamondAccess(rcvr: vpr.Exp): FieldAccessPredicate =
+  def diamondAccess(rcvr: vpr.Exp): vpr.FieldAccessPredicate =
     vpr.FieldAccessPredicate(diamondLocation(rcvr), vpr.FullPerm()())()
 
-  def stepFromField(typ: PType): Field =
+  def stepFromField(typ: PType): vpr.Field =
     vpr.Field(s"$$stepFrom_$typ", translateNonVoid(typ))()
 
-  def stepFromLocation(rcvr: vpr.Exp, typ: PType): FieldAccess =
+  def stepFromLocation(rcvr: vpr.Exp, typ: PType): vpr.FieldAccess =
     vpr.FieldAccess(rcvr, stepFromField(typ))()
 
-  def stepFromAccess(rcvr: vpr.Exp, typ: PType): FieldAccessPredicate =
+  def stepFromAccess(rcvr: vpr.Exp, typ: PType): vpr.FieldAccessPredicate =
     vpr.FieldAccessPredicate(stepFromLocation(rcvr, typ), vpr.FullPerm()())()
 
-  def stepToField(typ: PType): Field =
+  def stepToField(typ: PType): vpr.Field =
     vpr.Field(s"$$stepTo_$typ", translateNonVoid(typ))()
 
-  def stepToLocation(rcvr: vpr.Exp, typ: PType): FieldAccess =
+  def stepToLocation(rcvr: vpr.Exp, typ: PType): vpr.FieldAccess =
     vpr.FieldAccess(rcvr, stepToField(typ))()
 
-  def stepToAccess(rcvr: vpr.Exp, typ: PType): FieldAccessPredicate =
+  def stepToAccess(rcvr: vpr.Exp, typ: PType): vpr.FieldAccessPredicate =
     vpr.FieldAccessPredicate(stepToLocation(rcvr, typ), vpr.FullPerm()())()
 
-  val intSet: FuncApp =
+  val intSet: vpr.FuncApp =
     vpr.FuncApp.apply("IntSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty)
 
-  val natSet: FuncApp =
+  val natSet: vpr.FuncApp =
     vpr.FuncApp("NatSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty)
 
   def tmpVar(typ: PType): vpr.LocalVarDecl =

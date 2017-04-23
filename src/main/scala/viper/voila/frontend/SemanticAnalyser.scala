@@ -42,42 +42,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               rhs,
               s"Type error: expected ${lhsDecl.typ}* but got $rhsTyp",
               !isCompatible(referencedType(rhsTyp), lhsDecl.typ))
-//            entity(rhs) match {
-//              case RegularEntity(rhsDecl) =>
-//                val rhsType = typ
-//                val messages1 =
-//                  message(
-//                    rhs,
-//                    s"Type error: expected a reference type, but found ${rhsDecl.typ}",
-//                    !rhsDecl.typ.isInstanceOf[PRefType])
-//
-//                val messages2 =
-//                  message(
-//                    rhs,
-//                    s"Type error: expected ${lhsDecl.typ}* but got ${rhsDecl.typ}",
-//                    !isCompatible(referencedType(rhsDecl.typ), lhsDecl.typ))
-//
-//                messages1 ++ messages2
-//            }
-
 
           case other =>
             message(lhs, s"Type error: expected a local variable, but found $other")
         }
-
-//        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
-//          checkUse(entity(rhs)) { case TypedVariableEntity(rhsDecl) => (
-//               message(
-//                 rhs,
-//                 s"Type error: expected a reference type, but found ${rhsDecl.typ}",
-//                 !rhsDecl.typ.isInstanceOf[PRefType])
-//            ++
-//               message(
-//                 rhs,
-//                 s"Type error: expected ${lhsDecl.typ}* but got ${rhsDecl.typ}",
-//                 !isCompatible(referencedType(rhsDecl.typ), lhsDecl.typ)))
-//          }
-//        }
 
       case PHeapWrite(lhs, _) =>
         typeOfIdn(lhs) match {
@@ -89,13 +57,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               lhs,
               s"Type error: expected a reference type, but found $otherType")
         }
-
-//        checkUse(entity(lhs)) { case TypedVariableEntity(lhsDecl) =>
-//           message(
-//             lhs,
-//             s"Type error: expected a reference type, but found ${lhsDecl.typ}",
-//             !lhsDecl.typ.isInstanceOf[PRefType])
-//        }
 
       case exp: PExpression => (
            message(
@@ -124,18 +85,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   case _ =>
                     message(id, s"Cannot call ${id.name}")
                 }
-
-//              case PCall(id, args) =>
-//                checkUse(entity(id)) {
-//                  case ProcedureEntity(decl) =>
-//                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
-//
-//                  case PredicateEntity(decl) =>
-//                    reportArgumentLengthMismatch(decl.id, decl.formalArgs, args)
-//
-//                  case _ =>
-//                    message(id, s"Cannot call ${id.name}")
-//                }
           })
     }
 
@@ -229,11 +178,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     // environment
     case scope@(_: PMember) =>
       enter(in(scope))
-
-//    case pp: PPointsTo =>
-//      println(s"pp = $pp")
-//      println(s"in(pp) = ${in(pp)}")
-//      in(pp)
   }
 
   def defenvout(out: PAstNode => Environment): PAstNode ==> Environment = {
@@ -246,8 +190,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     // been defined in this scope. If so, change its entity to MultipleEntity,
     // otherwise use the entity appropriate for this definition.
     case idef: PIdnDef =>
-//      println(s"idef = $idef")
-//      println(s"out(idef) = ${out(idef)}")
       defineIfNew(out(idef), idef.name, definedEntity(idef))
   }
 
@@ -293,45 +235,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val enclosingScope: PAstNode => PAstNode => Option[PMember] =
     paramAttr { node => {
-      case member: PMember =>
-        Some(member)
-      case tree.parent(p) =>
-        enclosingScope(node)(p)
+      case member: PMember => Some(member)
+      case tree.parent(p) => enclosingScope(node)(p)
     }}
 
   lazy val interferenceSpecifications: PAstNode => PAstNode => Vector[PInterferenceClause] =
     paramAttr { node => {
       case procedure: PProcedure => procedure.inters
-//      case makeAtomic: PMakeAtomic => makeAtomic.inters
-      case tree.parent(p) =>
-        interferenceSpecifications(node)(p)
+      case tree.parent(p) => interferenceSpecifications(node)(p)
     }}
 
   lazy val enclosingMakeAtomic: PAstNode => PAstNode => PMakeAtomic =
     paramAttr { node => {
-      case makeAtomic: PMakeAtomic =>
-        makeAtomic
-      case tree.parent(p) =>
-        enclosingMakeAtomic(node)(p)
+      case makeAtomic: PMakeAtomic => makeAtomic
+      case tree.parent(p) => enclosingMakeAtomic(node)(p)
     }}
-
-  /**
-    * Return the internal type of a syntactic type. In most cases they
-    * are the same. The exception is class types since the class type
-    * refers to the class by name, but we need to have it as a reference
-    * type that refers to the declaration of that class.
-    */
-  def actualType(typ: PType): PType =
-    typ match {
-//        case ClassType(idn) =>
-//            entity(idn) match {
-//                case ClassEntity(decl) =>
-//                    ReferenceType(decl)
-//                case _ =>
-//                    UnknownType()
-//            }
-      case _ => typ
-    }
 
   def referencedType(typ: PType): PType =
     typ match {
@@ -344,28 +262,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case ArgumentEntity(decl) => decl.typ
       case LocalVariableEntity(decl) => decl.typ
       case ProcedureEntity(decl) => decl.typ
-      case LogicalVariableEntity(decl) =>
-//        println("\n[typeOfIdn]")
-//        println(s"  decl = $decl")
-        val t = typeOfLogicalVariable(decl)
-//        println(s"  typeOfLogicalVariable = $t")
-        t
+      case LogicalVariableEntity(decl) => typeOfLogicalVariable(decl)
       case _ => PUnknownType()
     })
-
-//  def typeOfIdn(idn: PIdnNode): PType =
-//    entity(idn) match {
-//      case ArgumentEntity(decl) => decl.typ
-//      case LocalVariableEntity(decl) => decl.typ
-//      case ProcedureEntity(decl) => decl.typ
-//      case LogicalVariableEntity(decl) =>
-//        println("\n[typeOfIdn]")
-//        println(s"  decl = $decl")
-//        val t = typeOfLogicalVariable(decl)
-//        println(s"  typeOfLogicalVariable = $t")
-//        t
-//      case _ => PUnknownType()
-//    }
 
   lazy val typeOfLogicalVariable: PLogicalVariableDecl => PType =
     attr {
@@ -386,16 +285,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PIntLit => PIntType()
       case _: PTrueLit | _: PFalseLit => PBoolType()
 
-      case PIdnExp(id) =>
-//        println(s"PIdnExp(id) = PIdnExp($id)")
-//        println(s"entity(id) = ${entity(id)}")
-        actualType(typeOfIdn(id))
-//        entity(id) match {
-//          case TypedVariableEntity(decl) =>
-//            println(s"actualType(decl.typ) = ${actualType(decl.typ)}")
-//            actualType(decl.typ)
-//          case _ => PUnknownType()
-//        }
+      case PIdnExp(id) => typeOfIdn(id)
 
       case _: PAdd | _: PSub => PIntType()
       case _: PAnd | _: POr | _: PNot => PBoolType()
@@ -404,26 +294,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PIntSet | _: PNatSet => PSetType(PIntType())
       case PExplicitSet(elements) => PSetType(typ(elements.head))
 
+      case conditional: PConditional => typ(conditional.thn)
+
       case _: PPointsTo | _: PPredicateExp | _: PGuardExp => PBoolType()
 
       case tree.parent.pair(_: PLogicalVariableDecl, pointsTo: PPointsTo) =>
         referencedType(typeOfIdn(pointsTo.id))
-
-//      case logicalVarDecl: PLogicalVariableDecl =>
-//        tree.parent(logicalVarDecl) match {
-//          case pp: PPointsTo =>
-//            ???
-//        }
-//        ???
-
-
-//          case CallExp(_, i, _) =>
-//              entity(i) match {
-//                  case MethodEntity(decl) =>
-//                      actualTypeOf(decl.body.tipe)
-//                  case _ =>
-//                      UnknownType()
-//              }
 
       case _ => PUnknownType()
     }
@@ -437,23 +313,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case tree.parent(PAssign(id, _)) =>
         entity(id) match {
-          case LocalVariableEntity(decl) => actualType(decl.typ)
+          case LocalVariableEntity(decl) => decl.typ
           case _ => PUnknownType()
         }
 
-      case tree.parent(PHeapRead(id, _)) =>
-        referencedType(typeOfIdn(id))
-//        entity(id) match {
-//          case TypedVariableEntity(decl) => referencedType(decl.typ)
-//          case _ => PUnknownType()
-//        }
+      case tree.parent(PHeapRead(id, _)) => referencedType(typeOfIdn(id))
 
-      case tree.parent(PHeapWrite(id, _)) =>
-        referencedType(typeOfIdn(id))
-//        entity(id) match {
-//          case TypedVariableEntity(decl) => referencedType(decl.typ)
-//          case _ => PUnknownType()
-//        }
+      case tree.parent(PHeapWrite(id, _)) => referencedType(typeOfIdn(id))
 
       case e @ tree.parent(PEquals(lhs, rhs)) if e eq rhs =>
         /* The expected type of the RHS of an equality is the type of the LHS */
@@ -463,44 +329,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(_: PAnd | _: POr | _: PNot) => PBoolType()
       case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => PIntType()
 
-//      case pp: PPointsTo =>
-//        println("Hit PPointsTo!")
-//        println(s"pp = $pp")
-//        ???
-
-//      case e @ tree.parent(pp: PPointsTo) =>
-//        println("Hit e!")
-//        println(s"e = $e")
-//        println(s"pp = $pp")
-//        ???
-//
-//      case decl: PLogicalVariableDecl =>
-//        println("Hit PLogicalVariableDecl!")
-//        println(s"decl = $decl")
-//        ???
-
-//      case tree.parent(tree.parent.pair(decl: PLogicalVariableDecl, PPointsTo(id, _))) =>
-//        println("Hit funny thing!")
-//        println(s"id = $id")
-//        println(s"decl = $decl")
-//        ???
-
-
-//        case e @ tree.parent(CallExp(base, u, _)) if base eq e =>
-//            UnknownType()
-//
-//        case e @ tree.parent(CallExp(_, u, _)) =>
-//            entity(u) match {
-//                case MethodEntity(decl) =>
-//                    expTypeOfArg(decl, tree.index(e))
-//
-//                case _ =>
-//                    // No idea what is being called, so no type constraint
-//                    UnknownType()
-//            }
-
-//        case tree.parent(tree.parent.pair(_ : Result, MethodBody(t, _, _, _, _))) =>
-//            actualTypeOf(t)
+      case cnd @ tree.parent(conditional: PConditional) if cnd eq conditional.cond => PBoolType()
+      case els @ tree.parent(conditional: PConditional) if els eq conditional.els => typ(conditional.thn)
 
       case _ =>
         /* Returning unknown expresses that no particular type is expected */

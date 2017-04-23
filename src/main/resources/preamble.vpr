@@ -1,0 +1,6 @@
+function IntSet(): Set[Int]
+  ensures forall n: Int :: n in result
+
+function NatSet(): Set[Int]
+  ensures forall n: Int :: 0 <= n <==> n in result
+

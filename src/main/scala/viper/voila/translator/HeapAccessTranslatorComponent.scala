@@ -6,7 +6,6 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.FieldAccess
 import viper.voila.frontend._
 import viper.silver.{ast => vpr}
 
@@ -62,7 +61,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def translateUseOf(declaration: PLogicalVariableDecl): FieldAccess = {
+  def translateUseOf(declaration: PLogicalVariableDecl): vpr.FieldAccess = {
     val boundTo = semanticAnalyser.boundTo(declaration)
     val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
 

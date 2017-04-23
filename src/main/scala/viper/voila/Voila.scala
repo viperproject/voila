@@ -23,6 +23,8 @@ object VoilaConstants {
   val toolCopyright = "(c) Copyright ETH Zurich 2016"
 
   val versionMessage = s"${VoilaConstants.toolName} ${VoilaConstants.toolVersion} ${VoilaConstants.toolCopyright}"
+
+  val preambleFile = "/preamble.vpr"
 }
 
 object Voila extends StrictLogging {
@@ -34,10 +36,21 @@ object Voila extends StrictLogging {
     val inputFile = new File(config.inputFile())
     val outputFile = new File(config.outputFile())
 
+    val preambleFile = {
+      val resource = getClass.getResource(VoilaConstants.preambleFile)
+
+      if (resource == null)
+        exitWithError(s"Cannot access resource ${VoilaConstants.preambleFile}")
+
+      new File(resource.getFile)
+    }
+
     logger.info(VoilaConstants.versionMessage)
 
     if (!inputFile.isFile) exitWithError(s"${config.inputFile()} is not a file")
     if (!inputFile.canRead) exitWithError(s"Cannot read from ${config.inputFile()}")
+    if (!preambleFile.isFile) exitWithError(s"$preambleFile is not a file")
+    if (!preambleFile.canRead) exitWithError(s"Cannot read from $preambleFile")
 
     logger.debug(s"Reading source program from file ${config.inputFile()}")
 
@@ -48,8 +61,7 @@ object Voila extends StrictLogging {
         frontend.reportErrors(
           s"Parsing ${config.inputFile()} failed with ${messages.length} error(s):",
           messages)
-        //      logger.error(s"Parsing ${config.inputFile()} failed with ${messages.length} error(s):")
-        //      messages foreach (m => logger.error(s"  $m"))
+
         sys.exit(1)
 
       case Right(program) =>
@@ -63,10 +75,7 @@ object Voila extends StrictLogging {
           frontend.reportErrors(
             s"Type-checking ${config.inputFile()} failed with ${messages.length} error(s):",
             messages)
-          //        if (logger.underlying.isErrorEnabled) {
-          //          messages.sorted(frontend.messageOrdering)
-          //                  .foreach(m => logger.error(frontend.formatMessage(m)))
-          //        }
+
           sys.exit(1)
         }
 
@@ -78,12 +87,17 @@ object Voila extends StrictLogging {
         val translator = new PProgramToViperTranslator(semanticAnalyser)
         val viperProgram = translator.translate(tree)
 
+        logger.debug(s"Taking Viper preamble from resources/${VoilaConstants.preambleFile}")
+
+        FileUtils.copyFile(preambleFile, outputFile)
+
         logger.debug(s"Writing generated program to file ${config.outputFile()}")
 
         FileUtils.writeStringToFile(
           outputFile,
           FastPrettyPrinter.pretty(viperProgram),
-          UTF_8)
+          UTF_8,
+          true)
     }
 
     logger.info("Done")
