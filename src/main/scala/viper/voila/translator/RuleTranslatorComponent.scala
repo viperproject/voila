@@ -90,6 +90,42 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       )()
     }
 
+    val currentState =
+      vpr.FuncApp(
+        regionStateFunction(region),
+        vprRegionIdArg +: vprRegularArgs
+      )()
+
+    val assumeStateIsStepTo =
+      vpr.Inhale(
+        vpr.EqCmp(
+          currentState,
+          stepToLocation(vprRegionIdArg, regionType)
+        )()
+      )()
+
+    val assumeInterferenceWasStepFrom =
+      vpr.Inhale(
+        vpr.EqCmp(
+          translateUseOf(interference.variable),
+          stepFromLocation(vprRegionIdArg, regionType)
+        )()
+      )()
+
+    val inhaleGuard = vpr.Inhale(exhaleGuard.exp)()
+
+    val exhaleTrackingResource = {
+      val stepFrom = stepFromAccess(vprRegionIdArg, regionType)
+      val stepTo = stepToAccess(vprRegionIdArg, regionType)
+
+      vpr.Exhale(
+        vpr.And(
+          stepFrom,
+          stepTo
+        )()
+      )()
+    }
+
     val result =
       vpr.Seqn(
         Vector(
@@ -97,7 +133,13 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           exhaleGuard,
           havoc,
           ruleBody,
-          checkUpdatePermitted)
+          checkUpdatePermitted,
+          havoc,
+          BLANK_LINE,
+          assumeStateIsStepTo,
+          assumeInterferenceWasStepFrom,
+          inhaleGuard,
+          exhaleTrackingResource)
       )()
 
     surroundWithSectionComments(makeAtomic.statementName, result)

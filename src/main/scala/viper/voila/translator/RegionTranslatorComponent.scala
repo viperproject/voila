@@ -285,7 +285,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           vpr.Exhale(predicateAccess)(),
           vpr.Inhale(predicateAccess)())
-      )(info = comment)
+      )()
 
     def potentialStateValuesPerGuard(guard: PGuardDecl): vpr.Exp = {
       val potentiallyHeld =
@@ -362,6 +362,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         havocRegion,
         constrainStateViaGuards,
         constrainStateViaAtomicityContext)
-    )()
+    )(info = comment)
   }
 }

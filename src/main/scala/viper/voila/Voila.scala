@@ -70,6 +70,11 @@ object Voila extends StrictLogging {
           sys.exit(1)
         }
 
+        logger.info("Parsed")
+        logger.info(s"  ${program.regions.length} region(s): ${program.regions.map(_.id.name).mkString(", ")}")
+        logger.info(s"  ${program.predicates.length} predicate(s): ${program.predicates.map(_.id.name).mkString(", ")}")
+        logger.info(s"  ${program.procedures.length} procedures(s): ${program.procedures.map(_.id.name).mkString(", ")}")
+
         val translator = new PProgramToViperTranslator(semanticAnalyser)
         val viperProgram = translator.translate(tree)
 

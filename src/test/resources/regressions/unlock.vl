@@ -36,3 +36,23 @@ void unlock(int s, id a, int* x)
   
   fold U(a, x);
 }
+
+void unlock_wrong(int s, id a, int* x)
+  interference s in Int on a;
+  requires L(a, x);
+  ensures U(a, x);
+{
+  unfold L(a, x);
+  
+  make_atomic
+    using Lock(a, x, s) with G@a;
+  {
+    update_region
+      using Lock(a, x, s);
+    {
+      *x := 0;
+    }
+  }
+  
+  fold U(a, x);
+}

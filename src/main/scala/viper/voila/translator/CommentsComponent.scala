@@ -37,4 +37,6 @@ trait CommentsComponent { this: PProgramToViperTranslator =>
       :+ sectionComment(sectionName, SectionMarker.End)
     )()
   }
+
+  val BLANK_LINE: vpr.Seqn = vpr.Seqn(Vector.empty)(info = vpr.SimpleInfo(Vector()))
 }
