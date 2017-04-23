@@ -291,14 +291,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         ???
     })
 
-    lazy val enclosingScope: PAstNode => PAstNode => Option[PMember] =
-      paramAttr { node => {
-          case member: PMember =>
-            Some(member)
-          case tree.parent(p) =>
-            enclosingScope(node)(p)
-        }
-      }
+  lazy val enclosingScope: PAstNode => PAstNode => Option[PMember] =
+    paramAttr { node => {
+      case member: PMember =>
+        Some(member)
+      case tree.parent(p) =>
+        enclosingScope(node)(p)
+    }}
+
+  lazy val interferenceSpecifications: PAstNode => PAstNode => Vector[PInterferenceClause] =
+    paramAttr { node => {
+      case procedure: PProcedure => procedure.inters
+//      case makeAtomic: PMakeAtomic => makeAtomic.inters
+      case tree.parent(p) =>
+        interferenceSpecifications(node)(p)
+    }}
 
   /**
     * Return the internal type of a syntactic type. In most cases they

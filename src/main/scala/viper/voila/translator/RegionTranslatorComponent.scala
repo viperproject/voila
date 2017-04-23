@@ -206,7 +206,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val vprStateConstraint =
       vpr.EqCmp(
         vpr.FuncApp(
-          funcname = regionStateFunctionName(region),
+          funcname = regionStateFunctionName(region), // TODO: Use regionStateFunctionCache
           args = vprRegionArguments
         )(
           pos = vpr.NoPosition,
@@ -250,29 +250,118 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                   tmpVar: vpr.LocalVar)
                  : vpr.Seqn =
   {
-    val vprArguments = arguments map translate
+    val vprArgs @ Seq(vprRegionIdArg, vprRegularArgs) = arguments map translate
+    val vprCxtX = translate(atomicityContextX)
+
+    val comment =
+      vpr.SimpleInfo(
+        Vector(
+          "",
+          s"${region.id.name}_havoc(${(vprArgs :+ vprCxtX :+ tmpVar).mkString(", ")})"))
+
+    val state =
+      vpr.FuncApp(
+        regionStateFunction(region),
+        vprArgs)()
 
     /* tmp := region_state(arguments) */
     val saveRegionState =
       vpr.LocalVarAssign(
         tmpVar,
-        vpr.FuncApp(regionStateFunction(region), vprArguments)()
+        state
       )()
 
-    val predicateAccess =
-      regionPredicateAccess(region, vprArguments)
+    /* Set(tmp) */
+    val currentSet =
+      vpr.ExplicitSet(Vector(tmpVar))()
 
+    /* region(arguments) */
+    val predicateAccess =
+      regionPredicateAccess(region, vprArgs)
+
+    /* exhale region(arguments);  inhale region(arguments) */
     val havocRegion =
       vpr.Seqn(
         Vector(
           vpr.Exhale(predicateAccess)(),
           vpr.Inhale(predicateAccess)())
+      )(info = comment)
+
+    def potentialStateValuesPerGuard(guard: PGuardDecl): vpr.Exp = {
+      val potentiallyHeld =
+          vpr.FuncApp(
+            guardPotentiallyHeldFunction(guard, region),
+            Vector(
+              vprRegionIdArg,
+              vpr.CurrentPerm(
+                vpr.PredicateAccess(
+                  Vector(vprRegionIdArg),
+                  guardPredicate(guard, region)
+                )()
+              )())
+          )()
+
+        val closureSet =
+          vpr.FuncApp(
+            guardTransitiveClosureFunction(guard, region),
+            Vector(
+              vprRegionIdArg,
+              tmpVar)
+          )()
+
+        vpr.CondExp(
+          potentiallyHeld,
+          closureSet,
+          currentSet
+        )()
+    }
+
+    val constrainStateViaGuards = {
+      val interferenceSet = {
+        val init = potentialStateValuesPerGuard(region.guards.head)
+
+        region.guards.tail.foldLeft(init)((set, guard) => {
+          vpr.AnySetUnion(
+            set,
+            potentialStateValuesPerGuard(guard)
+          )()
+        })
+      }
+
+      vpr.Inhale(
+        vpr.AnySetContains(
+          state,
+          interferenceSet
+        )()
       )()
+    }
+
+    val constrainStateViaAtomicityContext = {
+      val diamondHeld =
+        vpr.PermLtCmp(
+          vpr.NoPerm()(),
+          vpr.CurrentPerm(
+            diamondAccess(vprRegionIdArg).loc
+          )()
+        )()
+
+      vpr.Inhale(
+        vpr.Implies(
+          diamondHeld,
+          vpr.AnySetContains(
+            state,
+            vprCxtX
+          )()
+        )()
+      )()
+    }
 
     vpr.Seqn(
       Vector(
         saveRegionState,
-        havocRegion)
+        havocRegion,
+        constrainStateViaGuards,
+        constrainStateViaAtomicityContext)
     )()
   }
 }

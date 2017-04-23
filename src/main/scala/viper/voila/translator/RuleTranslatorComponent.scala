@@ -46,7 +46,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Exhale(translate(makeAtomic.guard))()
 
     val havoc =
-      havocRegion(region, regionArguments, null, tmpVar(semanticAnalyser.typ(region.state)).localVar)
+      havocRegion(
+        region,
+        regionArguments,
+        semanticAnalyser.interferenceSpecifications(makeAtomic)(makeAtomic).head.set,
+        tmpVar(semanticAnalyser.typ(region.state)).localVar)
 
     vpr.Seqn(
       Vector(
