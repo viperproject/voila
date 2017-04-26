@@ -115,6 +115,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       ++ procedure.inters.map(translate)
     )
 
+    val body =
+      procedure.body match {
+        case Some(statements) => vpr.Seqn(statements map translate)()
+        case None => vpr.Inhale(vpr.FalseLit()())()
+      }
+
     vpr.Method(
       name = procedure.id.name,
       formalArgs = procedure.formalArgs map translate,
@@ -122,7 +128,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       _pres = pres,
       _posts = procedure.posts map (post => translate(post.assertion)),
       _locals = procedure.locals map translate,
-      _body = vpr.Seqn(procedure.body.fold(Vector.empty[vpr.Stmt])(_ map translate))()
+      _body = body
     )()
   }
 
@@ -193,6 +199,39 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case _: PFold => vpr.Fold(acc)()
         case _: PUnfold => vpr.Unfold(acc)()
       }
+
+    case PProcedureCall(procedure, arguments, optRhs) =>
+      val vprArguments = arguments map translate
+
+      val vprFormalArgs =
+        vprArguments.zipWithIndex map { case (a, i) => vpr.LocalVarDecl(s"x$i", a.typ)() }
+
+      val vprFormalReturns =
+        optRhs match {
+          case Some(rhs) =>
+            val typ = translateNonVoid(semanticAnalyser.typ(PIdnExp(rhs)))
+            Vector(vpr.LocalVarDecl(rhs.name, typ)())
+          case None =>
+            Vector.empty
+        }
+
+      val method =
+        vpr.Method(
+          name = procedure.name,
+          formalArgs = vprFormalArgs,
+          formalReturns = vprFormalReturns,
+          _pres = Vector.empty,
+          _posts = Vector.empty,
+          _locals = Vector.empty,
+          _body = vpr.Seqn(Vector.empty)()
+        )()
+
+      vpr.MethodCall(
+        method,
+        vprArguments,
+        vprFormalReturns map (_.localVar)
+      )()
+      
 
     case stmt: PMakeAtomic => translate(stmt)
     case stmt: PUpdateRegion => translate(stmt)

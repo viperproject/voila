@@ -123,6 +123,12 @@ case class PHeapRead(lhs: PIdnUse, location: PIdnUse) extends PHeapAccess {
   val statementName = "heap-read"
 }
 
+case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Option[PIdnUse])
+    extends PStatement {
+
+  val statementName = s"call:${procedure.name}"
+}
+
 sealed trait PGhostStatement extends PStatement
 
 case class PFold(predicate: PIdnUse, arguments: Vector[PExpression])

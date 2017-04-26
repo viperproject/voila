@@ -102,6 +102,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     makeAtomic |
     updateRegion |
     "{" ~> statement.* <~ "}" ^^ PBlock |
+    (idnuse <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
+      case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs)
+    } |
     idnuse ~ (":=" ~> "*" ~> idnuse) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
 

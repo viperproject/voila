@@ -48,30 +48,39 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
     val rcvr = vpr.LocalVar(pointsTo.id.name)(typ = vpr.Ref)
     val fld = heapLocationAsField(voilaType)
-    val fldacc = vpr.FieldAccess(rcvr, fld)()
+    val deref = vpr.FieldAccess(rcvr, fld)()
 
     val fldvalcnstr = pointsTo.value match {
       case Left(_: PLogicalVariableDecl) => vpr.TrueLit()()
-      case Right(exp) => vpr.EqCmp(fldacc, translate(exp))()
+      case Right(exp) => vpr.EqCmp(deref, translate(exp))()
     }
 
     vpr.And(
-      vpr.FieldAccessPredicate(fldacc, vpr.FullPerm()())(),
+      vpr.FieldAccessPredicate(deref, vpr.FullPerm()())(),
       fldvalcnstr
     )()
   }
 
-  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableDecl): vpr.FieldAccess = {
-    println(s"Translating use of $id declared by $declaration")
-    println(s"Definition context ${semanticAnalyser.definitionContext(declaration)}")
-    println(s"Usage context ${semanticAnalyser.usageContext(id)}")
+  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableDecl): vpr.Exp = {
+    val definitionContext = semanticAnalyser.definitionContext(declaration)
+    val usageContext = semanticAnalyser.usageContext(id)
 
     val boundTo = semanticAnalyser.boundTo(declaration)
     val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
 
     val rcvr = vpr.LocalVar(boundTo.name)(typ = vpr.Ref)
     val fld = heapLocationAsField(voilaType)
+    val deref = vpr.FieldAccess(rcvr, fld)()
 
-    vpr.FieldAccess(rcvr, fld)()
+    (definitionContext, usageContext) match {
+      case (LogicalVariableContext.Precondition, LogicalVariableContext.Precondition) |
+           (LogicalVariableContext.Postcondition, LogicalVariableContext.Postcondition) |
+           (LogicalVariableContext.Region, LogicalVariableContext.Region) =>
+        deref
+      case (LogicalVariableContext.Precondition, _) =>
+        vpr.Old(deref)()
+      case _ =>
+        ???
+    }
   }
 }

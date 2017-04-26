@@ -1,21 +1,21 @@
-// region Lock(id a, int* x)
-  // guards { duplicable G; }
-  // interpretation {
-    // x |-> ?v && (v == 0 || v == 1) 
-  // }
-  // state { v }
-  // actions {
-    // G: 0 ~> Set(0, 1);
-    // G: 1 ~> Set(1, 0);
-  // }
+region Lock(id a, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?v && (v == 0 || v == 1) 
+  }
+  state { v }
+  actions {
+    G: 0 ~> Set(0, 1);
+    G: 1 ~> Set(1, 0);
+  }
 
-// predicate U(id a, int* x) {
-  // Lock(a, x, 0) && G@a
-// }
+predicate U(id a, int* x) {
+  Lock(a, x, 0) && G@a
+}
 
-// predicate L(id a, int* x) {
-  // Lock(a, x, 1) && G@a
-// }
+predicate L(id a, int* x) {
+  Lock(a, x, 1) && G@a
+}
 
 // void unlock(int s, id a, int* x)
   // interference s in Set(1) on a;
@@ -37,25 +37,27 @@
   // fold U(a, x);
 // }
 
-// void lock(int s, id a, int* x)
-  // interference s in Set(0, 1) on a;
-  // requires s == 0 ? U(a, x) : L(a, x);
+void lock(int s, id a, int* x)
+  interference s in Set(0, 1) on a;
+  requires s == 0 ? U(a, x) : L(a, x);
   // ensures L(a, x) && s == 0;
-// {
-  // bool b;
+{
+  bool b;
   
-  // // if (s == 0) unfold U(a, x);
-  // // else unfold L(a, x);
+  if (s == 0) unfold U(a, x);
+  else unfold L(a, x);
   
-  // // make_atomic
-    // // using Lock(a, x, s) with G@a;
-  // // {
-    // // update_region
-      // // using Lock(a, x, s)
-    // // {
-    // // }
-  // // }
-// }
+  b := CAS(x, 0, 1);
+  
+  // make_atomic
+    // using Lock(a, x, s) with G@a;
+  // {
+    // update_region
+      // using Lock(a, x, s)
+    // {
+    // }
+  // }
+}
 
 atomic bool CAS(int* x, int now, int thn)
   requires x |-> ?v;

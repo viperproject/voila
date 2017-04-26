@@ -267,6 +267,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     paramAttr { of => {
       case _: PPreconditionClause => LogicalVariableContext.Precondition
       case _: PPostconditionClause => LogicalVariableContext.Postcondition
+      case _: PRegion => LogicalVariableContext.Region
       case tree.parent(p) => definitionContextAttr(of)(p)
     }}
 
@@ -277,7 +278,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     paramAttr { of => {
       case _: PPreconditionClause => LogicalVariableContext.Precondition
       case _: PPostconditionClause => LogicalVariableContext.Postcondition
-      case _: PProcedure => LogicalVariableContext.Body /* TODO: Make more precise */
+      case _: PProcedure => LogicalVariableContext.Body
+      case _: PRegion => LogicalVariableContext.Region
       case tree.parent(p) => usageContextAttr(of)(p)
     }}
 
@@ -393,4 +395,5 @@ object LogicalVariableContext {
   case object Precondition extends LogicalVariableContext
   case object Postcondition extends LogicalVariableContext
   case object Body extends LogicalVariableContext
+  case object Region extends LogicalVariableContext
 }
