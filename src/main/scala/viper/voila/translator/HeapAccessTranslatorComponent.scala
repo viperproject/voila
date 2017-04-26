@@ -61,7 +61,11 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def translateUseOf(declaration: PLogicalVariableDecl): vpr.FieldAccess = {
+  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableDecl): vpr.FieldAccess = {
+    println(s"Translating use of $id declared by $declaration")
+    println(s"Definition context ${semanticAnalyser.definitionContext(declaration)}")
+    println(s"Usage context ${semanticAnalyser.usageContext(id)}")
+
     val boundTo = semanticAnalyser.boundTo(declaration)
     val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
 

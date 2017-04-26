@@ -20,13 +20,14 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "void", "int", "bool", "id", "Set",
     "region", "guards", "duplicable", "interpretation", "abstraction", "actions",
     "predicate",
+    "procedure", "atomic", "ret",
     "interference", "in", "on",
-    "if", "else", "while",
+    "if", "else", "while", "skip",
     "Int", "Nat"
   )
 
   lazy val program: Parser[PProgram] =
-    ((region | predicate | procedure)+) ^^ (members => {
+    (region | predicate | procedure).+ ^^ (members => {
       val region = members collect { case p: PRegion => p }
       val predicates = members collect { case p: PPredicate => p }
       val procedures = members collect { case p: PProcedure => p }
@@ -36,11 +37,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val region: Parser[PRegion] =
     ("region" ~> idndef) ~
-    ("(" ~> formalArg) ~ ((("," ~> formalArgs)?) <~ ")") ~
-    ("guards" ~> "{" ~> (guard+) <~ "}") ~
+    ("(" ~> formalArg) ~ (("," ~> formalArgs).? <~ ")") ~
+    ("guards" ~> "{" ~> guard.+ <~ "}") ~
     ("interpretation" ~> "{" ~> expression <~ "}") ~
     ("state" ~> "{" ~> expression <~ "}") ~
-    ("actions" ~> "{" ~> (action+) <~ "}") ^^ {
+    ("actions" ~> "{" ~> action.+ <~ "}") ^^ {
       case id ~ regionId ~ optArgs ~ guards ~ interpretation ~ abstraction ~ actions =>
         PRegion(
           id,
@@ -53,20 +54,26 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val guard: Parser[PGuardDecl] =
-    ("duplicable"?) ~ idndef <~ ";" ^^ { case optDup ~ id => PGuardDecl(id, optDup.isDefined) }
+    "duplicable".? ~ idndef <~ ";" ^^ { case optDup ~ id => PGuardDecl(id, optDup.isDefined) }
 
   lazy val action: Parser[PAction] =
     (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction
 
   lazy val procedure: Parser[PProcedure] =
+    "atomic".? ~
     typeOrVoid ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
-    (interference*) ~
-    (("requires" ~> expression <~ ";")*) ~
-    (("ensures" ~> expression <~ ";")*) ~
-    ("{" ~> (varDeclStmt*))  ~ ((statement*) <~ "}") ^^ {
-      case tpe ~ id ~ args ~ inters ~ pres ~ posts ~ locals ~ body =>
-        PProcedure(id, args, tpe, inters, pres, posts, locals, body)
+    interference.* ~
+    ("requires" ~> expression <~ ";").* ~
+    ("ensures" ~> expression <~ ";").* ~
+    (("{" ~> varDeclStmt.*) ~ (statement.* <~ "}")).? ^^ {
+      case optAtomic ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBody =>
+        optBody match {
+          case Some(locals ~ body) =>
+            PProcedure(id, args, tpe, inters, pres map PPreconditionClause, posts map PPostconditionClause, locals, Some(body), optAtomic.isDefined)
+          case None =>
+            PProcedure(id, args, tpe, inters, pres map PPreconditionClause, posts map PPostconditionClause, Vector.empty, None, optAtomic.isDefined)
+        }
     }
 
   lazy val predicate: Parser[PPredicate] =
@@ -86,6 +93,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     ("interference" ~> idnuse <~ "in") ~ setLiteral ~ ("on" ~> idnuse  <~ ";") ^^ PInterferenceClause
 
   lazy val statement: Parser[PStatement] =
+    "skip" <~ ";" ^^ (_ => PSkip()) |
     "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
     "while" ~> ("(" ~> expression <~ ")") ~ statement ^^ PWhile |
     "fold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PFold |
@@ -93,7 +101,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     makeAtomic |
     updateRegion |
-    "{" ~> (statement*) <~ "}" ^^ PBlock |
+    "{" ~> statement.* <~ "}" ^^ PBlock |
     idnuse ~ (":=" ~> "*" ~> idnuse) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
 
@@ -154,6 +162,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val exp0: PackratParser[PExpression] =
     "true" ^^ (_ => PTrueLit()) |
     "false" ^^ (_ => PFalseLit()) |
+    "ret" ^^ (_ => PRet()) |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     predicateExp |

@@ -8,7 +8,7 @@ package viper.voila.frontend
 
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
-import org.bitbucket.inkytonik.kiama.rewriting.Rewriter._
+import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{id => _, _}
 import org.bitbucket.inkytonik.kiama.util.{Entity, MultipleEntity, UnknownEntity}
 import org.bitbucket.inkytonik.kiama.util.Messaging.{check, checkUse, collectMessages, Messages, message}
 
@@ -216,7 +216,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
 
   lazy val usedWithRegion: PIdnNode => PRegion =
-    attr(id => enclosingScope(id)(id) match {
+    attr(id => enclosingScope(id) match {
       case Some(scope) =>
         val regions =
           collect[Vector, Option[PRegion]] {
@@ -233,23 +233,71 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         ???
     })
 
-  lazy val enclosingScope: PAstNode => PAstNode => Option[PMember] =
-    paramAttr { node => {
+  def enclosingScope(of: PAstNode): Option[PMember] =
+    enclosingScopeAttr(of)(of)
+
+  private lazy val enclosingScopeAttr: PAstNode => PAstNode => Option[PMember] =
+    paramAttr { of => {
       case member: PMember => Some(member)
-      case tree.parent(p) => enclosingScope(node)(p)
+      case tree.parent(p) => enclosingScopeAttr(of)(p)
     }}
 
-  lazy val interferenceSpecifications: PAstNode => PAstNode => Vector[PInterferenceClause] =
-    paramAttr { node => {
+  def interferenceSpecifications(of: PAstNode): Vector[PInterferenceClause] =
+    interferenceSpecificationsAttr(of)(of)
+
+  private lazy val interferenceSpecificationsAttr: PAstNode => PAstNode => Vector[PInterferenceClause] =
+    paramAttr { of => {
       case procedure: PProcedure => procedure.inters
-      case tree.parent(p) => interferenceSpecifications(node)(p)
+      case tree.parent(p) => interferenceSpecificationsAttr(of)(p)
     }}
 
-  lazy val enclosingMakeAtomic: PAstNode => PAstNode => PMakeAtomic =
-    paramAttr { node => {
+  def enclosingMakeAtomic(of: PAstNode): PMakeAtomic =
+    enclosingMakeAtomicAttr(of)(of)
+
+  private lazy val enclosingMakeAtomicAttr: PAstNode => PAstNode => PMakeAtomic =
+    paramAttr { of => {
       case makeAtomic: PMakeAtomic => makeAtomic
-      case tree.parent(p) => enclosingMakeAtomic(node)(p)
+      case tree.parent(p) => enclosingMakeAtomicAttr(of)(p)
     }}
+
+  def definitionContext(of: PLogicalVariableDecl): LogicalVariableContext =
+    definitionContextAttr(of)(of)
+
+  private lazy val definitionContextAttr: PLogicalVariableDecl => PAstNode => LogicalVariableContext =
+    paramAttr { of => {
+      case _: PPreconditionClause => LogicalVariableContext.Precondition
+      case _: PPostconditionClause => LogicalVariableContext.Postcondition
+      case tree.parent(p) => definitionContextAttr(of)(p)
+    }}
+
+  def usageContext(of: PIdnNode): LogicalVariableContext =
+    usageContextAttr(of)(of)
+
+  private lazy val usageContextAttr: PIdnNode => PAstNode => LogicalVariableContext =
+    paramAttr { of => {
+      case _: PPreconditionClause => LogicalVariableContext.Precondition
+      case _: PPostconditionClause => LogicalVariableContext.Postcondition
+      case _: PProcedure => LogicalVariableContext.Body /* TODO: Make more precise */
+      case tree.parent(p) => usageContextAttr(of)(p)
+    }}
+
+
+//  lazy val definingContext: PLogicalVariableDecl => Any =
+//    attr(of => {
+//      val d = rule[PAstNode] {
+//        case Add(l, r) => Add(r, l)
+//        case Sub(l, r) => Sub(r, l)
+//        case n         => n
+//      }
+////        def f(y : => Strategy) : Strategy =
+////            rule[Add] {
+////                case n @ Add(Num(3), _) => n
+////            }
+////        val s = topdownS(d, f)
+//      case tree.parent(p) =>
+//        definingContextAttr(of)(p)
+////      case e @ tree.parent(PEquals(lhs, rhs)) if e eq rhs =>
+//    })
 
   def referencedType(typ: PType): PType =
     typ match {
@@ -284,6 +332,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     attr {
       case _: PIntLit => PIntType()
       case _: PTrueLit | _: PFalseLit => PBoolType()
+
+      case ret: PRet => enclosingScope(ret).get.asInstanceOf[PProcedure].typ
 
       case PIdnExp(id) => typeOfIdn(id)
 
@@ -336,4 +386,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         /* Returning unknown expresses that no particular type is expected */
         PUnknownType()
     }
+}
+
+sealed trait LogicalVariableContext
+object LogicalVariableContext {
+  case object Precondition extends LogicalVariableContext
+  case object Postcondition extends LogicalVariableContext
+  case object Body extends LogicalVariableContext
 }

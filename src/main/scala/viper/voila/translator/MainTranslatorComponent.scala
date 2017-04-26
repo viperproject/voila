@@ -12,6 +12,9 @@ import viper.silver.{ast => vpr}
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   val returnVarName = "ret"
 
+  def returnVar(typ: PType): vpr.LocalVar =
+    vpr.LocalVar(returnVarName)(typ = translateNonVoid(typ))
+
   val diamondField: vpr.Field =
     vpr.Field("$diamond", vpr.Int)()
 
@@ -108,7 +111,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       }
 
     val pres = (
-         procedure.pres.map(translate)
+         procedure.pres.map(pre => translate(pre.assertion))
       ++ procedure.inters.map(translate)
     )
 
@@ -117,9 +120,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       formalArgs = procedure.formalArgs map translate,
       formalReturns = formalReturns,
       _pres = pres,
-      _posts = procedure.posts map translate,
+      _posts = procedure.posts map (post => translate(post.assertion)),
       _locals = procedure.locals map translate,
-      _body = vpr.Seqn(procedure.body map translate)()
+      _body = vpr.Seqn(procedure.body.fold(Vector.empty[vpr.Stmt])(_ map translate))()
     )()
   }
 
@@ -222,8 +225,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 //    //    val endComment = sectionComment(ruleName, SectionMarker.End)
 //  }
 
-
-
   def translate(expression: PExpression): vpr.Exp = expression match {
     case PTrueLit() => vpr.TrueLit()()
     case PFalseLit() => vpr.FalseLit()()
@@ -242,6 +243,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PExplicitSet(elements) => vpr.ExplicitSet(elements map translate)()
     case PIntSet() => intSet
     case PNatSet() => natSet
+    case ret: PRet => returnVar(semanticAnalyser.typ(ret))
 
     case pointsTo: PPointsTo => translate(pointsTo)
 
@@ -263,7 +265,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translateUseOf(id: PIdnNode): vpr.Exp = {
     semanticAnalyser.entity(id) match {
-      case entity: LogicalVariableEntity => translateUseOf(entity.declaration)
+      case entity: LogicalVariableEntity => translateUseOf(id, entity.declaration)
       case ArgumentEntity(decl) => vpr.LocalVar(id.name)(typ = translateNonVoid(decl.typ))
       case LocalVariableEntity(decl) => vpr.LocalVar(id.name)(typ = translateNonVoid(decl.typ))
     }

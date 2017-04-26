@@ -50,7 +50,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val exhaleGuard =
       vpr.Exhale(translate(makeAtomic.guard))()
 
-    val interference = semanticAnalyser.interferenceSpecifications(makeAtomic)(makeAtomic).head
+    val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
 
     val havoc =
       havocRegion(

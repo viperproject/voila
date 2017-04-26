@@ -65,14 +65,18 @@ case class PProcedure(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
                       typ: PType,
                       inters: Vector[PInterferenceClause],
-                      pres: Vector[PExpression],
-                      posts: Vector[PExpression],
+                      pres: Vector[PPreconditionClause],
+                      posts: Vector[PPostconditionClause],
                       locals: Vector[PLocalVariableDecl],
-                      body: Vector[PStatement])
+                      body: Option[Vector[PStatement]],
+                      isPrimitiveAtomic: Boolean)
     extends PMember with PDeclaration
 
 case class PInterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse)
     extends PAstNode
+
+case class PPreconditionClause(assertion: PExpression) extends PAstNode
+case class PPostconditionClause(assertion: PExpression) extends PAstNode
 
 case class PPredicate(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
@@ -85,6 +89,10 @@ case class PPredicate(id: PIdnDef,
 
 sealed trait PStatement extends PAstNode {
   def statementName: String
+}
+
+case class PSkip() extends PStatement {
+  val statementName = "skip"
 }
 
 case class PBlock(stmts: Vector[PStatement]) extends PStatement {
@@ -154,6 +162,8 @@ sealed trait PLiteral extends PExpression
 case class PTrueLit() extends PLiteral
 case class PFalseLit() extends PLiteral
 case class PIntLit(value: BigInt) extends PLiteral
+
+case class PRet() extends PLiteral
 
 sealed trait PUnOp extends PExpression {
   def operand: PExpression
