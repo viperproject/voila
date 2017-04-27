@@ -20,9 +20,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "void", "int", "bool", "id", "Set",
     "region", "guards", "duplicable", "interpretation", "abstraction", "actions",
     "predicate",
-    "procedure", "atomic", "ret",
+    "interference", "requires", "ensures", "invariant",
+    "procedure", "atomic", //"ret",
     "interference", "in", "on",
-    "if", "else", "while", "skip",
+    "if", "else", "while", "skip", "inhale", "exhale",
+    "make_atomic", "update_region",
     "Int", "Nat"
   )
 
@@ -59,28 +61,29 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val action: Parser[PAction] =
     (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction
 
-  lazy val procedure: Parser[PProcedure] =
-    "atomic".? ~
-    typeOrVoid ~
-    idndef ~ ("(" ~> formalArgs <~ ")") ~
-    interference.* ~
-    ("requires" ~> expression <~ ";").* ~
-    ("ensures" ~> expression <~ ";").* ~
-    (("{" ~> varDeclStmt.*) ~ (statement.* <~ "}")).? ^^ {
-      case optAtomic ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBody =>
-        optBody match {
-          case Some(locals ~ body) =>
-            PProcedure(id, args, tpe, inters, pres map PPreconditionClause, posts map PPostconditionClause, locals, Some(body), optAtomic.isDefined)
-          case None =>
-            PProcedure(id, args, tpe, inters, pres map PPreconditionClause, posts map PPostconditionClause, Vector.empty, None, optAtomic.isDefined)
-        }
-    }
-
   lazy val predicate: Parser[PPredicate] =
     ("predicate" ~> idndef) ~
     ("(" ~> formalArgs <~ ")") ~
     ("{" ~> expression <~ "}") ^^ {
       case id ~ args ~ body => PPredicate(id, args, body)
+    }
+
+  lazy val procedure: Parser[PProcedure] =
+    "atomic".? ~
+    typeOrVoid ~
+    idndef ~ ("(" ~> formalArgs <~ ")") ~
+    interference.* ~
+    requires.* ~
+    ensures .* ~
+    (("{" ~> varDeclStmt.*) ~ (statement.* <~ "}")).? ^^ {
+      case optAtomic ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBody =>
+        val (locals, body) =
+          optBody match {
+            case Some(l ~ b) => (l, Some(b))
+            case None => (Vector.empty, None)
+          }
+
+        PProcedure(id, args, tpe, inters, pres, posts, locals, body, optAtomic.isDefined)
     }
 
   lazy val formalArgs: Parser[Vector[PFormalArgumentDecl]] =
@@ -92,12 +95,26 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val interference: Parser[PInterferenceClause] =
     ("interference" ~> idnuse <~ "in") ~ setLiteral ~ ("on" ~> idnuse  <~ ";") ^^ PInterferenceClause
 
+  lazy val requires: Parser[PPreconditionClause] =
+    "requires" ~> expression <~ ";" ^^ PPreconditionClause
+
+  lazy val ensures: Parser[PPostconditionClause] =
+    "ensures" ~> expression <~ ";" ^^ PPostconditionClause
+
+  lazy val invariant: Parser[PInvariantClause] =
+    "invariant" ~> expression <~ ";" ^^ PInvariantClause
+
   lazy val statement: Parser[PStatement] =
     "skip" <~ ";" ^^ (_ => PSkip()) |
-    "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement) ^^ PIf |
-    "while" ~> ("(" ~> expression <~ ")") ~ statement ^^ PWhile |
+    "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement).? ^^ PIf |
+    ("do" ~> invariant.*) ~ ("{" ~> statement.* <~ "}") ~ ("while" ~> "(" ~> expression <~ ")") <~ ";" ^^ {
+      case invs ~ stmts ~ cond => PBlock(stmts :+ PWhile(cond, invs, stmts))
+    } |
+    "while" ~> ("(" ~> expression <~ ")") ~ invariant.* ~ ("{" ~> statement.* <~ "}") ^^ PWhile |
     "fold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PFold |
     "unfold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PUnfold |
+    "inhale" ~> expression <~ ";" ^^ PInhale |
+    "exhale" ~> expression <~ ";" ^^ PExhale |
     ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     makeAtomic |
     updateRegion |
@@ -111,65 +128,77 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
     ("using" ~> predicateExp) ~ ("with" ~> guardExp <~ ";") ~
-    ("{" ~> statement <~ "}") ^^ PMakeAtomic
+    ("{" ~> statement.* <~ "}") ^^ PMakeAtomic
 
   lazy val updateRegion: Parser[PUpdateRegion] =
     "update_region" ~>
     ("using" ~> predicateExp <~ ";") ~
-    ("{" ~> statement <~ "}") ^^ PUpdateRegion
+    ("{" ~> statement.* <~ "}") ^^ PUpdateRegion
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
     typ ~ idndef <~ ";" ^^ { case tpe ~ id => PLocalVariableDecl(id, tpe) }
 
-  /* Operator precedences and associativity taken from
-   * http://en.cppreference.com/w/cpp/language/operator_precedence
+  /* Operator precedences and associativity taken from the following sources:
+   *   http://en.cppreference.com/w/cpp/language/operator_precedence
+   *   https://en.wikipedia.org/wiki/Logical_connective
    */
 
-  lazy val expression: PackratParser[PExpression] = exp15
+  lazy val expression: PackratParser[PExpression] = exp99
 
-  lazy val exp15: PackratParser[PExpression] = /* Right associative */
-    exp14 ~ ("?" ~> expression <~ ":") ~ exp15 ^^ PConditional |
-    exp14
+  lazy val exp99: PackratParser[PExpression] = /* Right associative */
+    exp95 ~ ("?" ~> expression <~ ":") ~ exp99 ^^ PConditional |
+    exp95
 
-  lazy val exp14: PackratParser[PExpression] = /* Left associative*/
-    exp14 ~ ("||" ~> exp13) ^^ POr |
-    exp13
+  lazy val exp95: PackratParser[PExpression] = /* Left associative */
+    exp95 ~ ("<==>" ~> exp90) ^^ PEquals |
+    exp90
 
-  lazy val exp13: PackratParser[PExpression] = /* Left associative*/
-    exp13 ~ ("&&" ~> exp9) ^^ PAnd |
-    exp9
+  lazy val exp90: PackratParser[PExpression] = /* Right associative */
+    exp85 ~ ("==>" ~> exp90) ^^ { case lhs ~ rhs => PConditional(lhs, rhs, PTrueLit()) } |
+    exp85
 
-  lazy val exp9: PackratParser[PExpression] = /* Left associative*/
-    exp9 ~ ("==" ~> exp6) ^^ PEquals |
-    exp9 ~ ("!=" ~> exp6) ^^ { case lhs ~ rhs => PNot(PEquals(lhs, rhs)) } |
-    exp8
+  lazy val exp85: PackratParser[PExpression] = /* Left associative*/
+    exp85 ~ ("||" ~> exp80) ^^ POr |
+    exp80
 
-  lazy val exp8: PackratParser[PExpression] = /* Left associative*/
-    exp8 ~ ("<" ~> exp6) ^^ PLess |
-    exp8 ~ ("<=" ~> exp6) ^^ PAtMost |
-    exp8 ~ (">" ~> exp6) ^^ PGreater |
-    exp8 ~ (">=" ~> exp6) ^^ PAtLeast |
-    exp6
+  lazy val exp80: PackratParser[PExpression] = /* Left associative*/
+    exp80 ~ ("&&" ~> exp70) ^^ PAnd |
+    exp70
 
-  lazy val exp6: PackratParser[PExpression] = /* Left associative */
-    exp6 ~ ("+" ~> exp3) ^^ PAdd |
-    exp6 ~ ("-" ~> exp3) ^^ PSub |
-    exp3
+  lazy val exp70: PackratParser[PExpression] = /* Left associative*/
+    exp70 ~ ("==" ~> exp60) ^^ PEquals |
+    exp70 ~ ("!=" ~> exp60) ^^ { case lhs ~ rhs => PNot(PEquals(lhs, rhs)) } |
+    exp60
 
-  lazy val exp3: PackratParser[PExpression] = /* Right associative */
-    "+" ~> exp3 |
-    "-" ~> exp3 ^^ (e => PSub(PIntLit(0), e)) |
-    "!" ~> exp3 ^^ PNot |
+  lazy val exp60: PackratParser[PExpression] = /* Left associative*/
+    exp60 ~ ("<" ~> exp50) ^^ PLess |
+    exp60 ~ ("<=" ~> exp50) ^^ PAtMost |
+    exp60 ~ (">" ~> exp50) ^^ PGreater |
+    exp60 ~ (">=" ~> exp50) ^^ PAtLeast |
+    exp50
+
+  lazy val exp50: PackratParser[PExpression] = /* Left associative */
+    exp50 ~ ("+" ~> exp40) ^^ PAdd |
+    exp50 ~ ("-" ~> exp40) ^^ PSub |
+    exp40
+
+  lazy val exp40: PackratParser[PExpression] = /* Right associative */
+    "+" ~> exp40 |
+    "-" ~> exp40 ^^ (e => PSub(PIntLit(0), e)) |
+    "!" ~> exp40 ^^ PNot |
     exp0
 
   lazy val exp0: PackratParser[PExpression] =
     "true" ^^ (_ => PTrueLit()) |
     "false" ^^ (_ => PFalseLit()) |
     "ret" ^^ (_ => PRet()) |
+    "_" ^^ (_ => PIrrelevantValue()) |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     predicateExp |
     (idnuse <~ "|->") ~ binderOrExpression ^^ PPointsTo |
+    (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
+    idnuse <~ "|=>" <~ "<D>" ^^ PDiamond |
     guardExp |
     idnuse ^^ PIdnExp |
     "(" ~> expression <~ ")"

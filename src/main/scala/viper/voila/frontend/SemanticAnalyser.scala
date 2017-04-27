@@ -174,6 +174,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       rootenv(topLevelBindings ++ guardBindings :_*)
 
+    case procedure: PProcedure =>
+      val retDecl = PLocalVariableDecl(PIdnDef("ret"), procedure.typ)
+      val procenv :: envs = enter(in(procedure))
+
+      (procenv + ("ret" -> LocalVariableEntity(retDecl))) :: envs
+
     // At a nested scope region, create a new empty scope inside the outer
     // environment
     case scope@(_: PMember) =>
@@ -348,7 +354,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case conditional: PConditional => typ(conditional.thn)
 
-      case _: PPointsTo | _: PPredicateExp | _: PGuardExp => PBoolType()
+      case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
+
+      case tree.parent.pair(_: PIrrelevantValue, p: PExpression) => typ(p)
 
       case tree.parent.pair(_: PLogicalVariableDecl, pointsTo: PPointsTo) =>
         referencedType(typeOfIdn(pointsTo.id))

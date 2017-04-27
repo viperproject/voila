@@ -44,6 +44,19 @@ case class PGuardDecl(id: PIdnDef, duplicable: Boolean) extends PDeclaration
 case class PLogicalVariableDecl(id: PIdnDef) extends PDeclaration
 
 /*
+ * Specification clauses
+ */
+
+sealed trait PSpecificationClause extends PAstNode
+
+case class PInterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse)
+    extends PSpecificationClause
+
+case class PPreconditionClause(assertion: PExpression) extends PSpecificationClause
+case class PPostconditionClause(assertion: PExpression) extends PSpecificationClause
+case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
+
+/*
  * Members
  */
 
@@ -72,12 +85,6 @@ case class PProcedure(id: PIdnDef,
                       isPrimitiveAtomic: Boolean)
     extends PMember with PDeclaration
 
-case class PInterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse)
-    extends PAstNode
-
-case class PPreconditionClause(assertion: PExpression) extends PAstNode
-case class PPostconditionClause(assertion: PExpression) extends PAstNode
-
 case class PPredicate(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
                       body: PExpression)
@@ -99,11 +106,13 @@ case class PBlock(stmts: Vector[PStatement]) extends PStatement {
   val statementName = "seq-comp"
 }
 
-case class PIf(cond: PExpression, thn: PStatement, els: PStatement) extends PStatement {
+case class PIf(cond: PExpression, thn: PStatement, els: Option[PStatement]) extends PStatement {
   val statementName = "if-then-else"
 }
 
-case class PWhile(cond: PExpression, body: PStatement) extends PStatement {
+case class PWhile(cond: PExpression, invariants: Vector[PInvariantClause], body: Vector[PStatement])
+    extends PStatement {
+
   val statementName = "while"
 }
 
@@ -143,15 +152,18 @@ case class PUnfold(predicate: PIdnUse, arguments: Vector[PExpression])
   val statementName = "unfold"
 }
 
+case class PInhale(assertion: PExpression) extends PGhostStatement { val statementName = "inhale" }
+case class PExhale(assertion: PExpression) extends PGhostStatement { val statementName = "exhale" }
+
 sealed trait PRuleStatement extends PStatement
 
-case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: Vector[PStatement])
     extends PRuleStatement
 {
   val statementName = "make-atomic"
 }
 
-case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
+case class PUpdateRegion(regionPredicate: PPredicateExp, body: Vector[PStatement])
     extends PRuleStatement
 {
   val statementName = "update-region"
@@ -210,6 +222,17 @@ case class PPointsTo(id: PIdnUse, value: Either[PLogicalVariableDecl, PExpressio
     extends PExpression
 
 case class PGuardExp(guard: PIdnUse, regionId: PIdnUse) extends PExpression
+
+sealed trait PTrackingResource extends PExpression {
+  def regionId: PIdnUse
+}
+
+case class PDiamond(regionId: PIdnUse) extends PTrackingResource
+
+case class PRegionUpdateWitness(regionId: PIdnUse, from: PExpression, to: PExpression)
+    extends PTrackingResource
+
+case class PIrrelevantValue() extends PExpression
 
 /*
  * Types

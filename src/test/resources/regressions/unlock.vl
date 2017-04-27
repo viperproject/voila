@@ -17,46 +17,53 @@ predicate L(id a, int* x) {
   Lock(a, x, 1) && G@a
 }
 
-// void unlock(int s, id a, int* x)
-  // interference s in Set(1) on a;
-  // requires L(a, x);
-  // ensures U(a, x);
-// {
-  // unfold L(a, x);
+void unlock(int s, id a, int* x)
+  interference s in Set(1) on a;
+  requires L(a, x);
+  ensures U(a, x);
+{
+  unfold L(a, x);
   
-  // make_atomic
-    // using Lock(a, x, s) with G@a;
-  // {
-    // update_region
-      // using Lock(a, x, s);
-    // {
-      // *x := 0;
-    // }
-  // }
+  make_atomic
+    using Lock(a, x, s) with G@a;
+  {
+    update_region
+      using Lock(a, x, s);
+    {
+      *x := 0;
+    }
+  }
   
-  // fold U(a, x);
-// }
+  fold U(a, x);
+}
 
 void lock(int s, id a, int* x)
   interference s in Set(0, 1) on a;
   requires s == 0 ? U(a, x) : L(a, x);
-  // ensures L(a, x) && s == 0;
+  ensures L(a, x) && s == 0;
 {
   bool b;
   
   if (s == 0) unfold U(a, x);
   else unfold L(a, x);
   
-  b := CAS(x, 0, 1);
+  make_atomic
+    using Lock(a, x, s) with G@a;
+  {
+    do
+      invariant Lock(a, x, _);
+      invariant !b ==> a |=> <D>;
+      invariant  b ==> a |=> (0, 1);
+    {
+      update_region
+        using Lock(a, x, s);
+      {
+        b := CAS(x, 0, 1);
+      }
+    } while (!b);
+  }
   
-  // make_atomic
-    // using Lock(a, x, s) with G@a;
-  // {
-    // update_region
-      // using Lock(a, x, s)
-    // {
-    // }
-  // }
+  fold L(a, x);
 }
 
 atomic bool CAS(int* x, int now, int thn)

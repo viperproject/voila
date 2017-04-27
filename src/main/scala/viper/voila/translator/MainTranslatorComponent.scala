@@ -144,18 +144,32 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(statement: PStatement): vpr.Stmt = statement match {
+    case PSkip() =>
+      vpr.Seqn(Vector.empty)()
+
     case PBlock(stmts) =>
       vpr.Seqn(stmts map translate)()
 
-    case PIf(cond, thn, els) =>
+    case PIf(cond, thn, optEls) =>
+      val vprElse =
+        optEls match {
+          case Some(els) => translate(els)
+          case None => vpr.Seqn(Vector.empty)()
+        }
+
       val vprIf =
-        vpr.If(translate(cond), translate(thn), translate(els))()
+        vpr.If(translate(cond), translate(thn), vprElse)()
 
       surroundWithSectionComments(statement.statementName, vprIf)
 
-    case PWhile(cond, body) =>
+    case PWhile(cond, invs, body) =>
       val vprWhile =
-        vpr.While(translate(cond), Nil, Nil, translate(body))()
+        vpr.While(
+          cond = translate(cond),
+          invs = invs map (inv => translate(inv.assertion)),
+          locals = Nil,
+          body = vpr.Seqn(body map translate)()
+        )()
 
       surroundWithSectionComments(statement.statementName, vprWhile)
 
@@ -200,7 +214,23 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case _: PUnfold => vpr.Unfold(acc)()
       }
 
-    case PProcedureCall(procedure, arguments, optRhs) =>
+    case PInhale(assertion) =>
+      val inhale = vpr.Inhale(translate(assertion))()
+
+      surroundWithSectionComments(statement.statementName, inhale)
+
+    case PExhale(assertion) =>
+      val exhale = vpr.Exhale(translate(assertion))()
+
+      surroundWithSectionComments(statement.statementName, exhale)
+
+    case PProcedureCall(procedureId, arguments, optRhs) =>
+      val procedure =
+        semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
+
+      if (!procedure.isPrimitiveAtomic)
+        sys.error("Calling non-atomic procedures is not yet supported.")
+
       val vprArguments = arguments map translate
 
       val vprFormalArgs =
@@ -215,9 +245,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             Vector.empty
         }
 
-      val method =
+      val vprMethod = /* TODO: Avoid recreating the method here, lookup `procedure` in a cache */
         vpr.Method(
-          name = procedure.name,
+          name = procedure.id.name,
           formalArgs = vprFormalArgs,
           formalReturns = vprFormalReturns,
           _pres = Vector.empty,
@@ -226,43 +256,19 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           _body = vpr.Seqn(Vector.empty)()
         )()
 
-      vpr.MethodCall(
-        method,
-        vprArguments,
-        vprFormalReturns map (_.localVar)
-      )()
-      
+      val vprCall =
+        vpr.MethodCall(
+          vprMethod,
+          vprArguments,
+          vprFormalReturns map (_.localVar)
+        )()
+
+      surroundWithSectionComments(statement.statementName, vprCall)
+
 
     case stmt: PMakeAtomic => translate(stmt)
     case stmt: PUpdateRegion => translate(stmt)
   }
-
-//  protected def statementSectionComments(statement: PStatement): (vpr.Seqn, vpr.Seqn, vpr.Seqn) = {
-//    val noComment = vpr.Seqn(Vector.empty)()
-//
-//    val (statementName, commentType) =
-//      statement match {
-//        case PBlock(stmts) =>
-//          return (noComment, noComment, noComment)
-//
-//        case _: PIf => ("if-then-else", 3)
-//        case _: PWhile => ("while", 2)
-//        case _: PAssign => ("assign", 2)
-//        case _: PHeapRead => ("heap-read", 2)
-//        case _: PHeapWrite => ("heap-write", 2)
-//        case _: PMakeAtomic => ("make-atomic", 2)
-//        case _: PUpdateRegion => ("update-region", 2)
-//        case _: PGhostStatement => ("ghost statement", 1)
-//      }
-//
-//    commentType match {
-//      case 3 =>
-//    }
-//
-//    //      val ruleName = "make-atomic"
-//    //    val beginComment = sectionComment(ruleName, SectionMarker.Begin)
-//    //    val endComment = sectionComment(ruleName, SectionMarker.End)
-//  }
 
   def translate(expression: PExpression): vpr.Exp = expression match {
     case PTrueLit() => vpr.TrueLit()()
@@ -283,8 +289,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PIntSet() => intSet
     case PNatSet() => natSet
     case ret: PRet => returnVar(semanticAnalyser.typ(ret))
+    case PIdnExp(id) => translateUseOf(id)
 
     case pointsTo: PPointsTo => translate(pointsTo)
+    case guard: PGuardExp => translate(guard)
 
     case PPredicateExp(id, args) =>
       semanticAnalyser.entity(id) match {
@@ -298,8 +306,34 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           sys.error(s"Not yet supported: $other")
       }
 
-    case PIdnExp(id) => translateUseOf(id)
-    case guard: PGuardExp => translate(guard)
+    case PDiamond(regionId) =>
+      diamondAccess(translateUseOf(regionId))
+
+    case PRegionUpdateWitness(regionId, from, to) =>
+      val region = semanticAnalyser.usedWithRegion(regionId)
+      val vprRegionType = semanticAnalyser.typ(region.state)
+      val vprRegionReceiver = translateUseOf(regionId)
+      val vprFrom = translate(from)
+      val vprTo = translate(to)
+
+      vpr.And(
+        vpr.And(
+          stepFromAccess(vprRegionReceiver, vprRegionType),
+          vpr.EqCmp(
+            stepFromLocation(vprRegionReceiver, vprRegionType),
+            vprFrom
+          )()
+        )(),
+        vpr.And(
+          stepToAccess(vprRegionReceiver, vprRegionType),
+          vpr.EqCmp(
+            stepToLocation(vprRegionReceiver, vprRegionType),
+            vprTo
+          )()
+        )()
+      )()
+
+    case PIrrelevantValue() => sys.error("Not yet supported in all positions: _")
   }
 
   def translateUseOf(id: PIdnNode): vpr.Exp = {

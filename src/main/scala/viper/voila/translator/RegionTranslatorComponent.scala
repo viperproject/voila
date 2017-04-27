@@ -191,31 +191,25 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translateUseOf(region: PRegion, args: Vector[PExpression]): vpr.Exp = {
     val vprRegionId = translate(args.head)
-
-    val (vprRegularArgs, Seq(vprStateValue)) =
-      args.tail.map(translate).splitAt(args.length - 2)
-
+    val (regularArgs, Seq(stateValue)) = args.tail.splitAt(args.length - 2)
+    val vprRegularArgs = regularArgs map translate
     val vprRegionArguments = vprRegionId +: vprRegularArgs
 
-    val vprRegionArgumentDecls =
-      /* TODO: Needed in order to construct an instance of vpr.FuncApp.
-       *       Should be taken from the declaration of the region state function.
-       */
-      vprRegionArguments.map(a => vpr.LocalVarDecl("x", a.typ)())
-
     val vprStateConstraint =
-      vpr.EqCmp(
-        vpr.FuncApp(
-          funcname = regionStateFunctionName(region), // TODO: Use regionStateFunctionCache
-          args = vprRegionArguments
-        )(
-          pos = vpr.NoPosition,
-          info = vpr.NoInfo,
-          typ = vprStateValue.typ,
-          formalArgs = vprRegionArgumentDecls
-        ),
-        vprStateValue
-      )()
+      stateValue match {
+        case PIrrelevantValue() =>
+          vpr.TrueLit()()
+        case _ =>
+          val vprStateFunction = regionStateFunction(region)
+
+          vpr.EqCmp(
+            vpr.FuncApp(
+              func = vprStateFunction,
+              args = vprRegionArguments
+            )(),
+            translate(stateValue)
+          )()
+      }
 
     val vprRegionAccess =
       vpr.PredicateAccess(
@@ -229,13 +223,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(guardExp: PGuardExp): vpr.Exp = {
     semanticAnalyser.entity(guardExp.guard) match {
       case GuardEntity(guardDecl, region) =>
-        val name = guardPredicateName(guardDecl, region)
+        val vprGuardPredicate = guardPredicate(guardDecl, region)
 
-        val guardPredicateAccess = // TODO: Use guardPredicateCache
+        val guardPredicateAccess =
           vpr.PredicateAccessPredicate(
             loc = vpr.PredicateAccess(
                     args = Vector(translate(PIdnExp(guardExp.regionId))),
-                    predicateName = name
+                    predicate = vprGuardPredicate
                   )(pos = vpr.NoPosition, info = vpr.NoInfo),
             perm = vpr.FullPerm()()
           )()
