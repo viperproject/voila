@@ -106,7 +106,7 @@ case class PBlock(stmts: Vector[PStatement]) extends PStatement {
   val statementName = "seq-comp"
 }
 
-case class PIf(cond: PExpression, thn: PStatement, els: Option[PStatement]) extends PStatement {
+case class PIf(cond: PExpression, thn: Vector[PStatement], els: Vector[PStatement]) extends PStatement {
   val statementName = "if-then-else"
 }
 
@@ -167,6 +167,10 @@ case class PUpdateRegion(regionPredicate: PPredicateExp, body: Vector[PStatement
     extends PRuleStatement
 {
   val statementName = "update-region"
+}
+
+case class PStabilizationPoint() extends PGhostStatement {
+  val statementName = "stabilize"
 }
 
 /*

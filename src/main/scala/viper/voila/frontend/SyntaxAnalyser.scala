@@ -106,7 +106,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val statement: Parser[PStatement] =
     "skip" <~ ";" ^^ (_ => PSkip()) |
-    "if" ~> ("(" ~> expression <~ ")") ~ statement ~ ("else" ~> statement).? ^^ PIf |
+    "if" ~> ("(" ~> expression <~ ")") ~ ("{" ~> statement.* <~ "}") ~ ("else" ~> "{" ~> statement.* <~ "}").? ^^ {
+      case cond ~ thn ~ optEls => PIf(cond, thn, optEls.getOrElse(Vector.empty))
+    } |
     ("do" ~> invariant.*) ~ ("{" ~> statement.* <~ "}") ~ ("while" ~> "(" ~> expression <~ ")") <~ ";" ^^ {
       case invs ~ stmts ~ cond => PBlock(stmts :+ PWhile(cond, invs, stmts))
     } |

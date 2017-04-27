@@ -44,8 +44,8 @@ void lock(int s, id a, int* x)
 {
   bool b;
   
-  if (s == 0) unfold U(a, x);
-  else unfold L(a, x);
+  if (s == 0) { unfold U(a, x); }
+  else { unfold L(a, x); }
   
   make_atomic
     using Lock(a, x, s) with G@a;

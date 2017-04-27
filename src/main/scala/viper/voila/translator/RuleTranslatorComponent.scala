@@ -41,7 +41,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs =
       makeAtomic.regionPredicate.arguments.init
 
-    val vprRegionArgs @ (vprRegionIdArg +: vprRegularArgs :+ _) =
+    val vprRegionIdArg +: vprRegularArgs :+ _ =
       makeAtomic.regionPredicate.arguments map translate
 
     val inhaleDiamond =
@@ -60,7 +60,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         tmpVar(semanticAnalyser.typ(region.state)).localVar)
 
     val ruleBody =
-      vpr.Seqn(makeAtomic.body map translate)()
+      vpr.Seqn(translate(makeAtomic.body))()
 
     val vprAtomicityContextX = translate(interference.set)
 
@@ -165,7 +165,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Unfold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()
 
     val ruleBody =
-      vpr.Seqn(updateRegion.body map translate)()
+      vpr.Seqn(translate(updateRegion.body))()
 
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()

@@ -117,7 +117,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val body =
       procedure.body match {
-        case Some(statements) => vpr.Seqn(statements map translate)()
+        case Some(statements) => vpr.Seqn(translate(statements))()
         case None => vpr.Inhale(vpr.FalseLit()())()
       }
 
@@ -143,22 +143,39 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.AnySetContains(lv, set)()
   }
 
-  def translate(statement: PStatement): vpr.Stmt = statement match {
+  def translate(statements: Vector[PStatement]): Vector[vpr.Stmt] = {
+    weaveInStabilizationPoints(flattenStatements(statements)) map translateSingleStatement
+  }
+
+  def weaveInStabilizationPoints(statements: Vector[PStatement]): Vector[PStatement] = {
+    if (statements.lengthCompare(1) != 1) {
+      /* No need to stabilise if we have at most one statement */
+      statements
+    } else {
+      statements flatMap {
+        case stmt @ (_: PGhostStatement | _: PRuleStatement) => Vector(stmt)
+        case call: PProcedureCall if semanticAnalyser.entity(call.procedure).asInstanceOf[ProcedureEntity].declaration.isPrimitiveAtomic => Vector(call)
+        case stmt => Vector(stmt, PStabilizationPoint())
+      }
+    }
+  }
+
+  def flattenStatements(statements: Vector[PStatement]): Vector[PStatement] =
+    statements flatMap {
+      case PBlock(stmts) => flattenStatements(stmts)
+      case stmt => Vector(stmt)
+    }
+
+  def translateSingleStatement(statement: PStatement): vpr.Stmt = statement match {
+    case _: PBlock =>
+      sys.error(s"Unexpectedly found a block of statements (should have been flattened): $statement")
+
     case PSkip() =>
       vpr.Seqn(Vector.empty)()
 
-    case PBlock(stmts) =>
-      vpr.Seqn(stmts map translate)()
-
-    case PIf(cond, thn, optEls) =>
-      val vprElse =
-        optEls match {
-          case Some(els) => translate(els)
-          case None => vpr.Seqn(Vector.empty)()
-        }
-
+    case PIf(cond, thn, els) =>
       val vprIf =
-        vpr.If(translate(cond), translate(thn), vprElse)()
+        vpr.If(translate(cond), vpr.Seqn(translate(thn))(), vpr.Seqn(translate(els))())()
 
       surroundWithSectionComments(statement.statementName, vprIf)
 
@@ -168,7 +185,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           cond = translate(cond),
           invs = invs map (inv => translate(inv.assertion)),
           locals = Nil,
-          body = vpr.Seqn(body map translate)()
+          body = vpr.Seqn(translate(body))()
         )()
 
       surroundWithSectionComments(statement.statementName, vprWhile)
@@ -268,6 +285,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     case stmt: PMakeAtomic => translate(stmt)
     case stmt: PUpdateRegion => translate(stmt)
+
+    case _: PStabilizationPoint =>
+      vpr.Seqn(Vector.empty)(info = vpr.SimpleInfo(Vector("", "TODO: Stabilise, i.e. havoc regions")))
   }
 
   def translate(expression: PExpression): vpr.Exp = expression match {
