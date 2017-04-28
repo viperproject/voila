@@ -43,10 +43,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAccessPredicate(stepToLocation(rcvr, typ), vpr.FullPerm()())()
 
   val intSet: vpr.FuncApp =
-    vpr.FuncApp.apply("IntSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty)
+    vpr.FuncApp.apply("IntSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
 
   val natSet: vpr.FuncApp =
-    vpr.FuncApp("NatSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty)
+    vpr.FuncApp("NatSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
 
   def tmpVar(typ: PType): vpr.LocalVarDecl =
     vpr.LocalVarDecl(s"tmp_$typ", translateNonVoid(typ))()
@@ -218,7 +218,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.PredicateAccess(
           args = vprArguments,
           predicateName = predicate.name
-        )(vpr.NoPosition, vpr.NoInfo)
+        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
 
       val acc =
         vpr.PredicateAccessPredicate(
@@ -317,7 +317,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PPredicateExp(id, args) =>
       semanticAnalyser.entity(id) match {
         case _: PredicateEntity =>
-          vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo)
+          vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
 
         case RegionEntity(decl) =>
           translateUseOf(decl, args)
