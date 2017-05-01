@@ -9,21 +9,14 @@ class Frontend extends PositionStore with Messaging with StrictLogging {
   val syntaxAnalyser = new SyntaxAnalyser(positions)
 
   def parse(source: String): Either[Messages, PProgram] =
-    parse(source, syntaxAnalyser.program)
+    parse(source, syntaxAnalyser.phrase(syntaxAnalyser.program))
 
   protected def parse[T](source: String, parser: syntaxAnalyser.Parser[T]): Either[Messages, T] = {
     positions.reset()
 
     syntaxAnalyser.parse(parser, StringSource(source)) match {
       case Success(ast, next) =>
-//        if (next.atEnd)
-          Right(ast)
-//        else
-//          sys.error(
-//            s"""Parser error!
-//               |Parsed: $ast
-//               |Next: $next
-//             """.stripMargin)
+        Right(ast)
       case f @ Failure(label, next) =>
         val pos = next.position
         positions.setStart(f, pos)
