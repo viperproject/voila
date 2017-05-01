@@ -23,7 +23,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "interference", "requires", "ensures", "invariant",
     "procedure", "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
-    "if", "else", "while", "skip", "inhale", "exhale",
+    "if", "else", "while", "skip", "inhale", "exhale", "havoc",
     "make_atomic", "update_region",
     "Int", "Nat"
   )
@@ -127,6 +127,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "unfold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PUnfold |
     "inhale" ~> expression <~ ";" ^^ PInhale |
     "exhale" ~> expression <~ ";" ^^ PExhale |
+    "havoc" ~> idnuse <~ ";" ^^ PHavoc |
     ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     makeAtomic |
     updateRegion |

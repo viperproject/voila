@@ -54,6 +54,44 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def tmpVars(tree: VoilaTree): Vector[vpr.LocalVarDecl] =
     tree.root.regions map (region => tmpVar(semanticAnalyser.typ(region.state)))
 
+  def usedHavocs(tree: VoilaTree): Vector[vpr.Method] = {
+    tree.nodes.collect {
+      case PHavoc(variable) =>
+        val vprTyp = translateNonVoid(semanticAnalyser.typ(PIdnExp(variable)))
+
+        vpr.Method(
+          name = s"havoc_$vprTyp",
+          formalArgs = Vector.empty,
+          formalReturns = Vector(vpr.LocalVarDecl("$r", vprTyp)()),
+          _pres = Vector.empty,
+          _posts = Vector.empty,
+          _locals = Vector.empty,
+          _body = vpr.Seqn(Vector.empty)()
+        )()
+    }.distinct
+  }
+
+  def havoc(variable: PIdnUse): vpr.Stmt = {
+    val vprTyp = translateNonVoid(semanticAnalyser.typ(PIdnExp(variable)))
+
+    val vprMethod = /* TODO: Avoid recreating the method here, use a cache */
+      vpr.Method(
+        name = s"havoc_$vprTyp",
+        formalArgs = Vector.empty,
+        formalReturns = Vector(vpr.LocalVarDecl("$r", vprTyp)()),
+        _pres = Vector.empty,
+        _posts = Vector.empty,
+        _locals = Vector.empty,
+        _body = vpr.Seqn(Vector.empty)()
+      )()
+
+    vpr.MethodCall(
+      vprMethod,
+      Vector.empty,
+      Vector(translateUseOf(variable).asInstanceOf[vpr.LocalVar])
+    )()
+  }
+
   private var translationIndentation = 0
 
   private def indent(depth: Int = translationIndentation): String = " " * 2 * depth
@@ -62,6 +100,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
       ++ Vector(diamondField)
+      ++ usedHavocs(tree)
       ++ tree.root.regions.flatMap(region => {
            val typ = semanticAnalyser.typ(region.state)
 
@@ -158,33 +197,24 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprStatement =
       statement match {
-        case PSeqComp(firstStmt, secondStmt) =>
-          val vprFirstStmt = translate(firstStmt)
+        case seqComp: PSeqComp =>
+          val (firstStabilisation, secondStabilisation) = stabiliseAtSeqComp(seqComp)
 
-          val vprFirstHavoc =
-            if (   !semanticAnalyser.isGhost(firstStmt)
-                && !semanticAnalyser.isGhost(secondStmt)
-                && !firstStmt.isInstanceOf[PSeqComp])
+          val vprFirstStmt = translate(seqComp.first)
 
-              Some(stabilisationPoint(firstStmt))
-            else
-              None
+          if (firstStabilisation.isDefined)
+            logger.debug(s"${indent()}// Stabilise (havoc regions)")
 
-          val vprSecondStmt = translate(secondStmt)
+          val vprSecondStmt = translate(seqComp.second)
 
-          val vprSecondHavoc =
-            if (   !semanticAnalyser.isGhost(secondStmt)
-                && !secondStmt.isInstanceOf[PSeqComp])
-
-              Some(stabilisationPoint(secondStmt))
-            else
-              None
+          if (secondStabilisation.isDefined)
+            logger.debug(s"${indent()}// Stabilise (havoc regions)")
 
           vpr.Seqn(
                Vector(vprFirstStmt)
-            ++ vprFirstHavoc
+            ++ firstStabilisation
             ++ Vector(vprSecondStmt)
-            ++ vprSecondHavoc
+            ++ secondStabilisation
           )()
 
         case PSkip() =>
@@ -258,6 +288,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           surroundWithSectionComments(statement.statementName, exhale)
 
+        case PHavoc(variable) =>
+          val vprHavoc = havoc(variable)
+
+          surroundWithSectionComments(statement.statementName, vprHavoc)
+
         case PProcedureCall(procedureId, arguments, optRhs) =>
           val procedure =
             semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
@@ -299,7 +334,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           surroundWithSectionComments(statement.statementName, vprCall)
 
-
         case stmt: PMakeAtomic => translate(stmt)
         case stmt: PUpdateRegion => translate(stmt)
       }
@@ -312,12 +346,28 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vprStatement
   }
 
-  def stabilisationPoint(after: PStatement): vpr.Stmt = {
-    logger.debug(s"${indent()}// Stabilise (havoc regions)")
+  def stabiliseAtSeqComp(stmt: PSeqComp): (Option[vpr.Stmt], Option[vpr.Stmt]) = {
+    val areBothConcrete = (   !semanticAnalyser.isGhost(stmt.first)
+                           && !semanticAnalyser.isGhost(stmt.second))
 
-    val interference = semanticAnalyser.interferenceSpecifications(after).head
+    val isFirstSeqComp = stmt.first.isInstanceOf[PSeqComp]
+    val isSecondSeqComp = stmt.second.isInstanceOf[PSeqComp]
 
-    val makeAtomic = semanticAnalyser.enclosingMakeAtomic(after)
+    val stabiliseAfterFirst =
+      if (areBothConcrete && !isFirstSeqComp) Some(stabiliseAfter(stmt.first))
+      else None
+
+    val stabiliseAfterSecond =
+      if (areBothConcrete && !isSecondSeqComp) Some(stabiliseAfter(stmt.second))
+      else None
+
+    (stabiliseAfterFirst, stabiliseAfterSecond)
+  }
+
+  def stabiliseAfter(statement: PStatement): vpr.Stmt = {
+    val interference = semanticAnalyser.interferenceSpecifications(statement).head
+
+    val makeAtomic = semanticAnalyser.enclosingMakeAtomic(statement)
 
     val region =
       semanticAnalyser.entity(makeAtomic.regionPredicate.predicate).asInstanceOf[RegionEntity]
