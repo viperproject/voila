@@ -262,7 +262,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           val procedure =
             semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
 
-          if (!procedure.isPrimitiveAtomic)
+          if (procedure.atomicity != PPrimitiveAtomic())
             sys.error("Calling non-atomic procedures is not yet supported.")
 
           val vprArguments = arguments map translate

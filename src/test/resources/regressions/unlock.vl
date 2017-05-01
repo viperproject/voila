@@ -17,7 +17,7 @@ predicate L(id a, int* x) {
   Lock(a, x, 1) && G@a
 }
 
-void unlock(int s, id a, int* x)
+abstract_atomic void unlock(int s, id a, int* x)
   interference s in Set(1) on a;
   requires L(a, x);
   ensures U(a, x);
@@ -37,7 +37,7 @@ void unlock(int s, id a, int* x)
   fold U(a, x);
 }
 
-void lock(int s, id a, int* x)
+abstract_atomic void lock(int s, id a, int* x)
   interference s in Set(0, 1) on a;
   requires s == 0 ? U(a, x) : L(a, x);
   ensures L(a, x) && s == 0;
@@ -66,7 +66,7 @@ void lock(int s, id a, int* x)
   fold L(a, x);
 }
 
-atomic bool CAS(int* x, int now, int thn)
+primitive_atomic bool CAS(int* x, int now, int thn)
   requires x |-> ?v;
   ensures  v == now
               ? ret && x |-> thn

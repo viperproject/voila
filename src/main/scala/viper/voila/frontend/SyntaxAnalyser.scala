@@ -21,7 +21,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "region", "guards", "duplicable", "interpretation", "abstraction", "actions",
     "predicate",
     "interference", "requires", "ensures", "invariant",
-    "procedure", "atomic", //"ret",
+    "procedure", "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
     "if", "else", "while", "skip", "inhale", "exhale",
     "make_atomic", "update_region",
@@ -69,7 +69,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val procedure: Parser[PProcedure] =
-    "atomic".? ~
+    ("abstract_atomic" | "primitive_atomic").? ~
     typeOrVoid ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
     interference.* ~
@@ -83,7 +83,15 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
             case None => (Vector.empty, None)
           }
 
-        PProcedure(id, args, tpe, inters, pres, posts, locals, body, optAtomic.isDefined)
+        val atomicityModifier =
+          optAtomic match {
+            case None => PNotAtomic()
+            case Some("abstract_atomic") => PAbstractAtomic()
+            case Some("primitive_atomic") => PPrimitiveAtomic()
+            case Some(other) => sys.error(s"Unexpected atomicity modifier $other")
+          }
+
+        PProcedure(id, args, tpe, inters, pres, posts, locals, body, atomicityModifier)
     }
 
   lazy val formalArgs: Parser[Vector[PFormalArgumentDecl]] =

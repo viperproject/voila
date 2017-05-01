@@ -57,6 +57,18 @@ case class PPostconditionClause(assertion: PExpression) extends PSpecificationCl
 case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
 
 /*
+ * Modifiers
+ */
+
+sealed trait PModifier extends PAstNode
+
+sealed trait PAtomicityModifier extends PAstNode
+
+case class PNotAtomic() extends PAtomicityModifier
+case class PPrimitiveAtomic() extends PAtomicityModifier
+case class PAbstractAtomic() extends PAtomicityModifier
+
+/*
  * Members
  */
 
@@ -82,7 +94,7 @@ case class PProcedure(id: PIdnDef,
                       posts: Vector[PPostconditionClause],
                       locals: Vector[PLocalVariableDecl],
                       body: Option[PStatement],
-                      isPrimitiveAtomic: Boolean)
+                      atomicity: PAtomicityModifier)
     extends PMember with PDeclaration
 
 case class PPredicate(id: PIdnDef,
