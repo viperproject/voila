@@ -20,6 +20,23 @@ case class PProgram(regions: Vector[PRegion],
     extends PAstNode
 
 /*
+ * Modifiers
+ */
+
+sealed trait PModifier extends PAstNode
+
+sealed trait PAtomicityModifier extends PModifier
+
+case class PNotAtomic() extends PAtomicityModifier
+case class PPrimitiveAtomic() extends PAtomicityModifier
+case class PAbstractAtomic() extends PAtomicityModifier
+
+sealed trait PGuardModifier extends PModifier
+
+case class PUniqueGuard() extends PGuardModifier
+case class PDuplicableGuard() extends PGuardModifier
+
+/*
  * Identifiers
  */
 
@@ -40,7 +57,7 @@ sealed trait PDeclaration extends PAstNode {
 
 case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PDeclaration
-case class PGuardDecl(id: PIdnDef, duplicable: Boolean) extends PDeclaration
+case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
 case class PLogicalVariableDecl(id: PIdnDef) extends PDeclaration
 
 /*
@@ -55,18 +72,6 @@ case class PInterferenceClause(variable: PIdnUse, set: PExpression, regionId: PI
 case class PPreconditionClause(assertion: PExpression) extends PSpecificationClause
 case class PPostconditionClause(assertion: PExpression) extends PSpecificationClause
 case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
-
-/*
- * Modifiers
- */
-
-sealed trait PModifier extends PAstNode
-
-sealed trait PAtomicityModifier extends PAstNode
-
-case class PNotAtomic() extends PAtomicityModifier
-case class PPrimitiveAtomic() extends PAtomicityModifier
-case class PAbstractAtomic() extends PAtomicityModifier
 
 /*
  * Members

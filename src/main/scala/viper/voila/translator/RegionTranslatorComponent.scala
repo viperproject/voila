@@ -79,12 +79,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         val formalArgs =
           Vector(
             vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))(),
-            vpr.LocalVarDecl("$p", vpr.Perm)()
-          )
+            vpr.LocalVarDecl("$p", vpr.Perm)())
 
         val body =
-          if (guard.duplicable) vpr.TrueLit()()
-          else vpr.EqCmp(formalArgs(1).localVar, vpr.NoPerm()())()
+          guard.modifier match {
+            case PUniqueGuard() => vpr.EqCmp(formalArgs(1).localVar, vpr.NoPerm()())()
+            case PDuplicableGuard() => vpr.TrueLit()()
+          }
 
         vpr.Function(
           name = guardPotentiallyHeldFunctionName(guard, region),
@@ -110,8 +111,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         val formalArgs =
           Vector(
             vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))(),
-            vpr.LocalVarDecl("$from", fromTyp)()
-          )
+            vpr.LocalVarDecl("$from", fromTyp)())
 
         val body = {
           val from = formalArgs(1).localVar

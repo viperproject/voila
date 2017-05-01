@@ -12,13 +12,12 @@ import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   override val whitespace: Parser[String] =
-    """(\s|(//.*\s*\n))*""".r
-//    """(\s|(//.*\s*\n)|\(\*(?:.|[\n\r])*?\*\))*""".r
+    """(\s|(//.*\s*\n)|/\*(?:.|[\n\r])*?\*/)*""".r
 
   val reservedWords = Set(
     "true", "false",
     "void", "int", "bool", "id", "Set",
-    "region", "guards", "duplicable", "interpretation", "abstraction", "actions",
+    "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
     "predicate",
     "interference", "requires", "ensures", "invariant",
     "procedure", "abstract_atomic", "primitive_atomic", //"ret",
@@ -56,7 +55,18 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val guard: Parser[PGuardDecl] =
-    "duplicable".? ~ idndef <~ ";" ^^ { case optDup ~ id => PGuardDecl(id, optDup.isDefined) }
+    ("unique" | "duplicable").? ~ idndef <~ ";" ^^ {
+      case optDup ~ id =>
+        val modifier =
+          optDup match {
+            case None => PUniqueGuard()
+            case Some("unique") => PUniqueGuard()
+            case Some("duplicable") => PDuplicableGuard()
+            case Some(other) => sys.error(s"Unexpected guard modifier $other")
+          }
+
+        PGuardDecl(id, modifier)
+    }
 
   lazy val action: Parser[PAction] =
     (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction
