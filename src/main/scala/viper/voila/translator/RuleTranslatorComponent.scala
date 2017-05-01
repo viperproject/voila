@@ -59,8 +59,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         interference.set,
         tmpVar(semanticAnalyser.typ(region.state)).localVar)
 
-    val ruleBody =
-      vpr.Seqn(translate(makeAtomic.body))()
+    val ruleBody = translate(makeAtomic.body)
 
     val vprAtomicityContextX = translate(interference.set)
 
@@ -164,8 +163,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()
 
-    val ruleBody =
-      vpr.Seqn(translate(updateRegion.body))()
+    val ruleBody = translate(updateRegion.body)
 
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()

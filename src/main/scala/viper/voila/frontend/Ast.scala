@@ -81,7 +81,7 @@ case class PProcedure(id: PIdnDef,
                       pres: Vector[PPreconditionClause],
                       posts: Vector[PPostconditionClause],
                       locals: Vector[PLocalVariableDecl],
-                      body: Option[Vector[PStatement]],
+                      body: Option[PStatement],
                       isPrimitiveAtomic: Boolean)
     extends PMember with PDeclaration
 
@@ -98,22 +98,31 @@ sealed trait PStatement extends PAstNode {
   def statementName: String
 }
 
+sealed trait PCompoundStatement extends PStatement {
+  def components: Vector[PStatement]
+}
+
 case class PSkip() extends PStatement {
   val statementName = "skip"
 }
 
-case class PBlock(stmts: Vector[PStatement]) extends PStatement {
+case class PSeqComp(first: PStatement, second: PStatement) extends PCompoundStatement {
   val statementName = "seq-comp"
+  val components: Vector[PStatement] = Vector(first, second)
 }
 
-case class PIf(cond: PExpression, thn: Vector[PStatement], els: Vector[PStatement]) extends PStatement {
+case class PIf(cond: PExpression, thn: PStatement, els: Option[PStatement])
+    extends PCompoundStatement {
+
   val statementName = "if-then-else"
+  val components: Vector[PStatement] = Vector(thn) ++ els
 }
 
-case class PWhile(cond: PExpression, invariants: Vector[PInvariantClause], body: Vector[PStatement])
-    extends PStatement {
+case class PWhile(cond: PExpression, invariants: Vector[PInvariantClause], body: PStatement)
+    extends PCompoundStatement {
 
   val statementName = "while"
+  val components: Vector[PStatement] = Vector(body)
 }
 
 case class PAssign(lhs: PIdnUse, rhs: PExpression) extends PStatement {
@@ -157,20 +166,18 @@ case class PExhale(assertion: PExpression) extends PGhostStatement { val stateme
 
 sealed trait PRuleStatement extends PStatement
 
-case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: Vector[PStatement])
-    extends PRuleStatement
+case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+    extends PRuleStatement with PCompoundStatement
 {
   val statementName = "make-atomic"
+  val components: Vector[PStatement] = Vector(body)
 }
 
-case class PUpdateRegion(regionPredicate: PPredicateExp, body: Vector[PStatement])
-    extends PRuleStatement
+case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
+    extends PRuleStatement with PCompoundStatement
 {
   val statementName = "update-region"
-}
-
-case class PStabilizationPoint() extends PGhostStatement {
-  val statementName = "stabilize"
+  val components: Vector[PStatement] = Vector(body)
 }
 
 /*

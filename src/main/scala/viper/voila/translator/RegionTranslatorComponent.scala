@@ -30,7 +30,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       loc = vpr.PredicateAccess(
                 args = arguments,
                 predicateName = region.id.name
-            )(pos = vpr.NoPosition, info = vpr.NoInfo),
+            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos),
       perm = vpr.FullPerm()()
     )()
   }
@@ -215,7 +215,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.PredicateAccess(
         args = vprRegionArguments,
         predicateName = region.id.name
-      )(vpr.NoPosition, vpr.NoInfo)
+      )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
 
     vpr.And(vprRegionAccess, vprStateConstraint)()
   }

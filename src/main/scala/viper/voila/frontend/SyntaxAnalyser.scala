@@ -75,7 +75,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     interference.* ~
     requires.* ~
     ensures .* ~
-    (("{" ~> varDeclStmt.*) ~ (statement.* <~ "}")).? ^^ {
+    (("{" ~> varDeclStmt.*) ~ (statements <~ "}")).? ^^ {
       case optAtomic ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBody =>
         val (locals, body) =
           optBody match {
@@ -104,15 +104,17 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val invariant: Parser[PInvariantClause] =
     "invariant" ~> expression <~ ";" ^^ PInvariantClause
 
-  lazy val statement: Parser[PStatement] =
+  lazy val statements: Parser[PStatement] =
+    singleStatement ~ statements ^^ PSeqComp | /* Right-associative */
+    singleStatement
+
+  lazy val singleStatement: Parser[PStatement] =
     "skip" <~ ";" ^^ (_ => PSkip()) |
-    "if" ~> ("(" ~> expression <~ ")") ~ ("{" ~> statement.* <~ "}") ~ ("else" ~> "{" ~> statement.* <~ "}").? ^^ {
-      case cond ~ thn ~ optEls => PIf(cond, thn, optEls.getOrElse(Vector.empty))
+    "if" ~> ("(" ~> expression <~ ")") ~ ("{" ~> statements <~ "}") ~ ("else" ~> "{" ~> statements <~ "}").? ^^ PIf |
+    ("do" ~> invariant.*) ~ ("{" ~> statements <~ "}") ~ ("while" ~> "(" ~> expression <~ ")") <~ ";" ^^ {
+      case invs ~ stmts ~ cond => PSeqComp(stmts, PWhile(cond, invs, stmts))
     } |
-    ("do" ~> invariant.*) ~ ("{" ~> statement.* <~ "}") ~ ("while" ~> "(" ~> expression <~ ")") <~ ";" ^^ {
-      case invs ~ stmts ~ cond => PBlock(stmts :+ PWhile(cond, invs, stmts))
-    } |
-    "while" ~> ("(" ~> expression <~ ")") ~ invariant.* ~ ("{" ~> statement.* <~ "}") ^^ PWhile |
+    "while" ~> ("(" ~> expression <~ ")") ~ invariant.* ~ ("{" ~> statements <~ "}") ^^ PWhile |
     "fold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PFold |
     "unfold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PUnfold |
     "inhale" ~> expression <~ ";" ^^ PInhale |
@@ -120,7 +122,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     makeAtomic |
     updateRegion |
-    "{" ~> statement.* <~ "}" ^^ PBlock |
+    "(" ~> statements <~ ")" <~ ";" |
     (idnuse <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
       case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs)
     } |
@@ -130,12 +132,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
     ("using" ~> predicateExp) ~ ("with" ~> guardExp <~ ";") ~
-    ("{" ~> statement.* <~ "}") ^^ PMakeAtomic
+    ("{" ~> statements <~ "}") ^^ PMakeAtomic
 
   lazy val updateRegion: Parser[PUpdateRegion] =
     "update_region" ~>
     ("using" ~> predicateExp <~ ";") ~
-    ("{" ~> statement.* <~ "}") ^^ PUpdateRegion
+    ("{" ~> statements <~ "}") ^^ PUpdateRegion
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
     typ ~ idndef <~ ";" ^^ { case tpe ~ id => PLocalVariableDecl(id, tpe) }
@@ -147,44 +149,44 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val expression: PackratParser[PExpression] = exp99
 
-  lazy val exp99: PackratParser[PExpression] = /* Right associative */
+  lazy val exp99: PackratParser[PExpression] = /* Right-associative */
     exp95 ~ ("?" ~> expression <~ ":") ~ exp99 ^^ PConditional |
     exp95
 
-  lazy val exp95: PackratParser[PExpression] = /* Left associative */
+  lazy val exp95: PackratParser[PExpression] = /* Left-associative */
     exp95 ~ ("<==>" ~> exp90) ^^ PEquals |
     exp90
 
-  lazy val exp90: PackratParser[PExpression] = /* Right associative */
+  lazy val exp90: PackratParser[PExpression] = /* Right-associative */
     exp85 ~ ("==>" ~> exp90) ^^ { case lhs ~ rhs => PConditional(lhs, rhs, PTrueLit()) } |
     exp85
 
-  lazy val exp85: PackratParser[PExpression] = /* Left associative*/
+  lazy val exp85: PackratParser[PExpression] = /* Left-associative*/
     exp85 ~ ("||" ~> exp80) ^^ POr |
     exp80
 
-  lazy val exp80: PackratParser[PExpression] = /* Left associative*/
+  lazy val exp80: PackratParser[PExpression] = /* Left-associative*/
     exp80 ~ ("&&" ~> exp70) ^^ PAnd |
     exp70
 
-  lazy val exp70: PackratParser[PExpression] = /* Left associative*/
+  lazy val exp70: PackratParser[PExpression] = /* Left-associative*/
     exp70 ~ ("==" ~> exp60) ^^ PEquals |
     exp70 ~ ("!=" ~> exp60) ^^ { case lhs ~ rhs => PNot(PEquals(lhs, rhs)) } |
     exp60
 
-  lazy val exp60: PackratParser[PExpression] = /* Left associative*/
+  lazy val exp60: PackratParser[PExpression] = /* Left-associative*/
     exp60 ~ ("<" ~> exp50) ^^ PLess |
     exp60 ~ ("<=" ~> exp50) ^^ PAtMost |
     exp60 ~ (">" ~> exp50) ^^ PGreater |
     exp60 ~ (">=" ~> exp50) ^^ PAtLeast |
     exp50
 
-  lazy val exp50: PackratParser[PExpression] = /* Left associative */
+  lazy val exp50: PackratParser[PExpression] = /* Left-associative */
     exp50 ~ ("+" ~> exp40) ^^ PAdd |
     exp50 ~ ("-" ~> exp40) ^^ PSub |
     exp40
 
-  lazy val exp40: PackratParser[PExpression] = /* Right associative */
+  lazy val exp40: PackratParser[PExpression] = /* Right-associative */
     "+" ~> exp40 |
     "-" ~> exp40 ^^ (e => PSub(PIntLit(0), e)) |
     "!" ~> exp40 ^^ PNot |

@@ -289,23 +289,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => usageContextAttr(of)(p)
     }}
 
-
-//  lazy val definingContext: PLogicalVariableDecl => Any =
-//    attr(of => {
-//      val d = rule[PAstNode] {
-//        case Add(l, r) => Add(r, l)
-//        case Sub(l, r) => Sub(r, l)
-//        case n         => n
-//      }
-////        def f(y : => Strategy) : Strategy =
-////            rule[Add] {
-////                case n @ Add(Num(3), _) => n
-////            }
-////        val s = topdownS(d, f)
-//      case tree.parent(p) =>
-//        definingContextAttr(of)(p)
-////      case e @ tree.parent(PEquals(lhs, rhs)) if e eq rhs =>
-//    })
+  lazy val isGhost: PStatement => Boolean =
+    attr {
+      case _: PGhostStatement => true
+      case compound: PCompoundStatement => compound.components forall isGhost
+      case _ => false
+    }
 
   def referencedType(typ: PType): PType =
     typ match {

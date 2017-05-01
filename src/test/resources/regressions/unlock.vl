@@ -43,7 +43,7 @@ void lock(int s, id a, int* x)
   ensures L(a, x) && s == 0;
 {
   bool b;
-  
+
   if (s == 0) { unfold U(a, x); }
   else { unfold L(a, x); }
   

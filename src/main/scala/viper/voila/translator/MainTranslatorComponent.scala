@@ -54,6 +54,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def tmpVars(tree: VoilaTree): Vector[vpr.LocalVarDecl] =
     tree.root.regions map (region => tmpVar(semanticAnalyser.typ(region.state)))
 
+  private var translationIndentation = 0
+
+  private def indent(depth: Int = translationIndentation): String = " " * 2 * depth
+
   def translate(tree: VoilaTree): vpr.Program = {
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
@@ -76,7 +80,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val methods =
       members collect { case m: vpr.Method =>
-        m.copy(_locals = tmpVarDecls ++ m.locals)(m.pos, m.info)
+        m.copy(_locals = tmpVarDecls ++ m.locals)(m.pos, m.info, m.errT)
       }
 
     vpr.Program(
@@ -104,6 +108,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(procedure: PProcedure): vpr.Method = {
+    logger.debug(s"\nTranslating procedure ${procedure.id.name}")
+
     val formalReturns =
       procedure.typ match {
         case PVoidType() => Nil
@@ -117,7 +123,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val body =
       procedure.body match {
-        case Some(statements) => vpr.Seqn(translate(statements))()
+        case Some(stmt) => translate(stmt)
         case None => vpr.Inhale(vpr.FalseLit()())()
       }
 
@@ -143,151 +149,190 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.AnySetContains(lv, set)()
   }
 
-  def translate(statements: Vector[PStatement]): Vector[vpr.Stmt] = {
-    weaveInStabilizationPoints(flattenStatements(statements)) map translateSingleStatement
-  }
-
-  def weaveInStabilizationPoints(statements: Vector[PStatement]): Vector[PStatement] = {
-    if (statements.lengthCompare(1) != 1) {
-      /* No need to stabilise if we have at most one statement */
-      statements
-    } else {
-      statements flatMap {
-        case stmt @ (_: PGhostStatement | _: PRuleStatement) => Vector(stmt)
-        case call: PProcedureCall if semanticAnalyser.entity(call.procedure).asInstanceOf[ProcedureEntity].declaration.isPrimitiveAtomic => Vector(call)
-        case stmt => Vector(stmt, PStabilizationPoint())
-      }
-    }
-  }
-
-  def flattenStatements(statements: Vector[PStatement]): Vector[PStatement] =
-    statements flatMap {
-      case PBlock(stmts) => flattenStatements(stmts)
-      case stmt => Vector(stmt)
+  def translate(statement: PStatement): vpr.Stmt = {
+    logger.debug(s"${indent()}${statement.getClass.getSimpleName}")
+    statement match {
+      case _: PCompoundStatement => translationIndentation += 1
+      case _ =>
     }
 
-  def translateSingleStatement(statement: PStatement): vpr.Stmt = statement match {
-    case _: PBlock =>
-      sys.error(s"Unexpectedly found a block of statements (should have been flattened): $statement")
+    val vprStatement =
+      statement match {
+        case PSeqComp(firstStmt, secondStmt) =>
+          val vprFirstStmt = translate(firstStmt)
 
-    case PSkip() =>
-      vpr.Seqn(Vector.empty)()
+          val vprFirstHavoc =
+            if (   !semanticAnalyser.isGhost(firstStmt)
+                && !semanticAnalyser.isGhost(secondStmt)
+                && !firstStmt.isInstanceOf[PSeqComp])
 
-    case PIf(cond, thn, els) =>
-      val vprIf =
-        vpr.If(translate(cond), vpr.Seqn(translate(thn))(), vpr.Seqn(translate(els))())()
+              Some(stabilisationPoint(firstStmt))
+            else
+              None
 
-      surroundWithSectionComments(statement.statementName, vprIf)
+          val vprSecondStmt = translate(secondStmt)
 
-    case PWhile(cond, invs, body) =>
-      val vprWhile =
-        vpr.While(
-          cond = translate(cond),
-          invs = invs map (inv => translate(inv.assertion)),
-          locals = Nil,
-          body = vpr.Seqn(translate(body))()
-        )()
+          val vprSecondHavoc =
+            if (   !semanticAnalyser.isGhost(secondStmt)
+                && !secondStmt.isInstanceOf[PSeqComp])
 
-      surroundWithSectionComments(statement.statementName, vprWhile)
+              Some(stabilisationPoint(secondStmt))
+            else
+              None
 
-    case PAssign(lhs, rhs) =>
-      val vprAssign =
-        /* TODO: Use correct type */
-        vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
+          vpr.Seqn(
+               Vector(vprFirstStmt)
+            ++ vprFirstHavoc
+            ++ Vector(vprSecondStmt)
+            ++ vprSecondHavoc
+          )()
 
-      surroundWithSectionComments(statement.statementName, vprAssign)
+        case PSkip() =>
+          vpr.Seqn(Vector.empty)()
 
-    case read: PHeapRead =>
-      val vprRead = translate(read)
+        case PIf(cond, thn, els) =>
+          val vprIf =
+            vpr.If(translate(cond), translate(thn), vpr.Seqn(els.toSeq.map(translate))())()
 
-      surroundWithSectionComments(statement.statementName, vprRead)
+          surroundWithSectionComments(statement.statementName, vprIf)
 
-    case write: PHeapWrite =>
-      val vprWrite = translate(write)
+        case PWhile(cond, invs, body) =>
+          val vprWhile =
+            vpr.While(
+              cond = translate(cond),
+              invs = invs map (inv => translate(inv.assertion)),
+              locals = Nil,
+              body = translate(body)
+            )()
 
-      surroundWithSectionComments(statement.statementName, vprWrite)
+          surroundWithSectionComments(statement.statementName, vprWhile)
 
-    case stmt @ PPredicateAccess(predicate, arguments) =>
-      val vprArguments =
-        semanticAnalyser.entity(predicate) match {
-          case _: PredicateEntity => arguments map translate
-          case _: RegionEntity => arguments.init map translate
-        }
+        case PAssign(lhs, rhs) =>
+          val vprAssign =
+            /* TODO: Use correct type */
+            vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
 
-      val loc =
-        vpr.PredicateAccess(
-          args = vprArguments,
-          predicateName = predicate.name
-        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+          surroundWithSectionComments(statement.statementName, vprAssign)
 
-      val acc =
-        vpr.PredicateAccessPredicate(
-          loc = loc,
-          perm = vpr.FullPerm()()
-        )()
+        case read: PHeapRead =>
+          val vprRead = translate(read)
 
-      stmt match {
-        case _: PFold => vpr.Fold(acc)()
-        case _: PUnfold => vpr.Unfold(acc)()
+          surroundWithSectionComments(statement.statementName, vprRead)
+
+        case write: PHeapWrite =>
+          val vprWrite = translate(write)
+
+          surroundWithSectionComments(statement.statementName, vprWrite)
+
+        case stmt @ PPredicateAccess(predicate, arguments) =>
+          val vprArguments =
+            semanticAnalyser.entity(predicate) match {
+              case _: PredicateEntity => arguments map translate
+              case _: RegionEntity => arguments.init map translate
+            }
+
+          val loc =
+            vpr.PredicateAccess(
+              args = vprArguments,
+              predicateName = predicate.name
+            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+
+          val acc =
+            vpr.PredicateAccessPredicate(
+              loc = loc,
+              perm = vpr.FullPerm()()
+            )()
+
+          stmt match {
+            case _: PFold => vpr.Fold(acc)()
+            case _: PUnfold => vpr.Unfold(acc)()
+          }
+
+        case PInhale(assertion) =>
+          val inhale = vpr.Inhale(translate(assertion))()
+
+          surroundWithSectionComments(statement.statementName, inhale)
+
+        case PExhale(assertion) =>
+          val exhale = vpr.Exhale(translate(assertion))()
+
+          surroundWithSectionComments(statement.statementName, exhale)
+
+        case PProcedureCall(procedureId, arguments, optRhs) =>
+          val procedure =
+            semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
+
+          if (!procedure.isPrimitiveAtomic)
+            sys.error("Calling non-atomic procedures is not yet supported.")
+
+          val vprArguments = arguments map translate
+
+          val vprFormalArgs =
+            vprArguments.zipWithIndex map { case (a, i) => vpr.LocalVarDecl(s"x$i", a.typ)() }
+
+          val vprFormalReturns =
+            optRhs match {
+              case Some(rhs) =>
+                val typ = translateNonVoid(semanticAnalyser.typ(PIdnExp(rhs)))
+                Vector(vpr.LocalVarDecl(rhs.name, typ)())
+              case None =>
+                Vector.empty
+            }
+
+          val vprMethod = /* TODO: Avoid recreating the method here, lookup `procedure` in a cache */
+            vpr.Method(
+              name = procedure.id.name,
+              formalArgs = vprFormalArgs,
+              formalReturns = vprFormalReturns,
+              _pres = Vector.empty,
+              _posts = Vector.empty,
+              _locals = Vector.empty,
+              _body = vpr.Seqn(Vector.empty)()
+            )()
+
+          val vprCall =
+            vpr.MethodCall(
+              vprMethod,
+              vprArguments,
+              vprFormalReturns map (_.localVar)
+            )()
+
+          surroundWithSectionComments(statement.statementName, vprCall)
+
+
+        case stmt: PMakeAtomic => translate(stmt)
+        case stmt: PUpdateRegion => translate(stmt)
       }
 
-    case PInhale(assertion) =>
-      val inhale = vpr.Inhale(translate(assertion))()
+    statement match {
+      case _: PCompoundStatement => translationIndentation -= 1
+      case _ =>
+    }
 
-      surroundWithSectionComments(statement.statementName, inhale)
+    vprStatement
+  }
 
-    case PExhale(assertion) =>
-      val exhale = vpr.Exhale(translate(assertion))()
+  def stabilisationPoint(after: PStatement): vpr.Stmt = {
+    logger.debug(s"${indent()}// Stabilise (havoc regions)")
 
-      surroundWithSectionComments(statement.statementName, exhale)
+    val interference = semanticAnalyser.interferenceSpecifications(after).head
 
-    case PProcedureCall(procedureId, arguments, optRhs) =>
-      val procedure =
-        semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
+    val makeAtomic = semanticAnalyser.enclosingMakeAtomic(after)
 
-      if (!procedure.isPrimitiveAtomic)
-        sys.error("Calling non-atomic procedures is not yet supported.")
+    val region =
+      semanticAnalyser.entity(makeAtomic.regionPredicate.predicate).asInstanceOf[RegionEntity]
+                      .declaration
 
-      val vprArguments = arguments map translate
+    val regionArgs = makeAtomic.regionPredicate.arguments.init
 
-      val vprFormalArgs =
-        vprArguments.zipWithIndex map { case (a, i) => vpr.LocalVarDecl(s"x$i", a.typ)() }
+    val havoc =
+      havocRegion(
+        region,
+        regionArgs,
+        interference.set,
+        tmpVar(semanticAnalyser.typ(region.state)).localVar)
 
-      val vprFormalReturns =
-        optRhs match {
-          case Some(rhs) =>
-            val typ = translateNonVoid(semanticAnalyser.typ(PIdnExp(rhs)))
-            Vector(vpr.LocalVarDecl(rhs.name, typ)())
-          case None =>
-            Vector.empty
-        }
-
-      val vprMethod = /* TODO: Avoid recreating the method here, lookup `procedure` in a cache */
-        vpr.Method(
-          name = procedure.id.name,
-          formalArgs = vprFormalArgs,
-          formalReturns = vprFormalReturns,
-          _pres = Vector.empty,
-          _posts = Vector.empty,
-          _locals = Vector.empty,
-          _body = vpr.Seqn(Vector.empty)()
-        )()
-
-      val vprCall =
-        vpr.MethodCall(
-          vprMethod,
-          vprArguments,
-          vprFormalReturns map (_.localVar)
-        )()
-
-      surroundWithSectionComments(statement.statementName, vprCall)
-
-
-    case stmt: PMakeAtomic => translate(stmt)
-    case stmt: PUpdateRegion => translate(stmt)
-
-    case _: PStabilizationPoint =>
-      vpr.Seqn(Vector.empty)(info = vpr.SimpleInfo(Vector("", "TODO: Stabilise, i.e. havoc regions")))
+    vpr.Seqn(Vector(havoc))(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
   }
 
   def translate(expression: PExpression): vpr.Exp = expression match {

@@ -6,6 +6,7 @@
 
 package viper.voila.translator
 
+import com.typesafe.scalalogging.StrictLogging
 import viper.voila.frontend.{SemanticAnalyser, VoilaTree}
 import viper.silver.{ast => vpr}
 
@@ -20,3 +21,4 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
        with RegionTranslatorComponent
        with RuleTranslatorComponent
        with CommentsComponent
+       with StrictLogging
