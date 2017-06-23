@@ -405,8 +405,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PNatSet() => natSet
     case ret: PRet => returnVar(semanticAnalyser.typ(ret))
     case PIdnExp(id) => translateUseOf(id)
+    case POld(operand) => vpr.Old(translate(operand))()
 
-    case pointsTo: PPointsTo => translate(pointsTo)
+    case PHeapReadExp(location) => translateHeapDeref(location)
+
+    case access: PAccess => translate(access)
     case guard: PGuardExp => translate(guard)
 
     case PPredicateExp(id, args) =>
@@ -453,7 +456,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translateUseOf(id: PIdnNode): vpr.Exp = {
     semanticAnalyser.entity(id) match {
-      case entity: LogicalVariableEntity => translateUseOf(id, entity.declaration)
       case ArgumentEntity(decl) => vpr.LocalVar(id.name)(typ = translateNonVoid(decl.typ))
       case LocalVariableEntity(decl) => vpr.LocalVar(id.name)(typ = translateNonVoid(decl.typ))
     }

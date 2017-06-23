@@ -124,7 +124,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case decl: PGuardDecl => GuardEntity(decl, tree.parent.pair.unapply(decl).get._2.asInstanceOf[PRegion])
           case decl: PFormalArgumentDecl => ArgumentEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
-          case decl: PLogicalVariableDecl => LogicalVariableEntity(decl)
           case _ => UnknownEntity()
         }
     }
@@ -138,7 +137,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       // At a scope-introducing node, get the final value of the
       // defining environment, so that all of the definitions of
       // that scope are present.
-      case tree.lastChild.pair(_: PProgram | _: PMember, c) =>
+      case tree.lastChild.pair(top@(_: PProgram | _: PMember), c) =>
         defenv(c)
 
       // Otherwise, ask our parent so we work out way up to the
@@ -266,17 +265,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => enclosingMakeAtomicAttr(of)(p)
     }}
 
-  def definitionContext(of: PLogicalVariableDecl): LogicalVariableContext =
-    definitionContextAttr(of)(of)
-
-  private lazy val definitionContextAttr: PLogicalVariableDecl => PAstNode => LogicalVariableContext =
-    paramAttr { of => {
-      case _: PPreconditionClause => LogicalVariableContext.Precondition
-      case _: PPostconditionClause => LogicalVariableContext.Postcondition
-      case _: PRegion => LogicalVariableContext.Region
-      case tree.parent(p) => definitionContextAttr(of)(p)
-    }}
-
   def usageContext(of: PIdnNode): LogicalVariableContext =
     usageContextAttr(of)(of)
 
@@ -307,20 +295,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case ArgumentEntity(decl) => decl.typ
       case LocalVariableEntity(decl) => decl.typ
       case ProcedureEntity(decl) => decl.typ
-      case LogicalVariableEntity(decl) => typeOfLogicalVariable(decl)
       case _ => PUnknownType()
     })
-
-  lazy val typeOfLogicalVariable: PLogicalVariableDecl => PType =
-    attr {
-      case tree.parent(pointsTo: PPointsTo) =>
-        referencedType(typeOfIdn(pointsTo.id))
-    }
-
-  lazy val boundTo: PLogicalVariableDecl => PIdnNode =
-    attr {
-      case tree.parent(pointsTo: PPointsTo) => pointsTo.id
-    }
 
   /**
     * What is the type of an expression?
@@ -343,12 +319,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case conditional: PConditional => typ(conditional.thn)
 
-      case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
+      case _: PAccess | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
 
       case tree.parent.pair(_: PIrrelevantValue, p: PExpression) => typ(p)
 
-      case tree.parent.pair(_: PLogicalVariableDecl, pointsTo: PPointsTo) =>
-        referencedType(typeOfIdn(pointsTo.id))
+      case POld(operand) => typ(operand)
+
+      case PHeapReadExp(location) => referencedType(typeOfIdn(location))
 
       case _ => PUnknownType()
     }

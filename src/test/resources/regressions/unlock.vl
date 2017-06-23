@@ -1,9 +1,9 @@
 region Lock(id a, int* x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?v && (v == 0 || v == 1) 
+    acc(x) && (*x == 0 || *x == 1)
   }
-  state { v }
+  state { *x }
   actions {
     G: 0 ~> Set(0, 1);
     G: 1 ~> Set(1, 0);
@@ -18,10 +18,11 @@ predicate L(id a, int* x) {
 }
 
 primitive_atomic bool CAS(int* x, int now, int thn)
-  requires x |-> ?v;
-  ensures  v == now
-              ? ret && x |-> thn
-              : !ret && x |-> v;
+  requires acc(x);
+  ensures  acc(x);
+  ensures  old(*x) == now
+              ?  ret && *x == thn
+              : !ret && *x == old(*x);
 
 abstract_atomic void unlock(int s, id a, int* x)
   interference s in Set(1) on a;
@@ -29,7 +30,7 @@ abstract_atomic void unlock(int s, id a, int* x)
   ensures U(a, x);
 {
   unfold L(a, x);
-  
+
   make_atomic
     using Lock(a, x, s) with G@a;
   {
@@ -39,7 +40,7 @@ abstract_atomic void unlock(int s, id a, int* x)
       *x := 0;
     }
   }
-  
+
   fold U(a, x);
 }
 
@@ -52,7 +53,7 @@ abstract_atomic void lock(int s, id a, int* x)
 
   if (s == 0) { unfold U(a, x); }
   else { unfold L(a, x); }
-  
+
   make_atomic
     using Lock(a, x, s) with G@a;
   {
@@ -68,7 +69,7 @@ abstract_atomic void lock(int s, id a, int* x)
       }
     } while (!b);
   }
-  
+
   fold L(a, x);
 }
 

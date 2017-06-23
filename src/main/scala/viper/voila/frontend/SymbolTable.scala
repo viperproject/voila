@@ -26,24 +26,5 @@ case class PredicateEntity(declaration: PPredicate) extends RegularEntity
 case class RegionEntity(declaration: PRegion) extends RegularEntity
 case class GuardEntity(declaration: PGuardDecl, region: PRegion) extends RegularEntity
 
-//sealed trait VariableEntity extends RegularEntity {
-//  def declaration: PDeclaration
-//}
-//
-//object VariableEntity {
-//  def unapply(entity: VariableEntity): Option[PDeclaration] = Some(entity.declaration)
-//}
-
 case class ArgumentEntity(declaration: PFormalArgumentDecl) extends RegularEntity
 case class LocalVariableEntity(declaration: PLocalVariableDecl) extends RegularEntity
-case class LogicalVariableEntity(declaration: PLogicalVariableDecl) extends RegularEntity
-
-//// Internal types, not created from user programs by the parser but
-//// used to represent some types internally to the semantic analysis.
-//
-///**
-// * A reference type given by the declared class body.
-// */
-//case class ReferenceType(decl : Class) extends Type
-
-
