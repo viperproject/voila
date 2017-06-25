@@ -142,7 +142,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.Predicate(
       name = predicate.id.name,
       formalArgs = predicate.formalArgs map translate,
-      _body = Some(translate(predicate.body))
+      _body = predicate.body.map(translate)
     )()
   }
 

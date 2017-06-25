@@ -74,7 +74,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val predicate: Parser[PPredicate] =
     ("predicate" ~> idndef) ~
     ("(" ~> formalArgs <~ ")") ~
-    ("{" ~> expression <~ "}") ^^ {
+    ("{" ~> expression <~ "}").? ^^ {
       case id ~ args ~ body => PPredicate(id, args, body)
     }
 

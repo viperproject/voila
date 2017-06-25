@@ -104,7 +104,7 @@ case class PProcedure(id: PIdnDef,
 
 case class PPredicate(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
-                      body: PExpression)
+                      body: Option[PExpression])
     extends PMember
 
 /*
