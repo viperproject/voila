@@ -36,7 +36,7 @@ case class GuardEntity(declaration: PGuardDecl, region: PRegion) extends Regular
 
 case class ArgumentEntity(declaration: PFormalArgumentDecl) extends RegularEntity
 case class LocalVariableEntity(declaration: PLocalVariableDecl) extends RegularEntity
-case class LogicalVariableEntity(declaration: PLogicalVariableDecl) extends RegularEntity
+case class LogicalVariableEntity(declaration: PLogicalVariableBinder) extends RegularEntity
 
 //// Internal types, not created from user programs by the parser but
 //// used to represent some types internally to the semantic analysis.

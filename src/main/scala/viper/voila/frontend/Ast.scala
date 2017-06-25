@@ -58,7 +58,8 @@ sealed trait PDeclaration extends PAstNode {
 case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
-case class PLogicalVariableDecl(id: PIdnDef) extends PDeclaration
+
+case class PLogicalVariableBinder(id: PIdnDef) extends PDeclaration with PExpression
 
 /*
  * Specification clauses
@@ -247,7 +248,7 @@ case class PExplicitSet(args: Vector[PExpression]) extends PSetExp with PLiteral
 case class PIntSet() extends PSetExp with PLiteral
 case class PNatSet() extends PSetExp with PLiteral
 
-case class PPointsTo(id: PIdnUse, value: Either[PLogicalVariableDecl, PExpression])
+case class PPointsTo(id: PIdnUse, value: PExpression)
     extends PExpression
 
 case class PGuardExp(guard: PIdnUse, regionId: PIdnUse) extends PExpression

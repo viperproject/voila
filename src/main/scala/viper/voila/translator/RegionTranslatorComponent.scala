@@ -197,7 +197,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprStateConstraint =
       stateValue match {
-        case PIrrelevantValue() =>
+        case PIrrelevantValue() | _: PLogicalVariableBinder =>
           vpr.TrueLit()()
         case _ =>
           val vprStateFunction = regionStateFunction(region)

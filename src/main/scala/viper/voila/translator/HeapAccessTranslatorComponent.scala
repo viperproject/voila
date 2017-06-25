@@ -51,8 +51,8 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     val deref = vpr.FieldAccess(rcvr, fld)()
 
     val fldvalcnstr = pointsTo.value match {
-      case Left(_: PLogicalVariableDecl) => vpr.TrueLit()()
-      case Right(exp) => vpr.EqCmp(deref, translate(exp))()
+      case _: PLogicalVariableBinder => vpr.TrueLit()()
+      case exp => vpr.EqCmp(deref, translate(exp))()
     }
 
     vpr.And(
@@ -61,26 +61,49 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableDecl): vpr.Exp = {
+  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableBinder): vpr.Exp = {
     val definitionContext = semanticAnalyser.definitionContext(declaration)
     val usageContext = semanticAnalyser.usageContext(id)
 
-    val boundTo = semanticAnalyser.boundTo(declaration)
-    val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
+    val vprHeapRead: vpr.Exp =
+      semanticAnalyser.boundBy(declaration) match {
+        case PPointsTo(location, _) =>
+          val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
+          val vprReceiver = vpr.LocalVar(location.name)(typ = vpr.Ref)
+          val vprField = heapLocationAsField(voilaType)
 
-    val rcvr = vpr.LocalVar(boundTo.name)(typ = vpr.Ref)
-    val fld = heapLocationAsField(voilaType)
-    val deref = vpr.FieldAccess(rcvr, fld)()
+          vpr.FieldAccess(vprReceiver, vprField)()
+
+        case PPredicateExp(predicate, arguments) =>
+          /* TODO: Unify code with
+           *       RegionTranslatorComponent.translateUseOf(PRegion, Vector[PExpression]): vpr.Exp
+           */
+          val region = semanticAnalyser.entity(predicate).asInstanceOf[RegionEntity].declaration
+          val vprRegionId = translate(arguments.head)
+          val (regularArgs, Seq(stateValue)) = arguments.tail.splitAt(arguments.length - 2)
+          val vprRegularArgs = regularArgs map translate
+          val vprRegionArguments = vprRegionId +: vprRegularArgs
+
+          vpr.FuncApp(
+            regionStateFunction(region),
+            vprRegionArguments)()
+
+        case other =>
+          sys.error(s"Unexpectedly found $other")
+      }
 
     (definitionContext, usageContext) match {
       case (LogicalVariableContext.Precondition, LogicalVariableContext.Precondition) |
            (LogicalVariableContext.Postcondition, LogicalVariableContext.Postcondition) |
            (LogicalVariableContext.Region, LogicalVariableContext.Region) =>
-        deref
+
+        vprHeapRead
+
       case (LogicalVariableContext.Precondition, _) =>
-        vpr.Old(deref)()
-      case _ =>
-        ???
+        vpr.Old(vprHeapRead)()
+
+      case other =>
+        sys.error(s"Unexpectedly found $other")
     }
   }
 }

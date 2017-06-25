@@ -124,7 +124,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case decl: PGuardDecl => GuardEntity(decl, tree.parent.pair.unapply(decl).get._2.asInstanceOf[PRegion])
           case decl: PFormalArgumentDecl => ArgumentEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
-          case decl: PLogicalVariableDecl => LogicalVariableEntity(decl)
+          case decl: PLogicalVariableBinder => LogicalVariableEntity(decl)
           case _ => UnknownEntity()
         }
     }
@@ -226,11 +226,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case Some(scope) =>
         val regions =
           collect[Vector, Option[PRegion]] {
-            case PPredicateExp(region, PIdnExp(`id`) +: _) =>
+            case exp @ PPredicateExp(region, PIdnExp(`id`) +: _) =>
               entity(region) match {
                 case RegionEntity(decl) => Some(decl)
                 case _ => None
               }
+
+            case region: PRegion if region.regionId.id.name == id.name =>
+              Some(region)
           }
 
         regions(scope).flatten.head
@@ -266,10 +269,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => enclosingMakeAtomicAttr(of)(p)
     }}
 
-  def definitionContext(of: PLogicalVariableDecl): LogicalVariableContext =
+  def definitionContext(of: PLogicalVariableBinder): LogicalVariableContext =
     definitionContextAttr(of)(of)
 
-  private lazy val definitionContextAttr: PLogicalVariableDecl => PAstNode => LogicalVariableContext =
+  private lazy val definitionContextAttr: PLogicalVariableBinder => PAstNode => LogicalVariableContext =
     paramAttr { of => {
       case _: PPreconditionClause => LogicalVariableContext.Precondition
       case _: PPostconditionClause => LogicalVariableContext.Postcondition
@@ -311,15 +314,38 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ => PUnknownType()
     })
 
-  lazy val typeOfLogicalVariable: PLogicalVariableDecl => PType =
+  lazy val typeOfLogicalVariable: PLogicalVariableBinder => PType =
+    attr(boundBy(_) match {
+      case PPointsTo(id, _) =>
+        referencedType(typeOfIdn(id))
+
+      case PPredicateExp(id, _) =>
+        val region = entity(id).asInstanceOf[RegionEntity].declaration
+        typ(region.state)
+
+      case other => sys.error(s"Unexpectedly found $other")
+    })
+
+  lazy val boundBy: PLogicalVariableBinder => PExpression =
     attr {
       case tree.parent(pointsTo: PPointsTo) =>
-        referencedType(typeOfIdn(pointsTo.id))
-    }
+        pointsTo
 
-  lazy val boundTo: PLogicalVariableDecl => PIdnNode =
-    attr {
-      case tree.parent(pointsTo: PPointsTo) => pointsTo.id
+      case tree.parent.pair(binder: PLogicalVariableBinder,
+                            predicateExp @ PPredicateExp(id, arguments)) =>
+
+        val region =
+          entity(id) match {
+            case regionEntity: RegionEntity => regionEntity.declaration
+            case other => sys.error(s"Logical variables cannot yet be bound by a non-region predicate: $predicateExp")
+          }
+
+        val idx = arguments.indices.find(arguments(_) == binder).get
+        assert(idx == region.formalArgs.length + 1,
+                 s"Expected logical variable binder $binder to be the last predicate argument, "
+               + s"but got $predicateExp")
+
+        predicateExp
     }
 
   /**
@@ -347,8 +373,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case tree.parent.pair(_: PIrrelevantValue, p: PExpression) => typ(p)
 
-      case tree.parent.pair(_: PLogicalVariableDecl, pointsTo: PPointsTo) =>
-        referencedType(typeOfIdn(pointsTo.id))
+      case binder: PLogicalVariableBinder => typeOfLogicalVariable(binder)
 
       case _ => PUnknownType()
     }

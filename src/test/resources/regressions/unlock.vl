@@ -72,18 +72,20 @@ abstract_atomic void lock(int s, id a, int* x)
   fold L(a, x);
 }
 
-/*
+predicate Inv() // Invariant of CAP lock (left abstract)
+
 region CAPLock(id r, id a, int* x)
   guards {
     duplicable Z;
     unique K;
   }
   interpretation {
-    Lock(a, x, v) && G@a
+       Lock(a, x, ?v) && G@a // Included in both L(a, x) and U(a, x)
+    && (v == 0 ==> K@r && Inv())
+    && (v == 1 ==> true)
   }
-  state { 0 }
+  state { v }
   actions {
     Z: 0 ~> Set(0, 1);
     K: 1 ~> Set(1, 0);
   }
-*/

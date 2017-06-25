@@ -227,7 +227,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "(" ~> expression <~ ")"
 
   lazy val predicateExp: Parser[PPredicateExp] =
-    idnuse ~ ("(" ~> listOfExpressions <~ ")") ^^ {
+    idnuse ~ ("(" ~> listOfBindersOrExpressions <~ ")") ^^ {
       case callee ~ args => PPredicateExp(callee, args)
     }
 
@@ -239,15 +239,15 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Int" ^^ (_ => PIntSet()) |
     "Nat" ^^ (_=> PNatSet())
 
-  lazy val binderOrExpression: Parser[Either[PLogicalVariableDecl, PExpression]] =
-    "?" ~> idndef ^^ (id => Left(PLogicalVariableDecl(id))) |
-    expression ^^ (exp => Right(exp))
+  lazy val binderOrExpression: Parser[PExpression] =
+    "?" ~> idndef ^^ (id => PLogicalVariableBinder(id)) |
+    expression ^^ (exp => exp)
+
+  lazy val listOfBindersOrExpressions: Parser[Vector[PExpression]] =
+    repsep(binderOrExpression, ",")
 
   lazy val listOfExpressions: Parser[Vector[PExpression]] =
     repsep(expression, ",")
-
-//  lazy val listOfBindersOrExpressions: Parser[Vector[Either[PLogicalVariableDecl, PExpression]]] =
-//    repsep(binderOrExpression, ",")
 
   lazy val typeOrVoid: Parser[PType] =
     "void" ^^ (_ => PVoidType()) |

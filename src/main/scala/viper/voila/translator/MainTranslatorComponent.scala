@@ -52,7 +52,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.LocalVarDecl(s"tmp_$typ", translateNonVoid(typ))()
 
   def tmpVars(tree: VoilaTree): Vector[vpr.LocalVarDecl] =
-    tree.root.regions map (region => tmpVar(semanticAnalyser.typ(region.state)))
+    tree.root.regions.map(region => tmpVar(semanticAnalyser.typ(region.state))).distinct
 
   def usedHavocs(tree: VoilaTree): Vector[vpr.Method] = {
     tree.nodes.collect {
