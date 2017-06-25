@@ -18,7 +18,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "true", "false",
     "void", "int", "bool", "id", "Set",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
-    "acc", "predicate",
+    "predicate",
     "interference", "requires", "ensures", "invariant",
     "procedure", "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
@@ -209,7 +209,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "+" ~> exp40 |
     "-" ~> exp40 ^^ (e => PSub(PIntLit(0), e)) |
     "!" ~> exp40 ^^ PNot |
-    "*" ~> idnuse ^^ PHeapReadExp |
     exp0
 
   lazy val exp0: PackratParser[PExpression] =
@@ -219,9 +218,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "_" ^^ (_ => PIrrelevantValue()) |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
-    "old" ~> "(" ~> expression <~ ")" ^^ POld |
-    "acc" ~> "(" ~> idnuse <~ ")" ^^ PAccess |
     predicateExp |
+    (idnuse <~ "|->") ~ binderOrExpression ^^ PPointsTo |
     (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
     idnuse <~ "|=>" <~ "<D>" ^^ PDiamond |
     guardExp |
@@ -241,8 +239,15 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Int" ^^ (_ => PIntSet()) |
     "Nat" ^^ (_=> PNatSet())
 
+  lazy val binderOrExpression: Parser[Either[PLogicalVariableDecl, PExpression]] =
+    "?" ~> idndef ^^ (id => Left(PLogicalVariableDecl(id))) |
+    expression ^^ (exp => Right(exp))
+
   lazy val listOfExpressions: Parser[Vector[PExpression]] =
     repsep(expression, ",")
+
+//  lazy val listOfBindersOrExpressions: Parser[Vector[Either[PLogicalVariableDecl, PExpression]]] =
+//    repsep(binderOrExpression, ",")
 
   lazy val typeOrVoid: Parser[PType] =
     "void" ^^ (_ => PVoidType()) |

@@ -19,7 +19,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   def heapLocations(tree: VoilaTree): Vector[vpr.Field] = {
     tree.nodes.collect {
       case access: PHeapAccess => heapLocationAsField(referencedType(access.location))
-      case access: PAccess  => heapLocationAsField(referencedType(access.location))
+      case pointsTo: PPointsTo => heapLocationAsField(referencedType(pointsTo.id))
     }.distinct
   }
 
@@ -43,18 +43,44 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translate(write.rhs))()
   }
 
-  def translate(access: PAccess): vpr.Exp = {
-    val deref = translateHeapDeref(access.location)
+  def translate(pointsTo: PPointsTo): vpr.Exp = {
+    val voilaType = referencedType(pointsTo.id)
 
-    vpr.FieldAccessPredicate(deref, vpr.FullPerm()())()
+    val rcvr = vpr.LocalVar(pointsTo.id.name)(typ = vpr.Ref)
+    val fld = heapLocationAsField(voilaType)
+    val deref = vpr.FieldAccess(rcvr, fld)()
+
+    val fldvalcnstr = pointsTo.value match {
+      case Left(_: PLogicalVariableDecl) => vpr.TrueLit()()
+      case Right(exp) => vpr.EqCmp(deref, translate(exp))()
+    }
+
+    vpr.And(
+      vpr.FieldAccessPredicate(deref, vpr.FullPerm()())(),
+      fldvalcnstr
+    )()
   }
 
-  def translateHeapDeref(location: PIdnUse): vpr.FieldAccess = {
-    val voilaType = referencedType(location)
+  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableDecl): vpr.Exp = {
+    val definitionContext = semanticAnalyser.definitionContext(declaration)
+    val usageContext = semanticAnalyser.usageContext(id)
 
-    val rcvr = vpr.LocalVar(location.name)(typ = vpr.Ref)
+    val boundTo = semanticAnalyser.boundTo(declaration)
+    val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
+
+    val rcvr = vpr.LocalVar(boundTo.name)(typ = vpr.Ref)
     val fld = heapLocationAsField(voilaType)
+    val deref = vpr.FieldAccess(rcvr, fld)()
 
-    vpr.FieldAccess(rcvr, fld)()
+    (definitionContext, usageContext) match {
+      case (LogicalVariableContext.Precondition, LogicalVariableContext.Precondition) |
+           (LogicalVariableContext.Postcondition, LogicalVariableContext.Postcondition) |
+           (LogicalVariableContext.Region, LogicalVariableContext.Region) =>
+        deref
+      case (LogicalVariableContext.Precondition, _) =>
+        vpr.Old(deref)()
+      case _ =>
+        ???
+    }
   }
 }
