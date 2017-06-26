@@ -117,13 +117,15 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           val from = formalArgs(1).localVar
           val fromSet = vpr.ExplicitSet(Vector(from))()
 
-          region.actions.foldLeft(fromSet: vpr.Exp)((acc, action) => {
-            vpr.CondExp(
-              cond = vpr.EqCmp(from, translate(action.from))(),
-              thn = translate(action.to),
-              els = acc
-            )()
-          })
+          region.actions
+            .filter(_.guard.name == guard.id.name)
+            .foldLeft(fromSet: vpr.Exp)((acc, action) => {
+              vpr.CondExp(
+                cond = vpr.EqCmp(from, translate(action.from))(),
+                thn = translate(action.to),
+                els = acc
+              )()
+            })
         }
 
         vpr.Function(
