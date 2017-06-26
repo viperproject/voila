@@ -448,7 +448,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         )()
       )()
 
-    case PIrrelevantValue() => sys.error("Not yet supported in all positions: _")
+    case PIrrelevantValue() =>
+      sys.error("Wildcard arguments \"_\" are not yet supported in arbitrary positions.")
+
+    case binder: PLogicalVariableBinder =>
+      sys.error("Logical variable binders are not yet supported in arbitrary positions.")
   }
 
   def translateUseOf(id: PIdnNode): vpr.Exp = {
