@@ -62,9 +62,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           name = regionStateFunctionName(region),
           formalArgs = formalRegionArg +: formalRegularArgs,
           typ = regionStateType,
-          _pres = Vector(predicateAccess),
-          _posts = Vector.empty,
-          _body = Some(stateFunctionBody)
+          pres = Vector(predicateAccess),
+          posts = Vector.empty,
+          body = Some(stateFunctionBody)
         )()
       })
   }
@@ -91,9 +91,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           name = guardPotentiallyHeldFunctionName(guard, region),
           formalArgs = formalArgs,
           typ = vpr.Bool,
-          _pres = Vector.empty,
-          _posts = Vector.empty,
-          _body = Some(body)
+          pres = Vector.empty,
+          posts = Vector.empty,
+          body = Some(body)
         )()
       })
   }
@@ -132,9 +132,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           name = guardTransitiveClosureFunctionName(guard, region),
           formalArgs = formalArgs,
           typ = toTyp,
-          _pres = Vector.empty,
-          _posts = Vector.empty,
-          _body = Some(body)
+          pres = Vector.empty,
+          posts = Vector.empty,
+          body = Some(body)
         )()
       })
   }
@@ -148,7 +148,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Predicate(
         name = guardPredicateName(guard, region),
         formalArgs = Vector(vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))()),
-        _body = None
+        body = None
       )()
     )
   }
@@ -164,7 +164,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Predicate(
         name = regionPredicateName,
         formalArgs = formalRegionArg +: formalRegularArgs,
-        _body = Some(translate(region.interpretation))
+        body = Some(translate(region.interpretation))
       )()
 
     /* predicate region_G(r: RegionId) for each guard G */

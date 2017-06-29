@@ -63,10 +63,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           name = s"havoc_$vprTyp",
           formalArgs = Vector.empty,
           formalReturns = Vector(vpr.LocalVarDecl("$r", vprTyp)()),
-          _pres = Vector.empty,
-          _posts = Vector.empty,
-          _locals = Vector.empty,
-          _body = vpr.Seqn(Vector.empty)()
+          pres = Vector.empty,
+          posts = Vector.empty,
+          locals = Vector.empty,
+          body = vpr.Seqn(Vector.empty)()
         )()
     }.distinct
   }
@@ -79,10 +79,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         name = s"havoc_$vprTyp",
         formalArgs = Vector.empty,
         formalReturns = Vector(vpr.LocalVarDecl("$r", vprTyp)()),
-        _pres = Vector.empty,
-        _posts = Vector.empty,
-        _locals = Vector.empty,
-        _body = vpr.Seqn(Vector.empty)()
+        pres = Vector.empty,
+        posts = Vector.empty,
+        locals = Vector.empty,
+        body = vpr.Seqn(Vector.empty)()
       )()
 
     vpr.MethodCall(
@@ -119,7 +119,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val methods =
       members collect { case m: vpr.Method =>
-        m.copy(_locals = tmpVarDecls ++ m.locals)(m.pos, m.info, m.errT)
+        m.copy(locals = tmpVarDecls ++ m.locals)(m.pos, m.info, m.errT)
       }
 
     vpr.Program(
@@ -142,7 +142,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.Predicate(
       name = predicate.id.name,
       formalArgs = predicate.formalArgs map translate,
-      _body = predicate.body.map(translate)
+      body = predicate.body.map(translate)
     )()
   }
 
@@ -170,10 +170,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       name = procedure.id.name,
       formalArgs = procedure.formalArgs map translate,
       formalReturns = formalReturns,
-      _pres = pres,
-      _posts = procedure.posts map (post => translate(post.assertion)),
-      _locals = procedure.locals map translate,
-      _body = body
+      pres = pres,
+      posts = procedure.posts map (post => translate(post.assertion)),
+      locals = procedure.locals map translate,
+      body = body
     )()
   }
 
@@ -319,10 +319,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               name = procedure.id.name,
               formalArgs = vprFormalArgs,
               formalReturns = vprFormalReturns,
-              _pres = Vector.empty,
-              _posts = Vector.empty,
-              _locals = Vector.empty,
-              _body = vpr.Seqn(Vector.empty)()
+              pres = Vector.empty,
+              posts = Vector.empty,
+              locals = Vector.empty,
+              body = vpr.Seqn(Vector.empty)()
             )()
 
           val vprCall =
