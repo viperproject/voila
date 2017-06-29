@@ -20,7 +20,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
     "predicate",
     "interference", "requires", "ensures", "invariant",
-    "procedure", "abstract_atomic", "primitive_atomic", //"ret",
+    "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
     "if", "else", "while", "skip", "inhale", "exhale", "havoc",
     "make_atomic", "update_region",
@@ -85,11 +85,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     interference.* ~
     requires.* ~
     ensures .* ~
-    (("{" ~> varDeclStmt.*) ~ (statements <~ "}")).? ^^ {
+    (("{" ~> varDeclStmt.*) ~ (statements.? <~ "}")).? ^^ {
       case optAtomic ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBody =>
         val (locals, body) =
           optBody match {
-            case Some(l ~ b) => (l, Some(b))
+            case Some(l ~ b) => (l, b)
             case None => (Vector.empty, None)
           }
 
