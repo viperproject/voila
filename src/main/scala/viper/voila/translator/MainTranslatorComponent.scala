@@ -157,7 +157,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val pres = (
          procedure.pres.map(pre => translate(pre.assertion))
-      ++ procedure.inters.map(translate)
+      ++ procedure.inters.map(translate(_, procedure))
     )
 
     val body =
@@ -180,12 +180,29 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
     vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
 
-  def translate(interference: PInterferenceClause): vpr.AnySetContains = {
-    /* TODO: Use correct type */
-    val lv = vpr.LocalVar(interference.variable.name)(typ = vpr.Int)
-    val set = translate(interference.set)
+  def translate(interference: PInterferenceClause, procedure: PProcedure): vpr.AnySetContains = {
+    /* TODO: Unify code with
+     *       RegionTranslatorComponent.translateUseOf(PRegion, Vector[PExpression]): vpr.Exp
+     */
+    val (region, Some(PPredicateExp(_, arguments))) =
+      semanticAnalyser.regionIdUsedWith(interference.region)
 
-    vpr.AnySetContains(lv, set)()
+    val vprStateFunction = regionStateFunction(region)
+
+    val vprRegionId = translate(arguments.head)
+    val (regularArgs, _) = arguments.tail.splitAt(arguments.length - 2)
+    val vprRegularArgs = regularArgs map translate
+    val vprRegionArguments = vprRegionId +: vprRegularArgs
+
+    val vprState =
+      vpr.FuncApp(
+        regionStateFunction(region),
+        vprRegionArguments)()
+//    /* TODO: Use correct type */
+//    val lv = vpr.LocalVar(interference.variable.name)(typ = vpr.Int)
+    val vprSet = translate(interference.set)
+
+    vpr.AnySetContains(vprState, vprSet)()
   }
 
   def translate(statement: PStatement): vpr.Stmt = {

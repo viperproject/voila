@@ -77,10 +77,18 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     reportArgumentLengthMismatch(decl.id, decl.formalArgs.length, args.length)
 
                   case RegionEntity(decl) =>
-                    /* A region predicate has the following arguments: region id, regular arguments,
-                     * state. Hence, the provided argument count should be formal arguments + 2.
-                     */
-                    reportArgumentLengthMismatch(decl.id, decl.formalArgs.length + 2, args.length)
+                    /* A region predicate has the following argument structure:
+                     * one region id, several regular arguments, one optional out-argument.
+-                    * Hence, the provided argument count should be formal arguments plus 1 or 2.
+-                    */
+                    val requiredArgCount = 1 + decl.formalArgs.length
+                    val actualArgCount = args.length
+                    val delta = actualArgCount - requiredArgCount
+                    message(
+                      id,
+                        s"Wrong number of arguments for '${id.name}', got $actualArgCount "
+                      + s"but expected $requiredArgCount or ${requiredArgCount + 1}",
+                      delta != 0 && delta != 1)
 
                   case _ =>
                     message(id, s"Cannot call ${id.name}")
@@ -221,19 +229,40 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     }
 
 
-  lazy val usedWithRegion: PIdnNode => PRegion =
+  lazy val usedWithRegion: PIdnNode => PRegion = attr(regionIdUsedWith(_)._1)
+//    attr(id => enclosingScope(id) match {
+//      case Some(scope) =>
+//        val regions =
+//          collect[Vector, Option[PRegion]] {
+//            case exp @ PPredicateExp(region, PIdnExp(`id`) +: _) =>
+//              entity(region) match {
+//                case RegionEntity(decl) => Some(decl)
+//                case _ => None
+//              }
+//
+//            case region: PRegion if region.regionId.id.name == id.name =>
+//              Some(region)
+//          }
+//
+//        regions(scope).flatten.head
+//
+//      case None =>
+//        ???
+//    })
+
+  lazy val regionIdUsedWith: PIdnNode => (PRegion, Option[PPredicateExp]) =
     attr(id => enclosingScope(id) match {
       case Some(scope) =>
         val regions =
-          collect[Vector, Option[PRegion]] {
+          collect[Vector, Option[(PRegion, Option[PPredicateExp])]] {
             case exp @ PPredicateExp(region, PIdnExp(`id`) +: _) =>
               entity(region) match {
-                case RegionEntity(decl) => Some(decl)
+                case RegionEntity(decl) => Some((decl, Some(exp)))
                 case _ => None
               }
 
             case region: PRegion if region.regionId.id.name == id.name =>
-              Some(region)
+              Some(region, None)
           }
 
         regions(scope).flatten.head

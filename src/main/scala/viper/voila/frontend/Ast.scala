@@ -67,9 +67,7 @@ case class PLogicalVariableBinder(id: PIdnDef) extends PDeclaration with PExpres
 
 sealed trait PSpecificationClause extends PAstNode
 
-case class PInterferenceClause(variable: PIdnUse, set: PExpression, regionId: PIdnUse)
-    extends PSpecificationClause
-
+case class PInterferenceClause(region: PIdnUse, set: PExpression) extends PSpecificationClause
 case class PPreconditionClause(assertion: PExpression) extends PSpecificationClause
 case class PPostconditionClause(assertion: PExpression) extends PSpecificationClause
 case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
@@ -196,6 +194,13 @@ case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "update-region"
+  val components: Vector[PStatement] = Vector(body)
+}
+
+case class PUseAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+    extends PRuleStatement with PCompoundStatement
+{
+  val statementName = "use-atomic"
   val components: Vector[PStatement] = Vector(body)
 }
 

@@ -80,7 +80,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
            */
           val region = semanticAnalyser.entity(predicate).asInstanceOf[RegionEntity].declaration
           val vprRegionId = translate(arguments.head)
-          val (regularArgs, Seq(stateValue)) = arguments.tail.splitAt(arguments.length - 2)
+          val (regularArgs, _) = arguments.tail.splitAt(arguments.length - 2)
           val vprRegularArgs = regularArgs map translate
           val vprRegionArguments = vprRegionId +: vprRegularArgs
 

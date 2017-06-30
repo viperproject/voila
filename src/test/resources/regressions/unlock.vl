@@ -9,6 +9,7 @@ region Lock(id a, int* x)
     G: 1 ~> Set(1, 0);
   }
 
+/*
 predicate U(id a, int* x) {
   Lock(a, x, 0) && G@a
 }
@@ -16,7 +17,7 @@ predicate U(id a, int* x) {
 predicate L(id a, int* x) {
   Lock(a, x, 1) && G@a
 }
-
+*/
 
 
 predicate Inv() /* Invariant of CAP lock (left abstract) */
@@ -38,7 +39,7 @@ region CAPLock(id r, id a, int* x)
   }
 
 predicate isLock(id r, id a, int* x) {
-  CAPLock(r, a, x, ?v) && v in Set(0, 1)
+  CAPLock(r, a, x, ?v) && (v == 0 || v == 1) // v in Set(0, 1) // TODO: Support simple set expressions
 }
 
 predicate Locked(id r, id a, int* x) {
@@ -46,7 +47,7 @@ predicate Locked(id r, id a, int* x) {
 }
 
   
-  
+
 primitive_atomic bool CAS(int* x, int now, int thn)
   requires x |-> ?v;
   ensures  v == now
@@ -54,25 +55,25 @@ primitive_atomic bool CAS(int* x, int now, int thn)
               : !ret && x |-> v;
 
 
-              
-abstract_atomic void unlock(int s, id a, int* x)
-  interference s in Set(1) on a;
-  requires L(a, x);
-  ensures U(a, x);
+
+abstract_atomic void unlock(id a, int* x)
+  interference a in Set(1);
+  requires Lock(a, x, 1) && G@a; // L(a, x)
+  ensures Lock(a, x, 0) && G@a; // U(a, x)
 {
-  unfold L(a, x);
+  // unfold L(a, x);
 
   make_atomic
-    using Lock(a, x, s) with G@a;
+    using Lock(a, x) with G@a;
   {
     update_region
-      using Lock(a, x, s);
+      using Lock(a, x);
     {
       *x := 0;
     }
   }
 
-  fold U(a, x);
+  // fold U(a, x);
 }
 
 void non_atomic_unlock(id r, id a, int* x)
@@ -80,12 +81,13 @@ void non_atomic_unlock(id r, id a, int* x)
   requires Inv();
 {
   unfold Locked(r, a, x);
-  unfold CAPLock(r, a, x);
-  fold L(a, x);
-  
-  use_atomic { /* Probably not needed; calling an abstractly-atomic method 
-                * would always be nested inside use-atomic */
-    unlock(s, a, x)
+  // unfold CAPLock(r, a, x);
+  // fold L(a, x);
+
+  use_atomic
+    using CAPLock(r, a, x) with K@r;
+  {
+    unlock(a, x);
   }
 }
 
@@ -129,9 +131,8 @@ abstract_atomic void lock(int s, id a, int* x)
 
 
 
- 
 
 
 
 
- 
+

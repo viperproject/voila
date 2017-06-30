@@ -111,7 +111,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     typ ~ idndef ^^ { case tpe ~ id => PFormalArgumentDecl(id, tpe) }
 
   lazy val interference: Parser[PInterferenceClause] =
-    ("interference" ~> idnuse <~ "in") ~ setLiteral ~ ("on" ~> idnuse  <~ ";") ^^ PInterferenceClause
+    "interference" ~> idnuse ~ ("in" ~> setLiteral <~ ";") ^^ PInterferenceClause
 
   lazy val requires: Parser[PPreconditionClause] =
     "requires" ~> expression <~ ";" ^^ PPreconditionClause
@@ -141,6 +141,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     makeAtomic |
     updateRegion |
+    useAtomic |
     "(" ~> statements <~ ")" <~ ";" |
     (idnuse <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
       case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs)
@@ -157,6 +158,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "update_region" ~>
     ("using" ~> predicateExp <~ ";") ~
     ("{" ~> statements <~ "}") ^^ PUpdateRegion
+
+  lazy val useAtomic: Parser[PUseAtomic] =
+    "use_atomic" ~>
+    ("using" ~> predicateExp) ~ ("with" ~> guardExp <~ ";") ~
+    ("{" ~> statements <~ "}") ^^ PUseAtomic
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
     typ ~ idndef <~ ";" ^^ { case tpe ~ id => PLocalVariableDecl(id, tpe) }
