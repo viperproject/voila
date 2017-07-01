@@ -1,0 +1,9 @@
+region Counter(id c, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?n
+  }
+  state { n }
+  actions {
+    G: ?m ~> Nat;
+  }

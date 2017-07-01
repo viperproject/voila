@@ -191,26 +191,31 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             stateFunction))
   }
 
-  def translateUseOf(region: PRegion, args: Vector[PExpression]): vpr.Exp = {
-    val vprRegionId = translate(args.head)
-    val (regularArgs, Seq(stateValue)) = args.tail.splitAt(args.length - 2)
-    val vprRegularArgs = regularArgs map translate
-    val vprRegionArguments = vprRegionId +: vprRegularArgs
+  def translateUseOf(regionPredicate: PPredicateExp): vpr.Exp = {
+    val (region, vprRegionArguments, vprRegionStateArgument) =
+      getAndTranslateRegionPredicateDetails(regionPredicate)
 
     val vprStateConstraint =
-      stateValue match {
-        case PIrrelevantValue() | _: PLogicalVariableBinder =>
-          vpr.TrueLit()()
-        case _ =>
+      vprRegionStateArgument match {
+        case None | Some(Left(_: PLogicalVariableBinder)) => vpr.TrueLit()()
+        case Some(Right(vprStateArgument)) =>
           val vprStateFunction = regionStateFunction(region)
 
-          vpr.EqCmp(
-            vpr.FuncApp(
-              func = vprStateFunction,
-              args = vprRegionArguments
-            )(),
-            translate(stateValue)
-          )()
+          vprStateArgument match {
+            case app: vpr.FuncApp if app.funcname == vprStateFunction.name =>
+              /* Avoid generation of redundant constraints of the shape state(a, x) == state(a, x).
+               * Should not be necessary in the long run.
+               */
+              vpr.TrueLit()()
+            case _ =>
+              vpr.EqCmp(
+                vpr.FuncApp(
+                  func = vprStateFunction,
+                  args = vprRegionArguments
+                )(),
+                vprStateArgument
+              )()
+          }
       }
 
     val vprRegionAccess =
@@ -220,6 +225,48 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
 
     vpr.And(vprRegionAccess, vprStateConstraint)()
+  }
+
+  def getRegionPredicateDetails(predicateExp: PPredicateExp)
+                               : (PRegion, Vector[PExpression], Option[Either[PLogicalVariableBinder, PExpression]]) = {
+
+    val region =
+      semanticAnalyser.entity(predicateExp.predicate)
+                      .asInstanceOf[RegionEntity]
+                      .declaration
+
+    val (regionArguments, regionStateArgument) =
+      predicateExp.arguments.splitAt(region.formalArgs.length + 1) match {
+        case (args, Seq()) => (args, None)
+        case (args, Seq(binder: PLogicalVariableBinder)) => (args, Some(Left(binder)))
+        case (args, Seq(arg)) => (args, Some(Right(arg)))
+        case _ => sys.error(s"Unexpectedly many arguments: $predicateExp")
+      }
+
+    (region, regionArguments, regionStateArgument)
+  }
+
+  def getAndTranslateRegionPredicateDetails(predicateExp: PPredicateExp)
+                                           : (PRegion, Vector[vpr.Exp], Option[Either[PLogicalVariableBinder, vpr.Exp]]) = {
+
+    val (region, regionArguments, regionStateArgument) = getRegionPredicateDetails(predicateExp)
+    val vprRegionStateArgument = regionStateArgument.map(_.right.map(translate))
+
+    (region, regionArguments map translate, vprRegionStateArgument)
+  }
+
+  def regionState(predicateExp: PPredicateExp): vpr.FuncApp = {
+    val (region, regionArguments, _) = getRegionPredicateDetails(predicateExp)
+
+    regionState(region, regionArguments)
+  }
+
+  def regionState(region: PRegion, regionArguments: Vector[PExpression]): vpr.FuncApp = {
+    val vprRegionArguments = regionArguments map translate
+
+    vpr.FuncApp(
+      regionStateFunction(region),
+      vprRegionArguments)()
   }
 
   def translate(guardExp: PGuardExp): vpr.Exp = {
@@ -241,12 +288,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def havocRegion(region: PRegion,
-                  arguments: Vector[PExpression],
+                  regionArguments: Vector[PExpression],
                   atomicityContextX: PExpression,
                   tmpVar: vpr.LocalVar)
                  : vpr.Seqn =
   {
-    val vprArgs @ (vprRegionIdArg +: _) = arguments map translate
+    val vprArgs @ (vprRegionIdArg +: _) = regionArguments map translate
     val vprCxtX = translate(atomicityContextX)
 
     val comment =

@@ -27,22 +27,37 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     label
   }
 
+  // TODO: Unify fresh label code
+
+  private var lastPreUseAtomicLabel: vpr.Label = _
+  private var preUseAtomicCounter = 0
+
+  def freshPreUseAtomicLabel(): vpr.Label = {
+    preUseAtomicCounter += 1
+
+    val label =
+      vpr.Label(
+        s"pre_use_atomic_$preUseAtomicCounter",
+        Vector.empty
+      )()
+
+    lastPreUseAtomicLabel = label
+
+    label
+  }
+
   def translate(makeAtomic: PMakeAtomic): vpr.Stmt = {
-    val region =
-      semanticAnalyser.entity(makeAtomic.regionPredicate.predicate).asInstanceOf[RegionEntity]
-                      .declaration
+    val regionArgs = makeAtomic.regionPredicate.arguments
+
+    val (region, vprRegionArgs, None) =
+      getAndTranslateRegionPredicateDetails(makeAtomic.regionPredicate)
+
+    val regionType = semanticAnalyser.typ(region.state)
+    val vprRegionIdArg = vprRegionArgs.head
 
     val guard =
       semanticAnalyser.entity(makeAtomic.guard.guard).asInstanceOf[GuardEntity]
                       .declaration
-
-    val regionType = semanticAnalyser.typ(region.state)
-
-    val regionArgs =
-      makeAtomic.regionPredicate.arguments.init
-
-    val vprRegionIdArg +: vprRegularArgs :+ _ =
-      makeAtomic.regionPredicate.arguments map translate
 
     val inhaleDiamond =
       vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId)))()
@@ -93,7 +108,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val currentState =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprRegionIdArg +: vprRegularArgs
+        vprRegionArgs
       )()
 
     val assumeStateIsStepTo =
@@ -107,7 +122,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val assumeInterferenceWasStepFrom =
       vpr.Inhale(
         vpr.EqCmp(
-          translateUseOf(interference.variable),
+          translateUseOf(interference.variable.id),
           stepFromLocation(vprRegionIdArg, regionType)
         )()
       )()
@@ -146,14 +161,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(updateRegion: PUpdateRegion): vpr.Stmt = {
-    val region =
-      semanticAnalyser.entity(updateRegion.regionPredicate.predicate).asInstanceOf[RegionEntity]
-                      .declaration
+    val (region, vprRegionArgs, None) =
+      getAndTranslateRegionPredicateDetails(updateRegion.regionPredicate)
 
     val regionType = semanticAnalyser.typ(region.state)
-
-    val vprRegionIdArg +: vprRegularArgs :+ _ =
-      updateRegion.regionPredicate.arguments map translate
+    val vprRegionIdArg = vprRegionArgs.head
 
     val exhaleDiamond =
       vpr.Exhale(diamondAccess(vprRegionIdArg))()
@@ -161,17 +173,17 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val label = freshPreUpdateRegionLabel()
 
     val unfoldRegionPredicate =
-      vpr.Unfold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()
+      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
 
     val ruleBody = translate(updateRegion.body)
 
     val foldRegionPredicate =
-      vpr.Fold(regionPredicateAccess(region, vprRegionIdArg +: vprRegularArgs))()
+      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
 
     val currentState =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprRegionIdArg +: vprRegularArgs
+        vprRegionArgs
       )()
 
     val oldState =
@@ -226,5 +238,65 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       )()
 
     surroundWithSectionComments(updateRegion.statementName, result)
+  }
+
+  def translate(useAtomic: PUseAtomic): vpr.Stmt = {
+    val (region, vprRegionArgs, None) =
+      getAndTranslateRegionPredicateDetails(useAtomic.regionPredicate)
+
+    val vprRegionIdArg = vprRegionArgs.head
+
+    val guard =
+      semanticAnalyser.entity(useAtomic.guard.guard).asInstanceOf[GuardEntity]
+                      .declaration
+
+    val label = freshPreUseAtomicLabel()
+
+    val checkGuard =
+      vpr.Assert(translate(useAtomic.guard))()
+
+    val unfoldRegionPredicate =
+      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
+
+    val ruleBody = translate(useAtomic.body)
+
+    val foldRegionPredicate =
+      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+
+    val currentState =
+      vpr.FuncApp(
+        regionStateFunction(region),
+        vprRegionArgs
+      )()
+
+    val oldState =
+      vpr.LabelledOld(
+        currentState,
+        lastPreUseAtomicLabel.name
+      )()
+
+    val stateChangePermitted =
+      vpr.Exhale(
+        vpr.AnySetContains(
+          currentState,
+          vpr.FuncApp(
+            guardTransitiveClosureFunction(guard, region),
+            Vector(vprRegionIdArg, oldState)
+          )()
+        )()
+      )()
+
+    val result =
+      vpr.Seqn(
+        Vector(
+          label,
+          checkGuard,
+          unfoldRegionPredicate,
+          ruleBody,
+          foldRegionPredicate,
+          stateChangePermitted)
+      )()
+
+    surroundWithSectionComments(useAtomic.statementName, result)
   }
 }

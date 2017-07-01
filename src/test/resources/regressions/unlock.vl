@@ -46,7 +46,7 @@ predicate Locked(id r, id a, int* x) {
   CAPLock(r, a, x, ?v) && v == 1 && K@r
 }
 
-  
+
 
 primitive_atomic bool CAS(int* x, int now, int thn)
   requires x |-> ?v;
@@ -57,8 +57,8 @@ primitive_atomic bool CAS(int* x, int now, int thn)
 
 
 abstract_atomic void unlock(id a, int* x)
-  interference a in Set(1);
-  requires Lock(a, x, 1) && G@a; // L(a, x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a; // L(a, x)
   ensures Lock(a, x, 0) && G@a; // U(a, x)
 {
   // unfold L(a, x);
@@ -92,37 +92,54 @@ void non_atomic_unlock(id r, id a, int* x)
 }
 
 
-/*
-abstract_atomic void lock(int s, id a, int* x)
-  interference s in Set(0, 1) on a;
-  requires s == 0 ? U(a, x) : L(a, x);
-  ensures L(a, x) && s == 0;
+
+
+abstract_atomic void lock(id a, int* x)
+  interference ?s in Set(0, 1) on a;
+  // requires s == 0 ? U(a, x) : L(a, x);
+  requires Lock(a, x, s) && G@a;
+  // ensures L(a, x) && s == 0;
+  ensures Lock(a, x, 1) && G@a && s == 0;
 {
   bool b;
 
-  if (s == 0) { unfold U(a, x); }
-  else { unfold L(a, x); }
+  // if (s == 0) { unfold U(a, x); }
+  // else { unfold L(a, x); }
 
   make_atomic
-    using Lock(a, x, s) with G@a;
+    using Lock(a, x) with G@a;
   {
     do
-      invariant Lock(a, x, _);
+      invariant Lock(a, x);
       invariant !b ==> a |=> <D>;
       invariant  b ==> a |=> (0, 1);
     {
       update_region
-        using Lock(a, x, s);
+        using Lock(a, x);
       {
         b := CAS(x, 0, 1);
       }
     } while (!b);
   }
 
-  fold L(a, x);
+  // fold L(a, x);
 }
-*/
 
+void non_atomic_lock(id r, id a, int* x)
+  requires isLock(r, a, x);
+  ensures  Locked(r, a, x);
+  // ensures  isLock(r, a, x);
+{
+  unfold isLock(r, a, x);
+
+  use_atomic
+    using CAPLock(r, a, x) with Z@r;
+  {
+    lock(a, x);
+  }
+
+  fold Locked(r, a, x);
+}
 
 
 

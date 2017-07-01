@@ -74,22 +74,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def havoc(variable: PIdnUse): vpr.Stmt = {
     val vprTyp = translateNonVoid(semanticAnalyser.typ(PIdnExp(variable)))
 
-    val vprMethod = /* TODO: Avoid recreating the method here, use a cache */
-      vpr.Method(
-        name = s"havoc_$vprTyp",
-        formalArgs = Vector.empty,
-        formalReturns = Vector(vpr.LocalVarDecl("$r", vprTyp)()),
-        pres = Vector.empty,
-        posts = Vector.empty,
-        locals = Vector.empty,
-        body = vpr.Seqn(Vector.empty)()
-      )()
-
     vpr.MethodCall(
-      vprMethod,
+      s"havoc_$vprTyp",
       Vector.empty,
       Vector(translateUseOf(variable).asInstanceOf[vpr.LocalVar])
-    )()
+    )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
   }
 
   private var translationIndentation = 0
@@ -147,7 +136,56 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(procedure: PProcedure): vpr.Method = {
-    logger.debug(s"\nTranslating procedure ${procedure.id.name}")
+    procedure.atomicity match {
+      case PAbstractAtomic() =>
+        logger.debug(s"\nTranslating abstract-atomic procedure ${procedure.id.name}")
+        translateAbstractlyAtomicProcedure(procedure)
+      case PNotAtomic() =>
+        logger.debug(s"\nTranslating non-atomic procedure ${procedure.id.name}")
+        translateStandardProcedure(procedure)
+      case PPrimitiveAtomic() =>
+        logger.debug(s"\nTranslating primitive-atomic procedure ${procedure.id.name}")
+        translateStandardProcedure(procedure)
+    }
+  }
+
+  def translateAbstractlyAtomicProcedure(procedure: PProcedure): vpr.Method = {
+    val formalReturns =
+      procedure.typ match {
+        case PVoidType() => Nil
+        case other => Seq(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
+      }
+
+    val vprBody =
+      procedure.body match {
+        case Some(stmt) => translate(stmt)
+        case None => vpr.Inhale(vpr.FalseLit()())()
+      }
+
+    val vprPres = (
+         procedure.pres.map(pre => translate(pre.assertion))
+      ++ procedure.inters.map(translate)
+    )
+
+    val vprPosts = procedure.posts.map(post => translate(post.assertion))
+    val vprLocals = procedure.locals.map(translate)
+
+    vpr.Method(
+      name = procedure.id.name,
+      formalArgs = procedure.formalArgs map translate,
+      formalReturns = formalReturns,
+      pres = vprPres,
+      posts = vprPosts,
+      locals = vprLocals,
+      body = vprBody
+    )()
+  }
+
+  def translateStandardProcedure(procedure: PProcedure): vpr.Method = {
+    require(
+      procedure.inters.isEmpty,
+        s"Expected procedure ${procedure.id} to have no interference clause, "
+      + s"but found ${procedure.inters}")
 
     val formalReturns =
       procedure.typ match {
@@ -155,10 +193,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case other => Seq(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
       }
 
-    val pres = (
-         procedure.pres.map(pre => translate(pre.assertion))
-      ++ procedure.inters.map(translate(_, procedure))
-    )
+    val pres = procedure.pres.map(pre => translate(pre.assertion))
 
     val body =
       procedure.body match {
@@ -180,29 +215,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
     vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
 
-  def translate(interference: PInterferenceClause, procedure: PProcedure): vpr.AnySetContains = {
-    /* TODO: Unify code with
-     *       RegionTranslatorComponent.translateUseOf(PRegion, Vector[PExpression]): vpr.Exp
-     */
-    val (region, Some(PPredicateExp(_, arguments))) =
-      semanticAnalyser.regionIdUsedWith(interference.region)
-
-    val vprStateFunction = regionStateFunction(region)
-
-    val vprRegionId = translate(arguments.head)
-    val (regularArgs, _) = arguments.tail.splitAt(arguments.length - 2)
-    val vprRegularArgs = regularArgs map translate
-    val vprRegionArguments = vprRegionId +: vprRegularArgs
-
-    val vprState =
-      vpr.FuncApp(
-        regionStateFunction(region),
-        vprRegionArguments)()
-//    /* TODO: Use correct type */
-//    val lv = vpr.LocalVar(interference.variable.name)(typ = vpr.Int)
+  def translate(interference: PInterferenceClause): vpr.AnySetContains = {
     val vprSet = translate(interference.set)
+    val predicateExp = semanticAnalyser.usedWithRegionPredicate(interference.region)
+    val vprRegionState = regionState(predicateExp)
 
-    vpr.AnySetContains(vprState, vprSet)()
+    vpr.AnySetContains(vprRegionState, vprSet)()
   }
 
   def translate(statement: PStatement): vpr.Stmt = {
@@ -314,13 +332,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           val procedure =
             semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
 
-          if (procedure.atomicity != PPrimitiveAtomic())
+          if (procedure.atomicity == PNotAtomic())
             sys.error("Calling non-atomic procedures is not yet supported.")
 
           val vprArguments = arguments map translate
-
-          val vprFormalArgs =
-            vprArguments.zipWithIndex map { case (a, i) => vpr.LocalVarDecl(s"x$i", a.typ)() }
 
           val vprFormalReturns =
             optRhs match {
@@ -331,28 +346,18 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 Vector.empty
             }
 
-          val vprMethod = /* TODO: Avoid recreating the method here, lookup `procedure` in a cache */
-            vpr.Method(
-              name = procedure.id.name,
-              formalArgs = vprFormalArgs,
-              formalReturns = vprFormalReturns,
-              pres = Vector.empty,
-              posts = Vector.empty,
-              locals = Vector.empty,
-              body = vpr.Seqn(Vector.empty)()
-            )()
-
           val vprCall =
             vpr.MethodCall(
-              vprMethod,
+              procedure.id.name,
               vprArguments,
               vprFormalReturns map (_.localVar)
-            )()
+            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
 
           surroundWithSectionComments(statement.statementName, vprCall)
 
         case stmt: PMakeAtomic => translate(stmt)
         case stmt: PUpdateRegion => translate(stmt)
+        case stmt: PUseAtomic => translate(stmt)
       }
 
     statement match {
@@ -386,11 +391,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val makeAtomic = semanticAnalyser.enclosingMakeAtomic(statement)
 
-    val region =
-      semanticAnalyser.entity(makeAtomic.regionPredicate.predicate).asInstanceOf[RegionEntity]
-                      .declaration
-
-    val regionArgs = makeAtomic.regionPredicate.arguments.init
+    val (region, regionArgs, None) =
+      getRegionPredicateDetails(makeAtomic.regionPredicate)
 
     val havoc =
       havocRegion(
@@ -418,6 +420,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PSub(left, right) => vpr.Sub(translate(left), translate(right))()
     case PConditional(cond, thn, els) => vpr.CondExp(translate(cond), translate(thn), translate(els))()
     case PExplicitSet(elements) => vpr.ExplicitSet(elements map translate)()
+    case PSetContains(element, set) => vpr.AnySetContains(translate(element), translate(set))()
     case PIntSet() => intSet
     case PNatSet() => natSet
     case ret: PRet => returnVar(semanticAnalyser.typ(ret))
@@ -426,13 +429,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case pointsTo: PPointsTo => translate(pointsTo)
     case guard: PGuardExp => translate(guard)
 
-    case PPredicateExp(id, args) =>
+    case predicateExp @ PPredicateExp(id, args) =>
       semanticAnalyser.entity(id) match {
         case _: PredicateEntity =>
           vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
 
-        case RegionEntity(decl) =>
-          translateUseOf(decl, args)
+        case _: RegionEntity =>
+          translateUseOf(predicateExp)
 
         case other =>
           sys.error(s"Not yet supported: $other")
@@ -468,7 +471,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PIrrelevantValue() =>
       sys.error("Wildcard arguments \"_\" are not yet supported in arbitrary positions.")
 
-    case binder: PLogicalVariableBinder =>
+    case _: PLogicalVariableBinder =>
       sys.error("Logical variable binders are not yet supported in arbitrary positions.")
   }
 

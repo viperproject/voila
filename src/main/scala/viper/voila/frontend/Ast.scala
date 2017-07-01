@@ -60,6 +60,7 @@ case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
 
 case class PLogicalVariableBinder(id: PIdnDef) extends PDeclaration with PExpression
+sealed trait PBindingContext extends PAstNode
 
 /*
  * Specification clauses
@@ -67,7 +68,9 @@ case class PLogicalVariableBinder(id: PIdnDef) extends PDeclaration with PExpres
 
 sealed trait PSpecificationClause extends PAstNode
 
-case class PInterferenceClause(region: PIdnUse, set: PExpression) extends PSpecificationClause
+case class PInterferenceClause(variable: PLogicalVariableBinder, set: PExpression, region: PIdnUse)
+    extends PSpecificationClause with PBindingContext
+
 case class PPreconditionClause(assertion: PExpression) extends PSpecificationClause
 case class PPostconditionClause(assertion: PExpression) extends PSpecificationClause
 case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
@@ -245,7 +248,7 @@ case class PSub(left: PExpression, right: PExpression) extends PBinOp
 case class PIdnExp(id: PIdnUse) extends PExpression
 
 case class PPredicateExp(predicate: PIdnUse, arguments: Vector[PExpression])
-    extends PExpression with PPredicateAccess
+    extends PExpression with PPredicateAccess with PBindingContext
 
 sealed trait PSetExp extends PExpression
 
@@ -253,8 +256,13 @@ case class PExplicitSet(args: Vector[PExpression]) extends PSetExp with PLiteral
 case class PIntSet() extends PSetExp with PLiteral
 case class PNatSet() extends PSetExp with PLiteral
 
+case class PSetContains(element: PExpression, set: PExpression) extends PSetExp with PBinOp {
+  val left: PExpression = element
+  val right: PExpression = set
+}
+
 case class PPointsTo(id: PIdnUse, value: PExpression)
-    extends PExpression
+    extends PExpression with PBindingContext
 
 case class PGuardExp(guard: PIdnUse, regionId: PIdnUse) extends PExpression
 

@@ -184,9 +184,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
     case procedure: PProcedure =>
       val retDecl = PLocalVariableDecl(PIdnDef("ret"), procedure.typ)
+      val localBindings = Vector("ret" -> LocalVariableEntity(retDecl))
       val procenv :: envs = enter(in(procedure))
 
-      (procenv + ("ret" -> LocalVariableEntity(retDecl))) :: envs
+      (procenv ++ localBindings) :: envs
 
     // At a nested scope region, create a new empty scope inside the outer
     // environment
@@ -230,25 +231,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
 
   lazy val usedWithRegion: PIdnNode => PRegion = attr(regionIdUsedWith(_)._1)
-//    attr(id => enclosingScope(id) match {
-//      case Some(scope) =>
-//        val regions =
-//          collect[Vector, Option[PRegion]] {
-//            case exp @ PPredicateExp(region, PIdnExp(`id`) +: _) =>
-//              entity(region) match {
-//                case RegionEntity(decl) => Some(decl)
-//                case _ => None
-//              }
-//
-//            case region: PRegion if region.regionId.id.name == id.name =>
-//              Some(region)
-//          }
-//
-//        regions(scope).flatten.head
-//
-//      case None =>
-//        ???
-//    })
+
+  lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp = attr(regionIdUsedWith(_)._2.get)
 
   lazy val regionIdUsedWith: PIdnNode => (PRegion, Option[PPredicateExp]) =
     attr(id => enclosingScope(id) match {
@@ -298,27 +282,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => enclosingMakeAtomicAttr(of)(p)
     }}
 
-  def definitionContext(of: PLogicalVariableBinder): LogicalVariableContext =
-    definitionContextAttr(of)(of)
+  def generalBindingContext(of: PLogicalVariableBinder): LogicalVariableContext =
+    generalContextAttr(of.id)(of)
 
-  private lazy val definitionContextAttr: PLogicalVariableBinder => PAstNode => LogicalVariableContext =
+  def generalUsageContext(of: PIdnNode): LogicalVariableContext =
+    generalContextAttr(of)(of)
+
+  private lazy val generalContextAttr: PIdnNode => PAstNode => LogicalVariableContext =
     paramAttr { of => {
+      case _: PInterferenceClause => LogicalVariableContext.Interference
       case _: PPreconditionClause => LogicalVariableContext.Precondition
       case _: PPostconditionClause => LogicalVariableContext.Postcondition
+      case _: PProcedure => LogicalVariableContext.Procedure
       case _: PRegion => LogicalVariableContext.Region
-      case tree.parent(p) => definitionContextAttr(of)(p)
-    }}
-
-  def usageContext(of: PIdnNode): LogicalVariableContext =
-    usageContextAttr(of)(of)
-
-  private lazy val usageContextAttr: PIdnNode => PAstNode => LogicalVariableContext =
-    paramAttr { of => {
-      case _: PPreconditionClause => LogicalVariableContext.Precondition
-      case _: PPostconditionClause => LogicalVariableContext.Postcondition
-      case _: PProcedure => LogicalVariableContext.Body
-      case _: PRegion => LogicalVariableContext.Region
-      case tree.parent(p) => usageContextAttr(of)(p)
+      case _: PPredicate => LogicalVariableContext.Predicate
+      case tree.parent(p) => generalContextAttr(of)(p)
     }}
 
   lazy val isGhost: PStatement => Boolean =
@@ -344,7 +322,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     })
 
   lazy val typeOfLogicalVariable: PLogicalVariableBinder => PType =
-    attr(boundBy(_) match {
+    attr(binder => boundBy(binder) match {
       case PPointsTo(id, _) =>
         referencedType(typeOfIdn(id))
 
@@ -352,13 +330,16 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         val region = entity(id).asInstanceOf[RegionEntity].declaration
         typ(region.state)
 
-      case other => sys.error(s"Unexpectedly found $other")
+      case PInterferenceClause(`binder`, set, _) =>
+        typ(set).asInstanceOf[PSetType].elementType
+
+      case other => sys.error(s"Unexpectedly found $other as the binding context of $binder")
     })
 
-  lazy val boundBy: PLogicalVariableBinder => PExpression =
+  lazy val boundBy: PLogicalVariableBinder => PBindingContext =
     attr {
-      case tree.parent(pointsTo: PPointsTo) =>
-        pointsTo
+      case tree.parent(interferenceClause: PInterferenceClause) => interferenceClause
+      case tree.parent(pointsTo: PPointsTo) => pointsTo
 
       case tree.parent.pair(binder: PLogicalVariableBinder,
                             predicateExp @ PPredicateExp(id, arguments)) =>
@@ -366,7 +347,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         val region =
           entity(id) match {
             case regionEntity: RegionEntity => regionEntity.declaration
-            case other => sys.error(s"Logical variables cannot yet be bound by a non-region predicate: $predicateExp")
+            case _ => sys.error(s"Logical variables cannot yet be bound by a non-region predicate: $predicateExp")
           }
 
         val idx = arguments.indices.find(arguments(_) == binder).get
@@ -443,8 +424,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
 sealed trait LogicalVariableContext
 object LogicalVariableContext {
+  case object Interference extends LogicalVariableContext
   case object Precondition extends LogicalVariableContext
   case object Postcondition extends LogicalVariableContext
-  case object Body extends LogicalVariableContext
+  case object Procedure extends LogicalVariableContext
   case object Region extends LogicalVariableContext
+  case object Predicate extends LogicalVariableContext
 }

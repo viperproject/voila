@@ -111,7 +111,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     typ ~ idndef ^^ { case tpe ~ id => PFormalArgumentDecl(id, tpe) }
 
   lazy val interference: Parser[PInterferenceClause] =
-    "interference" ~> idnuse ~ ("in" ~> setLiteral <~ ";") ^^ PInterferenceClause
+    "interference" ~> binder ~ ("in" ~> setLiteral) ~ ("on" ~> idnuse <~ ";") ^^ PInterferenceClause
 
   lazy val requires: Parser[PPreconditionClause] =
     "requires" ~> expression <~ ";" ^^ PPreconditionClause
@@ -245,15 +245,18 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Int" ^^ (_ => PIntSet()) |
     "Nat" ^^ (_=> PNatSet())
 
+  lazy val binder: Parser[PLogicalVariableBinder] =
+    "?" ~> idndef ^^ (id => PLogicalVariableBinder(id))
+
   lazy val binderOrExpression: Parser[PExpression] =
     "?" ~> idndef ^^ (id => PLogicalVariableBinder(id)) |
-    expression ^^ (exp => exp)
-
-  lazy val listOfBindersOrExpressions: Parser[Vector[PExpression]] =
-    repsep(binderOrExpression, ",")
+    expression
 
   lazy val listOfExpressions: Parser[Vector[PExpression]] =
     repsep(expression, ",")
+
+  lazy val listOfBindersOrExpressions: Parser[Vector[PExpression]] =
+    repsep(binderOrExpression, ",")
 
   lazy val typeOrVoid: Parser[PType] =
     "void" ^^ (_ => PVoidType()) |

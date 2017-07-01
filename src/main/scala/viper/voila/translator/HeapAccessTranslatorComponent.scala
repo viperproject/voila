@@ -62,8 +62,8 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translateUseOf(id: PIdnNode, declaration: PLogicalVariableBinder): vpr.Exp = {
-    val definitionContext = semanticAnalyser.definitionContext(declaration)
-    val usageContext = semanticAnalyser.usageContext(id)
+    val generalBindingContext = semanticAnalyser.generalBindingContext(declaration)
+    val generalUsageContext = semanticAnalyser.generalUsageContext(id)
 
     val vprHeapRead: vpr.Exp =
       semanticAnalyser.boundBy(declaration) match {
@@ -74,32 +74,28 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
           vpr.FieldAccess(vprReceiver, vprField)()
 
-        case PPredicateExp(predicate, arguments) =>
-          /* TODO: Unify code with
-           *       RegionTranslatorComponent.translateUseOf(PRegion, Vector[PExpression]): vpr.Exp
-           */
-          val region = semanticAnalyser.entity(predicate).asInstanceOf[RegionEntity].declaration
-          val vprRegionId = translate(arguments.head)
-          val (regularArgs, _) = arguments.tail.splitAt(arguments.length - 2)
-          val vprRegularArgs = regularArgs map translate
-          val vprRegionArguments = vprRegionId +: vprRegularArgs
+        case predicateExp: PPredicateExp =>
+          regionState(predicateExp)
 
-          vpr.FuncApp(
-            regionStateFunction(region),
-            vprRegionArguments)()
+        case PInterferenceClause(`declaration`, set, regionId) =>
+          regionState(semanticAnalyser.usedWithRegionPredicate(regionId))
 
         case other =>
           sys.error(s"Unexpectedly found $other")
       }
 
-    (definitionContext, usageContext) match {
+    (generalBindingContext, generalUsageContext) match {
       case (LogicalVariableContext.Precondition, LogicalVariableContext.Precondition) |
+           (LogicalVariableContext.Interference, LogicalVariableContext.Precondition) |
            (LogicalVariableContext.Postcondition, LogicalVariableContext.Postcondition) |
-           (LogicalVariableContext.Region, LogicalVariableContext.Region) =>
+           (LogicalVariableContext.Region, LogicalVariableContext.Region) |
+           (LogicalVariableContext.Predicate, LogicalVariableContext.Predicate) =>
 
         vprHeapRead
 
-      case (LogicalVariableContext.Precondition, _) =>
+      case (LogicalVariableContext.Precondition, _) |
+           (LogicalVariableContext.Interference, _) =>
+
         vpr.Old(vprHeapRead)()
 
       case other =>
