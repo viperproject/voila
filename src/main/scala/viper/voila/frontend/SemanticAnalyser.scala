@@ -375,7 +375,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PEquals | _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
 
       case _: PIntSet | _: PNatSet => PSetType(PIntType())
-      case PExplicitSet(elements) => PSetType(typ(elements.head))
+
+      case PExplicitSet(elements, typeAnnotation) =>
+        typeAnnotation match {
+          case Some(_typ) => PSetType(_typ)
+          case None => PSetType(typ(elements.head))
+        }
 
       case conditional: PConditional => typ(conditional.thn)
 

@@ -207,6 +207,13 @@ case class PUseAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PS
   val components: Vector[PStatement] = Vector(body)
 }
 
+case class POpenRegion(regionPredicate: PPredicateExp, body: PStatement)
+    extends PRuleStatement with PCompoundStatement
+{
+  val statementName = "open-region"
+  val components: Vector[PStatement] = Vector(body)
+}
+
 /*
  * Expressions
  */
@@ -252,7 +259,9 @@ case class PPredicateExp(predicate: PIdnUse, arguments: Vector[PExpression])
 
 sealed trait PSetExp extends PExpression
 
-case class PExplicitSet(args: Vector[PExpression]) extends PSetExp with PLiteral
+case class PExplicitSet(args: Vector[PExpression], typeAnnotation: Option[PType])
+    extends PSetExp with PLiteral
+
 case class PIntSet() extends PSetExp with PLiteral
 case class PNatSet() extends PSetExp with PLiteral
 

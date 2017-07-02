@@ -23,7 +23,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
     "if", "else", "while", "skip", "inhale", "exhale", "havoc",
-    "make_atomic", "update_region",
+    "make_atomic", "update_region", "use_atomic", "open_region",
     "Int", "Nat"
   )
 
@@ -142,6 +142,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     makeAtomic |
     updateRegion |
     useAtomic |
+    openRegion |
     "(" ~> statements <~ ")" <~ ";" |
     (idnuse <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
       case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs)
@@ -163,6 +164,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "use_atomic" ~>
     ("using" ~> predicateExp) ~ ("with" ~> guardExp <~ ";") ~
     ("{" ~> statements <~ "}") ^^ PUseAtomic
+
+  lazy val openRegion: Parser[POpenRegion] =
+    "open_region" ~>
+    ("using" ~> predicateExp <~ ";") ~
+    ("{" ~> statements <~ "}") ^^ POpenRegion
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
     typ ~ idndef <~ ";" ^^ { case tpe ~ id => PLocalVariableDecl(id, tpe) }
@@ -241,7 +247,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     (idnuse <~ "@") ~ idnuse ^^ PGuardExp
 
   lazy val setLiteral: Parser[PLiteral] =
-    "Set" ~> "(" ~> listOfExpressions <~ ")" ^^ PExplicitSet |
+    "Set" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
+      case typeAnnotation ~ elements => PExplicitSet(elements, typeAnnotation)
+    } |
     "Int" ^^ (_ => PIntSet()) |
     "Nat" ^^ (_=> PNatSet())
 

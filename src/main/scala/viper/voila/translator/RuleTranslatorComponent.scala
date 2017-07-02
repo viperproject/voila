@@ -299,4 +299,6 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     surroundWithSectionComments(useAtomic.statementName, result)
   }
+
+  def translate(openRegion: POpenRegion): vpr.Stmt = ???
 }
