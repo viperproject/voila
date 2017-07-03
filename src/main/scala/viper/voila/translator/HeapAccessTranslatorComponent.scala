@@ -86,6 +86,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
     (generalBindingContext, generalUsageContext) match {
       case (LogicalVariableContext.Precondition, LogicalVariableContext.Precondition) |
+           (LogicalVariableContext.Interference, LogicalVariableContext.Interference) |
            (LogicalVariableContext.Interference, LogicalVariableContext.Precondition) |
            (LogicalVariableContext.Postcondition, LogicalVariableContext.Postcondition) |
            (LogicalVariableContext.Region, LogicalVariableContext.Region) |

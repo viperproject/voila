@@ -28,8 +28,6 @@ abstract_atomic int read(id c, int* x)
   }
 }
 
-// TODO: support open_region
-/*
 abstract_atomic int read2(id c, int* x)
   interference ?n in Nat on c;
   requires Counter(c, x, n) && G@c;
@@ -42,7 +40,6 @@ abstract_atomic int read2(id c, int* x)
     ret := *x;
   }
 }
-*/
 
 primitive_atomic bool CAS(int* x, int now, int thn)
   requires x |-> ?v;

@@ -300,5 +300,26 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     surroundWithSectionComments(useAtomic.statementName, result)
   }
 
-  def translate(openRegion: POpenRegion): vpr.Stmt = ???
+  def translate(openRegion: POpenRegion): vpr.Stmt = {
+    val (region, vprRegionArgs, None) =
+      getAndTranslateRegionPredicateDetails(openRegion.regionPredicate)
+
+    val unfoldRegionPredicate =
+      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
+
+    val ruleBody = translate(openRegion.body)
+
+    val foldRegionPredicate =
+      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+
+    val result =
+      vpr.Seqn(
+        Vector(
+          unfoldRegionPredicate,
+          ruleBody,
+          foldRegionPredicate)
+      )()
+
+    surroundWithSectionComments(openRegion.statementName, result)
+  }
 }

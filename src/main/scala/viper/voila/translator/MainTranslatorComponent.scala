@@ -6,6 +6,7 @@
 
 package viper.voila.translator
 
+import scala.collection.breakOut
 import viper.voila.frontend._
 import viper.silver.{ast => vpr}
 
@@ -156,11 +157,23 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case other => Seq(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
       }
 
-    val vprBody =
-      procedure.body match {
-        case Some(stmt) => translate(stmt)
-        case None => vpr.Inhale(vpr.FalseLit()())()
-      }
+    case class Entry(clause: PInterferenceClause, region: PRegion, v: vpr.LocalVar)
+
+    var regionInterferenceVariables: Map[PIdnUse, Entry] =
+      procedure.inters.map(inter => {
+        val region = semanticAnalyser.usedWithRegion(inter.region)
+        val vprRegionStateType = regionStateFunction(region).typ
+        val vprVar = vpr.LocalVar(s"$$${inter.region.name}X")(typ = vprRegionStateType)
+
+        inter.region -> Entry(inter, region, vprVar)
+      }).toMap
+
+    val vprLocals = (
+         procedure.locals.map(translate)
+      ++ regionInterferenceVariables.values.map(entry =>
+           vpr.LocalVarDecl(entry.v.name, entry.v.typ)()
+         )
+    )
 
     val vprPres = (
          procedure.pres.map(pre => translate(pre.assertion))
@@ -168,7 +181,24 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )
 
     val vprPosts = procedure.posts.map(post => translate(post.assertion))
-    val vprLocals = procedure.locals.map(translate)
+
+    val vprBody = {
+      val vprSaveInferenceSets: Vector[vpr.Stmt] =
+        regionInterferenceVariables.map { case (_, entry) =>
+          vpr.LocalVarAssign(
+            entry.v,
+            translate(entry.clause.set)
+          )()
+        }(breakOut)
+
+      val vprMainBody =
+        procedure.body match {
+          case Some(stmt) => translate(stmt)
+          case None => vpr.Inhale(vpr.FalseLit()())()
+        }
+
+      vpr.Seqn(vprSaveInferenceSets :+ vprMainBody)()
+    }
 
     vpr.Method(
       name = procedure.id.name,
@@ -358,6 +388,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case stmt: PMakeAtomic => translate(stmt)
         case stmt: PUpdateRegion => translate(stmt)
         case stmt: PUseAtomic => translate(stmt)
+        case stmt: POpenRegion => translate(stmt)
       }
 
     statement match {
