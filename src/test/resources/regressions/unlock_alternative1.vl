@@ -1,7 +1,7 @@
 region Lock(id a, int* x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?v && v != 0 
+    x |-> ?v && v != 0
   }
   state { v < 0 ? 0 : 1 }
   actions {
@@ -9,6 +9,7 @@ region Lock(id a, int* x)
     G: 1 ~> Set(1, 0);
   }
 
+/*
 predicate U(id a, int* x) {
   Lock(a, x, 0) && G@a
 }
@@ -16,52 +17,55 @@ predicate U(id a, int* x) {
 predicate L(id a, int* x) {
   Lock(a, x, 1) && G@a
 }
+*/
 
-abstract_atomic void unlock(int s, id a, int* x)
-  interference s in Set(1) on a;
-  requires L(a, x);
-  ensures U(a, x);
+abstract_atomic void unlock(id a, int* x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a; // L(a, x)
+  ensures Lock(a, x, 0) && G@a; // U(a, x)
 {
   int nonDetNeg;
-  
-  unfold L(a, x);
-  
+
+  // unfold L(a, x);
+
   make_atomic
-    using Lock(a, x, s) with G@a;
+    using Lock(a, x) with G@a;
   {
     update_region
-      using Lock(a, x, s);
+      using Lock(a, x);
     {
       havoc nonDetNeg;
       inhale nonDetNeg < 0;
       *x := nonDetNeg;
     }
   }
-  
-  fold U(a, x);
+
+  // fold U(a, x);
 }
 
-abstract_atomic void lock(int s, id a, int* x)
-  interference s in Set(0, 1) on a;
-  requires s == 0 ? U(a, x) : L(a, x);
-  ensures L(a, x) && s == 0;
+abstract_atomic void lock(id a, int* x)
+  interference ?s in Set(0, 1) on a;
+  // requires s == 0 ? U(a, x) : L(a, x);
+  requires Lock(a, x, s) && G@a;
+  // ensures L(a, x) && s == 0;
+  ensures Lock(a, x, 1) && G@a && s == 0;
 {
   int nonDetPos;
   bool b;
 
-  if (s == 0) { unfold U(a, x); }
-  else { unfold L(a, x); }
-  
+  // if (s == 0) { unfold U(a, x); }
+  // else { unfold L(a, x); }
+
   make_atomic
-    using Lock(a, x, s) with G@a;
+    using Lock(a, x) with G@a;
   {
     do
-      invariant Lock(a, x, _);
+      invariant Lock(a, x);
       invariant !b ==> a |=> <D>;
       invariant  b ==> a |=> (0, 1);
     {
       update_region
-        using Lock(a, x, s);
+        using Lock(a, x);
       {
         havoc nonDetPos;
         inhale 0 < nonDetPos;
@@ -69,8 +73,8 @@ abstract_atomic void lock(int s, id a, int* x)
       }
     } while (!b);
   }
-  
-  fold L(a, x);
+
+  // fold L(a, x);
 }
 
 primitive_atomic bool CASifNeg(int* x, int thn)
