@@ -44,16 +44,29 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAccessPredicate(stepToLocation(rcvr, typ), vpr.FullPerm()())()
 
   val intSet: vpr.FuncApp =
-    vpr.FuncApp.apply("IntSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
+    vpr.FuncApp.apply(
+      "IntSet",
+      Vector.empty
+    )(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
 
   val natSet: vpr.FuncApp =
-    vpr.FuncApp("NatSet", Vector.empty)(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
+    vpr.FuncApp(
+      "NatSet",
+      Vector.empty
+    )(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
 
-  def tmpVar(typ: PType): vpr.LocalVarDecl =
-    vpr.LocalVarDecl(s"tmp_$typ", translateNonVoid(typ))()
+  def temporaryVariable(typ: PType): vpr.LocalVarDecl =
+    vpr.LocalVarDecl(s"$$tmp_$typ", translateNonVoid(typ))()
+
+  def atomicityContextVariable(regionId: PIdnNode): vpr.LocalVarDecl = {
+    val region = semanticAnalyser.usedWithRegion(regionId)
+    val vprType = vpr.SetType(regionStateFunction(region).typ)
+
+    vpr.LocalVarDecl(s"$$${regionId.name}X", vprType)()
+  }
 
   def tmpVars(tree: VoilaTree): Vector[vpr.LocalVarDecl] =
-    tree.root.regions.map(region => tmpVar(semanticAnalyser.typ(region.state))).distinct
+    tree.root.regions.map(region => temporaryVariable(semanticAnalyser.typ(region.state))).distinct
 
   def usedHavocs(tree: VoilaTree): Vector[vpr.Method] = {
     tree.nodes.collect {
@@ -151,27 +164,29 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translateAbstractlyAtomicProcedure(procedure: PProcedure): vpr.Method = {
+    case class Entry(clause: PInterferenceClause,
+                     region: PRegion,
+                     atomicityContextVar: vpr.LocalVarDecl)
+
     val formalReturns =
       procedure.typ match {
         case PVoidType() => Nil
         case other => Seq(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
       }
 
-    case class Entry(clause: PInterferenceClause, region: PRegion, v: vpr.LocalVar)
-
-    var regionInterferenceVariables: Map[PIdnUse, Entry] =
+    val regionInterferenceVariables: Map[PIdnUse, Entry] =
       procedure.inters.map(inter => {
-        val region = semanticAnalyser.usedWithRegion(inter.region)
-        val vprRegionStateType = regionStateFunction(region).typ
-        val vprVar = vpr.LocalVar(s"$$${inter.region.name}X")(typ = vprRegionStateType)
+        val regionId = inter.region
+        val region = semanticAnalyser.usedWithRegion(regionId)
+        val vprVar = atomicityContextVariable(regionId)
 
-        inter.region -> Entry(inter, region, vprVar)
+        regionId -> Entry(inter, region, vprVar)
       }).toMap
 
     val vprLocals = (
          procedure.locals.map(translate)
       ++ regionInterferenceVariables.values.map(entry =>
-           vpr.LocalVarDecl(entry.v.name, entry.v.typ)()
+           vpr.LocalVarDecl(entry.atomicityContextVar.name, entry.atomicityContextVar.typ)()
          )
     )
 
@@ -186,7 +201,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       val vprSaveInferenceSets: Vector[vpr.Stmt] =
         regionInterferenceVariables.map { case (_, entry) =>
           vpr.LocalVarAssign(
-            entry.v,
+            entry.atomicityContextVar.localVar,
             translate(entry.clause.set)
           )()
         }(breakOut)
@@ -425,12 +440,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val (region, regionArgs, None) =
       getRegionPredicateDetails(makeAtomic.regionPredicate)
 
-    val havoc =
-      havocRegion(
-        region,
-        regionArgs,
-        interference.set,
-        tmpVar(semanticAnalyser.typ(region.state)).localVar)
+    val havoc = havocRegion(region, regionArgs)
 
     vpr.Seqn(Vector(havoc))(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
   }

@@ -1,11 +1,14 @@
 region Counter(id c, int* x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?n
+    x |-> ?n && n >= 0
+      // TODO: value constraints not yet assumed after region havoc, since
+      //       havocked w.r.t to state function, but n >= 0 is not a
+      //       postcondition of the latter
   }
   state { n }
   actions {
-    // G: ?m ~> Nat;
+    // G: ?m ~> Nat; // TODO: support "forall m1, ... with p(m1, ...) ~> s(m1, ...)"
     G: 0 ~> Nat;
   }
 
@@ -58,33 +61,22 @@ abstract_atomic void incr(id c, int* x)
   make_atomic
     using Counter(c, x) with G@c;
   {
-    (open_region
-      using Counter(c, x);
+    do
+      invariant Counter(c, x);
+      invariant !b ==> c |=> <D>;
+      invariant  b ==> c |=> (r, r + 1);
     {
-      r := *x;
-    }
-
-    update_region
-      using Counter(c, x);
-    {
-      b := CAS(x, r, r + 1);
-    });
-
-    while (!b)
-      invariant true;
-    {
-      (open_region
+      open_region
         using Counter(c, x);
       {
         r := *x;
       }
-
       update_region
         using Counter(c, x);
       {
         b := CAS(x, r, r + 1);
-      });
-    }
+      }
+    } while (!b);
   }
 }
 

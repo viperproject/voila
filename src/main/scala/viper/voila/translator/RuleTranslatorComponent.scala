@@ -48,6 +48,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translate(makeAtomic: PMakeAtomic): vpr.Stmt = {
     val regionArgs = makeAtomic.regionPredicate.arguments
+    val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
     val (region, vprRegionArgs, None) =
       getAndTranslateRegionPredicateDetails(makeAtomic.regionPredicate)
@@ -67,16 +68,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
 
-    val havoc =
-      havocRegion(
-        region,
-        regionArgs,
-        interference.set,
-        tmpVar(semanticAnalyser.typ(region.state)).localVar)
+    val havoc = havocRegion(region,regionArgs)
 
     val ruleBody = translate(makeAtomic.body)
 
-    val vprAtomicityContextX = translate(interference.set)
+    val vprAtomicityContextX = atomicityContextVariable(regionId).localVar
 
     val checkUpdatePermitted = {
       val checkFrom =

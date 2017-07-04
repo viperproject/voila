@@ -287,20 +287,18 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def havocRegion(region: PRegion,
-                  regionArguments: Vector[PExpression],
-                  atomicityContextX: PExpression,
-                  tmpVar: vpr.LocalVar)
-                 : vpr.Seqn =
-  {
+  def havocRegion(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
+    val regionId = regionArguments.head.asInstanceOf[PIdnExp].id
     val vprArgs @ (vprRegionIdArg +: _) = regionArguments map translate
-    val vprCxtX = translate(atomicityContextX)
+
+    val vprTmpVar = temporaryVariable(semanticAnalyser.typ(region.state)).localVar
+    val atomicityContextX = atomicityContextVariable(regionId).localVar
 
     val comment =
       vpr.SimpleInfo(
         Vector(
           "",
-          s"${region.id.name}_havoc(${(vprArgs :+ vprCxtX :+ tmpVar).mkString(", ")})"))
+          s"${region.id.name}_havoc(${(vprArgs :+ atomicityContextX :+ vprTmpVar).mkString(", ")})"))
 
     val state =
       vpr.FuncApp(
@@ -310,13 +308,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     /* tmp := region_state(arguments) */
     val saveRegionState =
       vpr.LocalVarAssign(
-        tmpVar,
+        vprTmpVar,
         state
       )()
 
     /* Set(tmp) */
     val currentSet =
-      vpr.ExplicitSet(Vector(tmpVar))()
+      vpr.ExplicitSet(Vector(vprTmpVar))()
 
     /* region(arguments) */
     val predicateAccess =
@@ -349,7 +347,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             guardTransitiveClosureFunction(guard, region),
             Vector(
               vprRegionIdArg,
-              tmpVar)
+              vprTmpVar)
           )()
 
         vpr.CondExp(
@@ -393,7 +391,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           diamondHeld,
           vpr.AnySetContains(
             state,
-            vprCxtX
+            atomicityContextX
           )()
         )()
       )()
