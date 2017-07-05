@@ -235,7 +235,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp = attr(regionIdUsedWith(_)._2.get)
 
   lazy val regionIdUsedWith: PIdnNode => (PRegion, Option[PPredicateExp]) =
-    attr(id => enclosingScope(id) match {
+    attr(id => enclosingMember(id) match {
       case Some(scope) =>
         val regions =
           collect[Vector, Option[(PRegion, Option[PPredicateExp])]] {
@@ -255,13 +255,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         ???
     })
 
-  def enclosingScope(of: PAstNode): Option[PMember] =
-    enclosingScopeAttr(of)(of)
+  def enclosingMember(of: PAstNode): Option[PMember] =
+    enclosingMemberAttr(of)(of)
 
-  private lazy val enclosingScopeAttr: PAstNode => PAstNode => Option[PMember] =
+  private lazy val enclosingMemberAttr: PAstNode => PAstNode => Option[PMember] =
     paramAttr { of => {
       case member: PMember => Some(member)
-      case tree.parent(p) => enclosingScopeAttr(of)(p)
+      case tree.parent(p) => enclosingMemberAttr(of)(p)
     }}
 
   def interferenceSpecifications(of: PAstNode): Vector[PInterferenceClause] =
@@ -333,12 +333,16 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PInterferenceClause(`binder`, set, _) =>
         typ(set).asInstanceOf[PSetType].elementType
 
+      case action @ PAction(_, `binder`, _) =>
+        typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
+
       case other => sys.error(s"Unexpectedly found $other as the binding context of $binder")
     })
 
   lazy val boundBy: PLogicalVariableBinder => PBindingContext =
     attr {
       case tree.parent(interferenceClause: PInterferenceClause) => interferenceClause
+      case tree.parent(action: PAction) => action
       case tree.parent(pointsTo: PPointsTo) => pointsTo
 
       case tree.parent.pair(binder: PLogicalVariableBinder,
@@ -366,7 +370,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PIntLit => PIntType()
       case _: PTrueLit | _: PFalseLit => PBoolType()
 
-      case ret: PRet => enclosingScope(ret).get.asInstanceOf[PProcedure].typ
+      case ret: PRet => enclosingMember(ret).get.asInstanceOf[PProcedure].typ
 
       case PIdnExp(id) => typeOfIdn(id)
 

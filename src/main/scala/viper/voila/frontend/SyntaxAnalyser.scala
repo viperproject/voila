@@ -69,7 +69,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val action: Parser[PAction] =
-    (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction
+    (idnuse <~ ":") ~ binderOrExpression ~ ("~>" ~> expression <~ ";") ^^ PAction
 
   lazy val predicate: Parser[PPredicate] =
     ("predicate" ~> idndef) ~

@@ -91,7 +91,8 @@ case class PRegion(id: PIdnDef,
     extends PMember
 
 
-case class PAction(guard: PIdnUse, from: PExpression, to: PExpression) extends PAstNode
+case class PAction(guard: PIdnUse, from: PExpression, to: PExpression)
+    extends PAstNode with PBindingContext
 
 case class PProcedure(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],

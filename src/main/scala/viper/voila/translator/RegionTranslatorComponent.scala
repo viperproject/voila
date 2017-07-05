@@ -116,15 +116,37 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         val body = {
           val from = formalArgs(1).localVar
           val fromSet = vpr.ExplicitSet(Vector(from))()
+          val actions = region.actions.filter(_.guard.name == guard.id.name)
 
-          region.actions
-            .filter(_.guard.name == guard.id.name)
+          require(
+            actions.count(_.from.isInstanceOf[PLogicalVariableBinder]) <= 1,
+               "Cannot yet handle cases in which more than one action per guard binds a "
+            + s"variable: $actions")
+
+          /* Note: translation scheme needs to be generalised in order to support a generalised
+           * source syntax, e.g. to the shape `?x if p(x) ~> Set(y | q(x, y))`.
+           */
+          actions
             .foldLeft(fromSet: vpr.Exp)((acc, action) => {
-              vpr.CondExp(
-                cond = vpr.EqCmp(from, translate(action.from))(),
-                thn = translate(action.to),
-                els = acc
-              )()
+              action.from match {
+                case PLogicalVariableBinder(iddef) =>
+                  /* Source: ?x ~> e(x)
+                   * Encode: e(from)
+                   */
+                  translate(action.to).transform {
+                    case vpr.LocalVar(iddef.name) => from /* TODO: Fragile, relies on 'x' being translated to 'x' */
+                  }
+
+                case exp =>
+                  /* Source: e ~> e'
+                   * Encode: from == e ? e' : Set(from)
+                   */
+                  vpr.CondExp(
+                    cond = vpr.EqCmp(from, translate(action.from))(),
+                    thn = translate(action.to),
+                    els = acc
+                  )()
+              }
             })
         }
 

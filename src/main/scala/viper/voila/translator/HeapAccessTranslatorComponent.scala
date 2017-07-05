@@ -61,7 +61,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableBinder): vpr.Exp = {
+  def translateAsHeapAccess(id: PIdnNode, declaration: PLogicalVariableBinder): vpr.Exp = {
     val generalBindingContext = semanticAnalyser.generalBindingContext(declaration)
     val generalUsageContext = semanticAnalyser.generalUsageContext(id)
 

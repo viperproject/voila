@@ -524,6 +524,18 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
+  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableBinder): vpr.Exp = {
+    semanticAnalyser.boundBy(declaration) match {
+      case PAction(_, `declaration`, _) =>
+        val vprType = translateNonVoid(semanticAnalyser.typeOfLogicalVariable(declaration))
+
+        vpr.LocalVar(id.name)(typ = vprType)
+
+      case _ =>
+        translateAsHeapAccess(id, declaration)
+    }
+  }
+
   def translate(declaration: PLocalVariableDecl): vpr.LocalVarDecl =
     vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
 
