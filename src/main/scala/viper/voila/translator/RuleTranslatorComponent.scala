@@ -101,24 +101,24 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       )()
     }
 
-    val currentState =
+    val vprRegionState =
       vpr.FuncApp(
         regionStateFunction(region),
         vprRegionArgs
       )()
 
-    val assumeStateIsStepTo =
+    val assumeCurrentStateIsStepTo =
       vpr.Inhale(
         vpr.EqCmp(
-          currentState,
+          vprRegionState,
           stepToLocation(vprRegionIdArg, regionType)
         )()
       )()
 
-    val assumeInterferenceWasStepFrom =
+    val assumeOldStateWasStepFrom =
       vpr.Inhale(
         vpr.EqCmp(
-          translateUseOf(interference.variable.id),
+          vpr.Old(vprRegionState)(),
           stepFromLocation(vprRegionIdArg, regionType)
         )()
       )()
@@ -147,8 +147,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           checkUpdatePermitted,
           havoc,
           BLANK_LINE,
-          assumeStateIsStepTo,
-          assumeInterferenceWasStepFrom,
+          assumeCurrentStateIsStepTo,
+          assumeOldStateWasStepFrom,
           inhaleGuard,
           exhaleTrackingResource)
       )()
