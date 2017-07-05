@@ -1,19 +1,43 @@
 region Counter(id c, int* x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?n && n >= 0
-      // TODO: value constraints not yet assumed after region havoc, since
-      //       havocked w.r.t to state function, but n >= 0 is not a
-      //       postcondition of the latter
+    x |-> ?n // TODO: n is a Nat (not an Int) in the paper. Here are two ideas:
+             //         - Encode a Nat type in Viper (domain, axioms, (un)boxing)
+             //         - Add n >= 0 here; must be taken into account when havocking region
   }
   state { n }
+  // TODO:
+  //   Considered general syntax:
+  //
+  //     G: ?x if p1(x) ~> Set(?y | q1(x, y))
+  //     G: ?x if p2(x) ~> Set(?y | q2(x, y))
+  //
+  //   Translated as follows, where 'x' translates to 'from':
+  //
+  //     TransClosure_G(from: T): Set[T] { // from actions
+  //       p1(from) ? setcompr1(from) : // TODO: what if guard conditions overlap?
+  //       p2(from) ? setcompr2(from) :
+  //       Set(from)
+  //     }
+  //
+  //     function setcompr1(from: T): Set[T]
+  //       ensures forall y: T :: y in result <==> q1(from, y)
+  //
+  //     function setcompr2(from: T): Set[T]
+  //       ensures forall y: T :: y in result <==> q2(from, y)
+  //
+  //   Syntactic sugar examples:
+  //
+  //     0  ~> Set(0, 1)    |===> ?x if x == 0 ~> Set(?y | y == 0 || y == 1)
+  //     ?x ~> Set(x + 1)   |===> ?x if x == x ~> Set(?y | y == x + 1)
+  //
   actions {
-    // G: ?m ~> Nat; // TODO: support "forall m1, ... with p(m1, ...) ~> s(m1, ...)"
-    G: 0 ~> Nat;
+    G: ?m ~> Int;
   }
 
+
 abstract_atomic int read(id c, int* x)
-  interference ?n in Nat on c;
+  interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
   ensures ret == n;
@@ -32,7 +56,7 @@ abstract_atomic int read(id c, int* x)
 }
 
 abstract_atomic int read2(id c, int* x)
-  interference ?n in Nat on c;
+  interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
   ensures ret == n;
@@ -51,7 +75,7 @@ primitive_atomic bool CAS(int* x, int now, int thn)
               : !ret && x |-> v;
 
 abstract_atomic void incr(id c, int* x)
-  interference ?n in Nat on c;
+  interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n + 1) && G@c;
 {
