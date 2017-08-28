@@ -24,7 +24,7 @@ trait CommentsComponent { this: PProgramToViperTranslator =>
     val comment = s"$prefix ${pattern * (span - prefix.length - 1)}"
     val info = vpr.SimpleInfo(Vector("", comment))
 
-    vpr.Seqn(Vector.empty)(info = info)
+    vpr.Seqn(Vector.empty, Vector.empty)(info = info)
   }
 
   def surroundWithSectionComments(sectionName: String, statement: vpr.Stmt): vpr.Stmt =
@@ -34,9 +34,10 @@ trait CommentsComponent { this: PProgramToViperTranslator =>
     vpr.Seqn(
          sectionComment(sectionName, SectionMarker.Begin)
       +: statements
-      :+ sectionComment(sectionName, SectionMarker.End)
+      :+ sectionComment(sectionName, SectionMarker.End),
+      Vector.empty
     )()
   }
 
-  val BLANK_LINE: vpr.Seqn = vpr.Seqn(Vector.empty)(info = vpr.SimpleInfo(Vector("")))
+  val BLANK_LINE: vpr.Seqn = vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("")))
 }

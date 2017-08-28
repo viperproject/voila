@@ -79,8 +79,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           formalReturns = Vector(vpr.LocalVarDecl("$r", vprTyp)()),
           pres = Vector.empty,
           posts = Vector.empty,
-          locals = Vector.empty,
-          body = vpr.Seqn(Vector.empty)()
+          body = vpr.Seqn(Vector.empty, Vector.empty)()
         )()
     }.distinct
   }
@@ -122,7 +121,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val methods =
       members collect { case m: vpr.Method =>
-        m.copy(locals = tmpVarDecls ++ m.locals)(m.pos, m.info, m.errT)
+        val bodyWithAdditionalLocalVariables =
+          m.body.copy(
+            scopedDecls = tmpVarDecls ++ m.body.scopedDecls
+          )(m.body.pos, m.body.info, m.body.errT)
+
+        m.copy(body = bodyWithAdditionalLocalVariables)(m.pos, m.info, m.errT)
       }
 
     vpr.Program(
@@ -212,7 +216,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           case None => vpr.Inhale(vpr.FalseLit()())()
         }
 
-      vpr.Seqn(vprSaveInferenceSets :+ vprMainBody)()
+      vpr.Seqn(vprSaveInferenceSets :+ vprMainBody, vprLocals)()
     }
 
     vpr.Method(
@@ -221,7 +225,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       formalReturns = formalReturns,
       pres = vprPres,
       posts = vprPosts,
-      locals = vprLocals,
       body = vprBody
     )()
   }
@@ -234,17 +237,21 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val formalReturns =
       procedure.typ match {
-        case PVoidType() => Nil
-        case other => Seq(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
+        case PVoidType() => Vector.empty
+        case other => Vector(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
       }
 
     val pres = procedure.pres.map(pre => translate(pre.assertion))
 
-    val body =
-      procedure.body match {
-        case Some(stmt) => translate(stmt)
-        case None => vpr.Inhale(vpr.FalseLit()())()
-      }
+    val body = {
+      val mainBody =
+        procedure.body match {
+          case Some(stmt) => translate(stmt)
+          case None => vpr.Inhale(vpr.FalseLit()())()
+        }
+
+      vpr.Seqn(Vector(mainBody), procedure.locals map translate)()
+    }
 
     vpr.Method(
       name = procedure.id.name,
@@ -252,7 +259,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       formalReturns = formalReturns,
       pres = pres,
       posts = procedure.posts map (post => translate(post.assertion)),
-      locals = procedure.locals map translate,
       body = body
     )()
   }
@@ -294,15 +300,20 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                Vector(vprFirstStmt)
             ++ firstStabilisation
             ++ Vector(vprSecondStmt)
-            ++ secondStabilisation
+            ++ secondStabilisation,
+            Vector.empty
           )()
 
         case PSkip() =>
-          vpr.Seqn(Vector.empty)()
+          vpr.Seqn(Vector.empty, Vector.empty)()
 
         case PIf(cond, thn, els) =>
           val vprIf =
-            vpr.If(translate(cond), translate(thn), vpr.Seqn(els.toSeq.map(translate))())()
+            vpr.If(
+              translate(cond),
+              vpr.Seqn(Vector(translate(thn)), Vector.empty)(),
+              vpr.Seqn(els.toSeq.map(translate), Vector.empty)()
+            )()
 
           surroundWithSectionComments(statement.statementName, vprIf)
 
@@ -311,8 +322,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             vpr.While(
               cond = translate(cond),
               invs = invs map (inv => translate(inv.assertion)),
-              locals = Nil,
-              body = translate(body)
+              body = vpr.Seqn(Seq(translate(body)), Vector.empty)()
             )()
 
           surroundWithSectionComments(statement.statementName, vprWhile)
@@ -442,7 +452,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val havoc = havocRegion(region, regionArgs)
 
-    vpr.Seqn(Vector(havoc))(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
+    vpr.Seqn(Vector(havoc), Vector.empty)(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
   }
 
   def translate(expression: PExpression): vpr.Exp = expression match {

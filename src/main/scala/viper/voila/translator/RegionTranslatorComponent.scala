@@ -64,6 +64,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           typ = regionStateType,
           pres = Vector(predicateAccess),
           posts = Vector.empty,
+          decs = None,
           body = Some(stateFunctionBody)
         )()
       })
@@ -93,6 +94,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           typ = vpr.Bool,
           pres = Vector.empty,
           posts = Vector.empty,
+          decs = None,
           body = Some(body)
         )()
       })
@@ -156,6 +158,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           typ = toTyp,
           pres = Vector.empty,
           posts = Vector.empty,
+          decs = None,
           body = Some(body)
         )()
       })
@@ -347,7 +350,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Seqn(
         Vector(
           vpr.Exhale(predicateAccess)(),
-          vpr.Inhale(predicateAccess)())
+          vpr.Inhale(predicateAccess)()),
+        Vector.empty
       )()
 
     def potentialStateValuesPerGuard(guard: PGuardDecl): vpr.Exp = {
@@ -424,7 +428,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         saveRegionState,
         havocRegion,
         constrainStateViaGuards,
-        constrainStateViaAtomicityContext)
+        constrainStateViaAtomicityContext),
+      Vector.empty
     )(info = comment)
   }
 }

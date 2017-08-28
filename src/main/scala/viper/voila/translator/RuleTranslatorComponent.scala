@@ -97,7 +97,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Seqn(
         Vector(
           checkFrom,
-          checkTo)
+          checkTo),
+        Vector.empty
       )()
     }
 
@@ -150,7 +151,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           assumeCurrentStateIsStepTo,
           assumeOldStateWasStepFrom,
           inhaleGuard,
-          exhaleTrackingResource)
+          exhaleTrackingResource),
+        Vector.empty
       )()
 
     surroundWithSectionComments(makeAtomic.statementName, result)
@@ -209,7 +211,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           inhaleFromTo,
           initFrom,
-          initTo)
+          initTo),
+        Vector.empty
       )()
     }
 
@@ -219,7 +222,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.If(
         stateChanged,
         obtainTrackingResource,
-        inhaleDiamond
+        vpr.Seqn(Vector(inhaleDiamond), Vector.empty)()
       )()
 
     val result =
@@ -230,7 +233,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           unfoldRegionPredicate,
           ruleBody,
           foldRegionPredicate,
-          postRegionUpdate)
+          postRegionUpdate),
+        Vector.empty
       )()
 
     surroundWithSectionComments(updateRegion.statementName, result)
@@ -290,7 +294,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           unfoldRegionPredicate,
           ruleBody,
           foldRegionPredicate,
-          stateChangePermitted)
+          stateChangePermitted),
+        Vector.empty
       )()
 
     surroundWithSectionComments(useAtomic.statementName, result)
@@ -313,7 +318,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           unfoldRegionPredicate,
           ruleBody,
-          foldRegionPredicate)
+          foldRegionPredicate),
+        Vector.empty
       )()
 
     surroundWithSectionComments(openRegion.statementName, result)
