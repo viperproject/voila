@@ -1,6 +1,32 @@
-void test(int* x) {
+void test01(int* x)
+  requires x |-> ?a;
+{
   int v;
 
   v := *x;
   *x := v + 1;
+}
+
+
+region Cell(id c, int* x)
+  guards { duplicable G; }
+  interpretation { x |-> ?n }
+  state { n }
+  actions { G: ?m ~> Int; }
+
+void test02(id c, int* x)
+  requires Cell(c, x, ?v);
+  ensures Cell(c, x, ?w);
+  ensures v == w; // OK
+{
+  skip;
+}
+
+void test03(id c, int* x)
+  requires Cell(c, x, ?v);
+  ensures Cell(c, x, ?w);
+  ensures v == w; // Should fail
+{
+  skip;
+  skip;
 }

@@ -69,8 +69,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
     // TODO: Actually use computed interference
 
-    val havoc1 = havocSingleRegion(region,regionArgs)
-    val havoc2 = havocSingleRegion(region,regionArgs)
+    val havoc1 = havocSingleRegionInstance(region,regionArgs)
+    val havoc2 = havocSingleRegionInstance(region,regionArgs)
 
     val ruleBody = translate(makeAtomic.body)
 

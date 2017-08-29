@@ -98,7 +98,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   private def indent(depth: Int = translationIndentation): String = " " * 2 * depth
 
+  private var tree: VoilaTree = _
+
   def translate(tree: VoilaTree): vpr.Program = {
+    this.tree = tree
+
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
       ++ Vector(diamondField)
@@ -128,6 +132,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         m.copy(body = bodyWithAdditionalLocalVariables)(m.pos, m.info, m.errT)
       }
+
+    this.tree = null
 
     vpr.Program(
       domains = Nil,
@@ -443,18 +449,23 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def stabiliseAfter(statement: PStatement): vpr.Stmt = {
-    val interference = semanticAnalyser.interferenceSpecifications(statement).head
-    // TODO: Returned sequence might be empty (.head yields error)
-    // TODO: Actually use computed interference
+//    val interference = semanticAnalyser.interferenceSpecifications(statement).head
+//    // TODO: Returned sequence might be empty (.head yields error)
+//    // TODO: Actually use computed interference
+//
+//    val makeAtomic = semanticAnalyser.enclosingMakeAtomic(statement)
+//
+//    val (region, regionArgs, None) =
+//      getRegionPredicateDetails(makeAtomic.regionPredicate)
+//
+//    val havoc = havocSingleRegionInstance(region, regionArgs)
+//
+//    vpr.Seqn(Vector(havoc), Vector.empty)(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
 
-    val makeAtomic = semanticAnalyser.enclosingMakeAtomic(statement)
-
-    val (region, regionArgs, None) =
-      getRegionPredicateDetails(makeAtomic.regionPredicate)
-
-    val havoc = havocSingleRegion(region, regionArgs)
-
-    vpr.Seqn(Vector(havoc), Vector.empty)(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
+    vpr.Seqn(
+      tree.root.regions.map(region => havocAllRegionsInstances(region)),
+      Vector.empty
+    )()
   }
 
   def translate(expression: PExpression): vpr.Exp = expression match {

@@ -23,7 +23,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   private val guardPredicateCache =
     mutable.Map.empty[(PGuardDecl, PRegion), vpr.Predicate]
 
-  def regionPredicateAccess(region: PRegion, arguments: Vector[vpr.Exp])
+  def regionPredicateAccess(region: PRegion,
+                            arguments: Vector[vpr.Exp],
+                            permissions: vpr.Exp = vpr.FullPerm()())
                            : vpr.PredicateAccessPredicate =
   {
     vpr.PredicateAccessPredicate(
@@ -31,7 +33,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                 args = arguments,
                 predicateName = region.id.name
             )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos),
-      perm = vpr.FullPerm()()
+      perm = permissions
     )()
   }
 
@@ -331,12 +333,15 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     label
   }
 
-  def havocSingleRegion(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
+  def havocSingleRegionInstance(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
     val regionId = regionArguments.head.asInstanceOf[PIdnExp].id
     val atomicityContextX = atomicityContextVariable(regionId).localVar
 
     havocRegionInstances(region, Some((regionArguments map translate, atomicityContextX)))
   }
+
+  def havocAllRegionsInstances(region: PRegion): vpr.Seqn =
+    havocRegionInstances(region, None)
 
   private def havocRegionInstances(region: PRegion,
                                    specificInstance: Option[(Vector[vpr.Exp], vpr.Exp)])
@@ -347,19 +352,33 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         case Some((args, _)) =>
           (args.head, args)
         case None =>
-          val idArg = vpr.LocalVar(region.regionId.id.name)(typ = translateNonVoid(region.regionId.typ))
-          val furtherArgs = region.formalArgs map (a => vpr.LocalVar(a.id.name)(typ = translateNonVoid(a.typ)))
+          val idArg = vpr.LocalVar(s"$$${region.regionId.id.name}")(typ = translateNonVoid(region.regionId.typ))
+          val furtherArgs = region.formalArgs map (a => vpr.LocalVar(s"$$${a.id.name}")(typ = translateNonVoid(a.typ)))
           (idArg, idArg +: furtherArgs)
       }
+
+    def potentiallyQuantify(body: vpr.Exp, trigger: Option[vpr.Exp]): vpr.Exp = {
+      if (specificInstance.nonEmpty)
+        body
+      else {
+        vpr.Forall(
+          regionArguments
+            .map(_.asInstanceOf[vpr.LocalVar]) // TODO: Get rid of casts
+            .map(v => vpr.LocalVarDecl(v.name, v.typ)()),
+          trigger.map(e => vpr.Trigger(Vector(e))()).toSeq,
+          body
+        )()
+      }
+    }
 
     val comment =
       vpr.SimpleInfo(
         Vector(
           "",
-          if (specificInstance.isEmpty)
-            s"Havocking all held instances of region ${region.id.name}"
+          if (specificInstance.nonEmpty)
+            s"Havocking region ${region.id.name}(${regionArguments.mkString(", ")})"
           else
-            s"Havocking region ${region.id.name}(${regionArguments.mkString(", ")})"))
+            s"Havocking all held instances of region ${region.id.name}"))
 
     val preHavocLabel = freshPreHavocLabel()
 
@@ -373,25 +392,42 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val preHavocState =
       vpr.LabelledOld(state, preHavocLabel.name)()
 
-    /* acc(region(args)) */
-    val predicateAccess =
-      regionPredicateAccess(region, regionArguments)
+    /* region(args) */
+    val regionPredicateInstance =
+      vpr.PredicateAccess(
+        args = regionArguments,
+        predicateName = region.id.name
+      )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+
+    /* perm(region(args)) */
+    val currentPermissions = vpr.CurrentPerm(regionPredicateInstance)()
+
+    /* old[pre_havoc](perm(region(args))) */
+    val preHavocPermissions =
+      vpr.LabelledOld(currentPermissions, preHavocLabel.name)()
+
+    /* acc(region(args), p) */
+    def regionPredicateAccess(p: vpr.Exp) =
+      vpr.PredicateAccessPredicate(
+        loc = regionPredicateInstance,
+        perm = p
+      )()
 
     val regionPredicateHeld =
-      if (specificInstance.isEmpty)
+      if (specificInstance.nonEmpty)
+        vpr.TrueLit()()
+      else
         vpr.PermLtCmp(
           vpr.NoPerm()(),
-          vpr.CurrentPerm(predicateAccess.loc)()
+          currentPermissions
         )()
-      else
-        vpr.TrueLit()()
 
-    /* exhale region(arguments);  inhale region(arguments) */
+    /* exhale region(args);  inhale region(args) */
     val havocRegion =
       vpr.Seqn(
         Vector(
-          vpr.Exhale(predicateAccess)(),
-          vpr.Inhale(predicateAccess)()),
+          vpr.Exhale(potentiallyQuantify(regionPredicateAccess(currentPermissions), None))(),
+          vpr.Inhale(potentiallyQuantify(regionPredicateAccess(preHavocPermissions), None))()),
         Vector.empty
       )()
 
@@ -437,17 +473,15 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       }
 
       val stateConstraint =
-        vpr.AnySetContains(
-          state,
-          interferenceSet
-        )()
-
-      vpr.Inhale(
         vpr.Implies(
           regionPredicateHeld,
-          stateConstraint
+          vpr.AnySetContains(
+            state,
+            interferenceSet
+          )()
         )()
-      )()
+
+      vpr.Inhale(potentiallyQuantify(stateConstraint, Some(state)))()
     }
 
     val constrainStateViaAtomicityContext = {
@@ -461,8 +495,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
       val stateConstraint =
         specificInstance match {
-          case None =>
-            vpr.TrueLit()()
           case Some((_, atomicityContextX)) =>
             vpr.Implies(
               vpr.And(
@@ -474,6 +506,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                 atomicityContextX
               )()
             )()
+          case None =>
+            vpr.TrueLit()()
         }
 
       vpr.Inhale(stateConstraint)()
