@@ -1,9 +1,14 @@
 region Counter(id c, int* x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?n // TODO: n is a Nat (not an Int) in the paper. Here are two ideas:
+    x |-> ?n // TODO: n is a Nat (not an Int) in the paper. Here are three ideas:
              //         - Encode a Nat type in Viper (domain, axioms, (un)boxing)
              //         - Add n >= 0 here; must be taken into account when havocking region
+             //           Hm ... why? Havocking a region is implemented by ex- & inhaling the region
+             //           predicate, and the region state is returned by a function that unfolds the
+             //           predicate. Hence, the state should be known to be at least zero.
+             //         - Change action for G, s.t. ?m ~> Set(?y | 0 <= y)
+             //
   }
   state { n }
   // TODO:
