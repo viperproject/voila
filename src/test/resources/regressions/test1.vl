@@ -1,6 +1,6 @@
 void test(int* x) {
   int v;
 
-  v := [x];
-  [x] := v + 1;
+  v := *x;
+  *x := v + 1;
 }
