@@ -312,38 +312,79 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def havocRegion(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
-    val regionId = regionArguments.head.asInstanceOf[PIdnExp].id
-    val vprArgs @ (vprRegionIdArg +: _) = regionArguments map translate
+  // TODO: Unify fresh label code
 
-    val vprTmpVar = temporaryVariable(semanticAnalyser.typ(region.state)).localVar
+  private var lastPreHavocLabel: vpr.Label = _
+  private var preHavocCounter = 0
+
+  def freshPreHavocLabel(): vpr.Label = {
+    preHavocCounter += 1
+
+    val label =
+      vpr.Label(
+        s"pre_havoc_$preHavocCounter",
+        Vector.empty
+      )()
+
+    lastPreHavocLabel = label
+
+    label
+  }
+
+  def havocSingleRegion(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
+    val regionId = regionArguments.head.asInstanceOf[PIdnExp].id
     val atomicityContextX = atomicityContextVariable(regionId).localVar
+
+    havocRegionInstances(region, Some((regionArguments map translate, atomicityContextX)))
+  }
+
+  private def havocRegionInstances(region: PRegion,
+                                   specificInstance: Option[(Vector[vpr.Exp], vpr.Exp)])
+                                  : vpr.Seqn = {
+
+    val (regionId, regionArguments) =
+      specificInstance match {
+        case Some((args, _)) =>
+          (args.head, args)
+        case None =>
+          val idArg = vpr.LocalVar(region.regionId.id.name)(typ = translateNonVoid(region.regionId.typ))
+          val furtherArgs = region.formalArgs map (a => vpr.LocalVar(a.id.name)(typ = translateNonVoid(a.typ)))
+          (idArg, idArg +: furtherArgs)
+      }
 
     val comment =
       vpr.SimpleInfo(
         Vector(
           "",
-          s"${region.id.name}_havoc(${(vprArgs :+ atomicityContextX :+ vprTmpVar).mkString(", ")})"))
+          if (specificInstance.isEmpty)
+            s"Havocking all held instances of region ${region.id.name}"
+          else
+            s"Havocking region ${region.id.name}(${regionArguments.mkString(", ")})"))
 
+    val preHavocLabel = freshPreHavocLabel()
+
+    /* region_state(args) */
     val state =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprArgs)()
+        regionArguments)()
 
-    /* tmp := region_state(arguments) */
-    val saveRegionState =
-      vpr.LocalVarAssign(
-        vprTmpVar,
-        state
-      )()
+    /* old[pre_havoc](region_state(args)) */
+    val preHavocState =
+      vpr.LabelledOld(state, preHavocLabel.name)()
 
-    /* Set(tmp) */
-    val currentSet =
-      vpr.ExplicitSet(Vector(vprTmpVar))()
-
-    /* region(arguments) */
+    /* acc(region(args)) */
     val predicateAccess =
-      regionPredicateAccess(region, vprArgs)
+      regionPredicateAccess(region, regionArguments)
+
+    val regionPredicateHeld =
+      if (specificInstance.isEmpty)
+        vpr.PermLtCmp(
+          vpr.NoPerm()(),
+          vpr.CurrentPerm(predicateAccess.loc)()
+        )()
+      else
+        vpr.TrueLit()()
 
     /* exhale region(arguments);  inhale region(arguments) */
     val havocRegion =
@@ -359,10 +400,10 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.FuncApp(
             guardPotentiallyHeldFunction(guard, region),
             Vector(
-              vprRegionIdArg,
+              regionId,
               vpr.CurrentPerm(
                 vpr.PredicateAccess(
-                  Vector(vprRegionIdArg),
+                  Vector(regionId),
                   guardPredicate(guard, region)
                 )()
               )())
@@ -372,14 +413,14 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.FuncApp(
             guardTransitiveClosureFunction(guard, region),
             Vector(
-              vprRegionIdArg,
-              vprTmpVar)
+              regionId,
+              preHavocState)
           )()
 
         vpr.CondExp(
           potentiallyHeld,
           closureSet,
-          currentSet
+          vpr.ExplicitSet(Vector(preHavocState))()
         )()
     }
 
@@ -395,10 +436,16 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         })
       }
 
-      vpr.Inhale(
+      val stateConstraint =
         vpr.AnySetContains(
           state,
           interferenceSet
+        )()
+
+      vpr.Inhale(
+        vpr.Implies(
+          regionPredicateHeld,
+          stateConstraint
         )()
       )()
     }
@@ -408,24 +455,33 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.PermLtCmp(
           vpr.NoPerm()(),
           vpr.CurrentPerm(
-            diamondAccess(vprRegionIdArg).loc
+            diamondAccess(regionId).loc
           )()
         )()
 
-      vpr.Inhale(
-        vpr.Implies(
-          diamondHeld,
-          vpr.AnySetContains(
-            state,
-            atomicityContextX
-          )()
-        )()
-      )()
+      val stateConstraint =
+        specificInstance match {
+          case None =>
+            vpr.TrueLit()()
+          case Some((_, atomicityContextX)) =>
+            vpr.Implies(
+              vpr.And(
+                regionPredicateHeld,
+                diamondHeld
+              )(),
+              vpr.AnySetContains(
+                state,
+                atomicityContextX
+              )()
+            )()
+        }
+
+      vpr.Inhale(stateConstraint)()
     }
 
     vpr.Seqn(
       Vector(
-        saveRegionState,
+        preHavocLabel,
         havocRegion,
         constrainStateViaGuards,
         constrainStateViaAtomicityContext),

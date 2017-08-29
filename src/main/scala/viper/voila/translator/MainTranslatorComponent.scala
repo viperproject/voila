@@ -444,13 +444,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def stabiliseAfter(statement: PStatement): vpr.Stmt = {
     val interference = semanticAnalyser.interferenceSpecifications(statement).head
+    // TODO: Returned sequence might be empty (.head yields error)
+    // TODO: Actually use computed interference
 
     val makeAtomic = semanticAnalyser.enclosingMakeAtomic(statement)
 
     val (region, regionArgs, None) =
       getRegionPredicateDetails(makeAtomic.regionPredicate)
 
-    val havoc = havocRegion(region, regionArgs)
+    val havoc = havocSingleRegion(region, regionArgs)
 
     vpr.Seqn(Vector(havoc), Vector.empty)(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
   }
