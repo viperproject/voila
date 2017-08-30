@@ -1,4 +1,12 @@
 void test01(int* x)
+  requires true;
+{
+  int v;
+
+  v := *x;
+}
+
+void test02(int* x)
   requires x |-> ?a;
 {
   int v;
@@ -6,36 +14,3 @@ void test01(int* x)
   v := *x;
   *x := v + 1;
 }
-
-
-region Cell(id c, int* x)
-  guards { duplicable G; }
-  interpretation { x |-> ?n }
-  state { n }
-  actions { G: ?m ~> Int; }
-
-void test02(id c, int* x)
-  requires Cell(c, x, ?v);
-  ensures Cell(c, x, ?w);
-  ensures v == w; // OK
-{
-  skip;
-}
-
-void test03(id c, int* x)
-  requires Cell(c, x, ?v);
-  ensures Cell(c, x, ?w);
-  ensures v == w; // Should fail
-{
-  skip;
-  skip;
-}
-
-void testAbstractMethod()
-  requires true;
-  ensures false;
-
-void testEmptyMethodBody()
-  requires true;
-  ensures false;
-{}
