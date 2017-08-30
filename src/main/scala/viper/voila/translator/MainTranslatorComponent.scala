@@ -100,7 +100,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   private var tree: VoilaTree = _
 
-  def translate(tree: VoilaTree): vpr.Program = {
+  def translate(tree: VoilaTree): (vpr.Program, ErrorBacktranslator) = {
     this.tree = tree
 
     val members: Vector[vpr.Member] = (
@@ -135,13 +135,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     this.tree = null
 
-    vpr.Program(
-      domains = Nil,
-      fields = fields,
-      functions = functions,
-      predicates = predicates,
-      methods = methods
-    )()
+    val vprProgram =
+      vpr.Program(
+        domains = Nil,
+        fields = fields,
+        functions = functions,
+        predicates = predicates,
+        methods = methods
+      )()
+
+    (vprProgram, new DefaultErrorBacktranslator)
   }
 
   def translate(member: PMember): vpr.Member =
@@ -314,39 +317,40 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("skip;")))
 
         case PIf(cond, thn, els) =>
-          val vprIf =
+          var vprIf =
             vpr.If(
               translate(cond),
               vpr.Seqn(Vector(translate(thn)), Vector.empty)(),
               vpr.Seqn(els.toSeq.map(translate), Vector.empty)()
             )()
 
+          vprIf = vprIf.withSource(statement)
+
           surroundWithSectionComments(statement.statementName, vprIf)
 
         case PWhile(cond, invs, body) =>
-          val vprWhile =
+          var vprWhile =
             vpr.While(
               cond = translate(cond),
               invs = invs map (inv => translate(inv.assertion)),
               body = vpr.Seqn(Seq(translate(body)), Vector.empty)()
             )()
 
+          vprWhile = vprWhile.withSource(statement)
+
           surroundWithSectionComments(statement.statementName, vprWhile)
 
         case PAssign(lhs, rhs) =>
-          val vprAssign =
+          var vprAssign =
             /* TODO: Use correct type */
             vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
+
+          vprAssign = vprAssign.withSource(statement)
 
           surroundWithSectionComments(statement.statementName, vprAssign)
 
         case read: PHeapRead =>
-          var vprRead = translate(read)
-          vprRead = vprRead.withSource(read)
-
-          println(s"\nSource: $read")
-          println(s"Translation: $vprRead")
-          println(s"Info: ${vprRead.getPrettyMetadata._2}")
+          val vprRead = translate(read)
 
           surroundWithSectionComments(statement.statementName, vprRead)
 
@@ -380,17 +384,23 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           }
 
         case PInhale(assertion) =>
-          val inhale = vpr.Inhale(translate(assertion))()
+          var inhale = vpr.Inhale(translate(assertion))()
+
+          inhale = inhale.withSource(statement)
 
           surroundWithSectionComments(statement.statementName, inhale)
 
         case PExhale(assertion) =>
-          val exhale = vpr.Exhale(translate(assertion))()
+          var exhale = vpr.Exhale(translate(assertion))()
+
+          exhale = exhale.withSource(statement)
 
           surroundWithSectionComments(statement.statementName, exhale)
 
         case PHavoc(variable) =>
-          val vprHavoc = havoc(variable)
+          var vprHavoc = havoc(variable)
+
+          vprHavoc = vprHavoc.withSource(statement)
 
           surroundWithSectionComments(statement.statementName, vprHavoc)
 

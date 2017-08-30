@@ -31,7 +31,10 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     val fld = heapLocationAsField(voilaType)
     val lv = vpr.LocalVar(read.lhs.name)(typ = viperType)
 
-    vpr.LocalVarAssign(lv, vpr.FieldAccess(rcvr, fld)())()
+    val result =
+      vpr.LocalVarAssign(lv, vpr.FieldAccess(rcvr, fld)())()
+
+    result.withSource(read)
   }
 
   def translate(write: PHeapWrite): vpr.Stmt = {
@@ -40,7 +43,10 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     val rcvr = vpr.LocalVar(write.location.name)(typ = vpr.Ref)
     val fld = heapLocationAsField(voilaType)
 
-    vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translate(write.rhs))()
+    val result =
+      vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translate(write.rhs))()
+
+    result.withSource(write)
   }
 
   def translate(pointsTo: PPointsTo): vpr.Exp = {

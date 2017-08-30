@@ -6,6 +6,7 @@
 
 package viper.voila.reporting
 
+import viper.silver
 import viper.voila.frontend.PExpression
 
 sealed trait VoilaResult
@@ -14,6 +15,10 @@ case object Success extends VoilaResult
 
 sealed trait VoilaFailure extends VoilaResult {
   def message: String
+}
+
+case class UnhandledViperError(error: silver.verifier.VerificationError) extends VoilaFailure {
+  def message = error.readableMessage
 }
 
 case class AssignmentFailed(lhs: PExpression, reason: String) extends VoilaFailure {

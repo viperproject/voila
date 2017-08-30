@@ -88,7 +88,7 @@ object Voila extends StrictLogging {
         }
 
         val translator = new PProgramToViperTranslator(semanticAnalyser)
-        val viperProgram = translator.translate(tree)
+        val (viperProgram, errorBacktranslator) = translator.translate(tree)
 
         logger.debug(s"Taking Viper preamble from resources/${VoilaConstants.preambleFile}")
 
@@ -108,24 +108,28 @@ object Voila extends StrictLogging {
         silicon.start()
         val verificationResult = silicon.handle(viperProgram)
         silicon.stop()
-        logger.info("... done. Obtained the following result:")
-        logger.info(s"  $verificationResult")
+        logger.info(s"... done.")
+        logger.info(s"Obtained the following result: ${verificationResult.getClass.getSimpleName}")
+//        logger.info("... done. Obtained the following result:")
+//        logger.info(s"  $verificationResult")
 
         verificationResult match {
           case silver.verifier.Success => /* Nothing left to do */
-          case silver.verifier.Failure(errors) =>
-            logger.info("Inspecting verification errors:")
-            errors.collect { case err: silver.verifier.VerificationError => err }
-                  .foreach (error => {
-                    logger.info(s"  Error: $error")
-                    logger.info(s"    Offending Viper node: ${error.offendingNode}")
-                    val info = error.offendingNode.getPrettyMetadata._2
-                    info.getUniqueInfo[SourceInfo] match {
-                      case None =>
-                        logger.info(s"    Node's info: $info")
-                      case Some(SourceInfo(node)) =>
-                        logger.info(s"    Source node: ${node.format}")
-                    }
+          case silver.verifier.Failure(viperErrors) =>
+            logger.info("Back-translated verification errors:")
+            viperErrors.collect { case err: silver.verifier.VerificationError => err }
+                  .foreach (viperError => {
+//                    logger.info(s"  Error: $error")
+//                    logger.info(s"    Offending Viper node: ${error.offendingNode}")
+//                    val info = error.offendingNode.getPrettyMetadata._2
+//                    info.getUniqueInfo[SourceInfo] match {
+//                      case None =>
+//                        logger.info(s"    Node's info: $info")
+//                      case Some(SourceInfo(node)) =>
+//                        logger.info(s"    Source node: ${node.format}")
+//                    }
+                    val voilaError = errorBacktranslator.translate(viperError)
+                    logger.info(voilaError.message)
                   })
         }
     }
