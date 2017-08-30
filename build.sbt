@@ -20,7 +20,7 @@ lazy val root =
       libraryDependencies += commonsIO,
 
       fork in run := true /* See http://stackoverflow.com/questions/21464673 */
-    ).dependsOn(silverSrc)
+    ).dependsOn(silverSrc, siliconSrc)
 
 addCommandAlias("to", "test-only")
 addCommandAlias("tn", "test-only -- -n")

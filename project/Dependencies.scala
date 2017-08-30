@@ -9,4 +9,5 @@ object Dependencies {
   lazy val commonsIO = "commons-io" % "commons-io" % "2.5"
 
   lazy val silverSrc = RootProject(new java.io.File("../silver"))
+  lazy val siliconSrc = RootProject(new java.io.File("../silicon"))
 }
