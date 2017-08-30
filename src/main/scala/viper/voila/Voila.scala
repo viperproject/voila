@@ -8,14 +8,17 @@ package viper.voila
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
+
 import ch.qos.logback.classic.{Level, Logger}
+
 import scala.util.{Left, Right}
 import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.io.FileUtils
 import org.slf4j.LoggerFactory
+import viper.silver
 import viper.voila.frontend.{Config, Frontend, SemanticAnalyser, VoilaTree}
-import viper.voila.translator.PProgramToViperTranslator
-import viper.silver.ast.pretty.FastPrettyPrinter
+import viper.voila.translator.{PProgramToViperTranslator, SourceInfo, prettyPrinter}
+import viper.voila.backends.Silicon
 
 object VoilaConstants {
   val toolName = "Voila"
@@ -95,9 +98,36 @@ object Voila extends StrictLogging {
 
         FileUtils.writeStringToFile(
           outputFile,
-          FastPrettyPrinter.pretty(viperProgram),
+          silver.ast.pretty.FastPrettyPrinter.pretty(viperProgram),
           UTF_8,
           true)
+
+        logger.info("Encoded Voila program in Viper")
+        logger.info("Verifying encoding using Silicon ...")
+        val silicon = new Silicon
+        silicon.start()
+        val verificationResult = silicon.handle(viperProgram)
+        silicon.stop()
+        logger.info("... done. Obtained the following result:")
+        logger.info(s"  $verificationResult")
+
+        verificationResult match {
+          case silver.verifier.Success => /* Nothing left to do */
+          case silver.verifier.Failure(errors) =>
+            logger.info("Inspecting verification errors:")
+            errors.collect { case err: silver.verifier.VerificationError => err }
+                  .foreach (error => {
+                    logger.info(s"  Error: $error")
+                    logger.info(s"    Offending Viper node: ${error.offendingNode}")
+                    val info = error.offendingNode.getPrettyMetadata._2
+                    info.getUniqueInfo[SourceInfo] match {
+                      case None =>
+                        logger.info(s"    Node's info: $info")
+                      case Some(SourceInfo(node)) =>
+                        logger.info(s"    Source node: ${node.format}")
+                    }
+                  })
+        }
     }
 
     logger.info("Done")

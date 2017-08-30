@@ -7,8 +7,8 @@
 package viper.voila.translator
 
 import scala.collection.breakOut
-import viper.voila.frontend._
 import viper.silver.{ast => vpr}
+import viper.voila.frontend._
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   val returnVarName = "ret"
@@ -341,7 +341,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           surroundWithSectionComments(statement.statementName, vprAssign)
 
         case read: PHeapRead =>
-          val vprRead = translate(read)
+          var vprRead = translate(read)
+          vprRead = vprRead.withSource(read)
+
+          println(s"\nSource: $read")
+          println(s"Translation: $vprRead")
+          println(s"Info: ${vprRead.getPrettyMetadata._2}")
 
           surroundWithSectionComments(statement.statementName, vprRead)
 
