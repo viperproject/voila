@@ -12,7 +12,9 @@ import org.bitbucket.inkytonik.kiama.output.PrettyExpression
  * Top-level nodes
  */
 
-sealed abstract class PAstNode extends Product
+sealed abstract class PAstNode extends Product {
+  def format(implicit prettyPrinter: PrettyPrinter): String = prettyPrinter.format(this)
+}
 
 case class PProgram(regions: Vector[PRegion],
                     predicates: Vector[PPredicate],
