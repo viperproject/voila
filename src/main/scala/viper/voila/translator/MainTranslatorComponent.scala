@@ -311,7 +311,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           )()
 
         case PSkip() =>
-          vpr.Seqn(Vector.empty, Vector.empty)()
+          vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("skip;")))
 
         case PIf(cond, thn, els) =>
           val vprIf =
