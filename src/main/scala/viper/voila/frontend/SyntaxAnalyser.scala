@@ -96,8 +96,15 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case optAtomic ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBody =>
         val (locals, body) =
           optBody match {
-            case Some(l ~ b) => (l, b)
-            case None => (Vector.empty, None)
+            case None =>
+              /* Abstract method, i.e. braces omitted */
+              (Vector.empty, None)
+            case Some(l ~ None) =>
+              /* Concrete method, i.e. braces given, but no statements in the body */
+              (Vector.empty, Some(PSkip()))
+            case Some(l ~ b) =>
+              /* Concrete method with at least one statement in the body */
+              (l, b)
           }
 
         val atomicityModifier =

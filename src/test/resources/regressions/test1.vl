@@ -30,3 +30,12 @@ void test03(id c, int* x)
   skip;
   skip;
 }
+
+void testAbstractMethod()
+  requires true;
+  ensures false;
+
+void testEmptyMethodBody()
+  requires true;
+  ensures false;
+{}
