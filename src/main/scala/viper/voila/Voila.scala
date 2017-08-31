@@ -30,6 +30,8 @@ object VoilaConstants {
   val preambleFile = "/preamble.vpr"
 }
 
+trait Voila
+
 object Voila extends StrictLogging {
   def main(args: Array[String]) {
     val config = new Config(args)

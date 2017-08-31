@@ -24,7 +24,7 @@ sealed trait VoilaFailure extends VoilaResult {
         case Some(pos) => s"${pos.line}:${pos.column}"
         case None => "<unknown position>"
       }
-    
+
     s"$message ($formattedPosition)"
   }
 }
