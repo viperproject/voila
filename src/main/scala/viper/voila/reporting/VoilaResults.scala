@@ -19,7 +19,13 @@ sealed trait VoilaFailure extends VoilaResult {
   def message: String
 
   def message(positions: Positions): String = {
-    s"$message (${positions.getStart(offendingNode).fold("<unknown position>")(_.format)})"
+    val formattedPosition: String =
+      positions.getStart(offendingNode) match {
+        case Some(pos) => s"${pos.line}:${pos.column}"
+        case None => "<unknown position>"
+      }
+    
+    s"$message ($formattedPosition)"
   }
 }
 
