@@ -9,14 +9,14 @@ package viper.voila.translator
 import viper.silver
 import viper.voila.frontend._
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.voila.reporting.{AssignmentFailed, VoilaFailure}
+import viper.voila.reporting.{AssignmentFailed, VoilaError}
 
 trait ErrorBacktranslator {
-  def translate(error: silver.verifier.VerificationError): Option[VoilaFailure]
+  def translate(error: silver.verifier.VerificationError): Option[VoilaError]
 }
 
 class DefaultErrorBacktranslator extends ErrorBacktranslator {
-  def translate(error: viper.silver.verifier.VerificationError): Option[VoilaFailure] = {
+  def translate(error: viper.silver.verifier.VerificationError): Option[VoilaError] = {
     error match {
       case vprerr.AssignmentFailed(Source(sourceNode: PHeapRead), reason, _) =>
         Some(AssignmentFailed(sourceNode, translate(reason)))

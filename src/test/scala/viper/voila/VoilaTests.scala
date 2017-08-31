@@ -7,13 +7,7 @@
 package viper.voila
 
 import viper.silver
-
-//trait SystemUnderTest {
-//  /** For filtering test annotations. Does not need to be unique. */
-//  val projectInfo: ProjectInfo
-//
-//  def run(input: AnnotatedTestInput): Seq[AbstractOutput]
-//}
+import viper.silver.testing._
 
 //private case class VerifierUnderTest(verifier: Verifier)
 //    extends SystemUnderTest with TimingUtils {
@@ -39,13 +33,31 @@ import viper.silver
 //    }
 //  }
 
-class VoilaTests extends silver.testing.AnnotationBasedTestSuite {
-  val voilaInstance: Voila = _
+//case class SilOutput(error: AbstractError) extends AbstractOutput {
+//  def isSameLine(file: Path, lineNr: Int): Boolean = error.pos match {
+//    case p: SourcePosition => lineNr == p.line
+//    case p: TranslatedPosition => file == p.file && lineNr == p.line
+//    case _ => false
+//  }
+//
+//  def fullId: String = error.fullId
+//
+//  override def toString: String = error.toString
+//}
 
-  val voilaInstanceUnderTest: viper.silver.testing.SystemUnderTest = ???
+class VoilaTests extends AnnotationBasedTestSuite {
+  val voilaInstance: Voila = null
+
+  val voilaInstanceUnderTest: SystemUnderTest =
+    new SystemUnderTest with TimingUtils {
+      val projectInfo: ProjectInfo = new ProjectInfo(List("Voila"))
+
+      def run(input: AnnotatedTestInput):Seq[AbstractOutput] = {
+
+      }
+    }
 
   def systemsUnderTest: Seq[silver.testing.SystemUnderTest] = Vector(voilaInstanceUnderTest)
 
-
-  def testDirectories = ???
+  def testDirectories: Seq[String] = Vector("regressions")
 }
