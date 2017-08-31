@@ -13,7 +13,10 @@ import org.bitbucket.inkytonik.kiama.output.PrettyExpression
  */
 
 sealed abstract class PAstNode extends Product {
-  def format(implicit prettyPrinter: PrettyPrinter): String = prettyPrinter.format(this)
+  def pretty(prettyPrinter: PrettyPrinter = defaultPrettyPrinter): String =
+    prettyPrinter.format(this)
+
+  lazy val pretty: String = pretty()
 }
 
 case class PProgram(regions: Vector[PRegion],

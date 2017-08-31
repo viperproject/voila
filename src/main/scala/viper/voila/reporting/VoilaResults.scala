@@ -6,21 +6,23 @@
 
 package viper.voila.reporting
 
-import viper.silver
-import viper.voila.frontend.PExpression
+import org.bitbucket.inkytonik.kiama.util.Positions
+import viper.voila.frontend.PAstNode
 
 sealed trait VoilaResult
 
 case object Success extends VoilaResult
 
 sealed trait VoilaFailure extends VoilaResult {
+  def offendingNode: PAstNode
+
   def message: String
+
+  def message(positions: Positions): String = {
+    s"$message (${positions.getStart(offendingNode).fold("<unknown position>")(_.format)})"
+  }
 }
 
-case class UnhandledViperError(error: silver.verifier.VerificationError) extends VoilaFailure {
-  def message = error.readableMessage
-}
-
-case class AssignmentFailed(lhs: PExpression, reason: String) extends VoilaFailure {
-  def message: String = s"Assignment to $lhs failed. $reason"
+case class AssignmentFailed(offendingNode: PAstNode, reason: String) extends VoilaFailure {
+  val message: String = s"Assignment failed: $reason"
 }

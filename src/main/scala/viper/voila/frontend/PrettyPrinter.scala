@@ -80,6 +80,49 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 //      case _: PRuleStatement => ???
     }
 
-  def toDoc(expression: PExpression): Doc = ???
+  def toDoc(expression: PExpression): Doc =
+    expression match {
+      case PLogicalVariableBinder(id) => "?" <> id.name
+
+      case PTrueLit() => "true"
+      case PFalseLit() => "false"
+      case PIntLit(value) => value.toString
+      case PRet() => "ret"
+      case PExplicitSet(args, typeAnnotation) =>
+        "Set" <>
+          typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
+          "(" <> ssep(args map toDoc, comma <> space) <> ")"
+      case PIntSet() => "Int"
+      case PNatSet() => "Nat"
+
+      case PNot(operand) => "!" <> toDoc(operand)
+
+      /* TODO: Use associativity and precedence to avoid unncessary parentheses */
+      case PEquals(left, right) => parens(toDoc(left) <+> "==" <+> toDoc(right))
+      case PAnd(left, right) => parens(toDoc(left) <+> "&&" <+> toDoc(right))
+      case POr(left, right) => parens(toDoc(left) <+> "||" <+> toDoc(right))
+      case PLess(left, right) => parens(toDoc(left) <+> "<" <+> toDoc(right))
+      case PAtMost(left, right) => parens(toDoc(left) <+> "<=" <+> toDoc(right))
+      case PGreater(left, right) => parens(toDoc(left) <+> ">" <+> toDoc(right))
+      case PAtLeast(left, right) => parens(toDoc(left) <+> ">=" <+> toDoc(right))
+      case PAdd(left, right) => parens(toDoc(left) <+> "+" <+> toDoc(right))
+      case PSub(left, right) => parens(toDoc(left) <+> "-" <+> toDoc(right))
+      case PSetContains(element, set) => parens(toDoc(element) <+> "in" <+> toDoc(set))
+      case PConditional(cond, thn, els) =>
+        parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
+        
+      case PIdnExp(id) => id.name
+      case PPredicateExp(predicate, arguments) =>
+        predicate.name <> "(" <> ssep(arguments map toDoc, comma <> space) <> ")"
+
+      case PPointsTo(id, value) => id.name <+> "|->" <+> toDoc(value)
+      case PGuardExp(guard, regionId) => guard.name <> "@" <> regionId.name
+      case PDiamond(regionId) => regionId.name <+> "|=>" <+> "<D>"
+      case PRegionUpdateWitness(regionId, from, to) =>
+        regionId.name <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"
+
+      case PIrrelevantValue() => "_"
+    }
+
   def toDoc(typ: PType): Doc = ???
 }

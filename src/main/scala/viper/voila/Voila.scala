@@ -17,7 +17,7 @@ import org.apache.commons.io.FileUtils
 import org.slf4j.LoggerFactory
 import viper.silver
 import viper.voila.frontend.{Config, Frontend, SemanticAnalyser, VoilaTree}
-import viper.voila.translator.{PProgramToViperTranslator, SourceInfo, prettyPrinter}
+import viper.voila.translator.PProgramToViperTranslator
 import viper.voila.backends.Silicon
 
 object VoilaConstants {
@@ -102,40 +102,62 @@ object Voila extends StrictLogging {
           UTF_8,
           true)
 
+//        tree.nodes foreach (n => {
+//          frontend.positions.getStart(n) match {
+//            case Some(x) =>
+//            case None => println(s"  NO POSITION FOR $n")
+//          }
+//        })
+
         logger.info("Encoded Voila program in Viper")
         logger.info("Verifying encoding using Silicon ...")
         val silicon = new Silicon
         silicon.start()
         val verificationResult = silicon.handle(viperProgram)
         silicon.stop()
-        logger.info(s"... done.")
-        logger.info(s"Obtained the following result: ${verificationResult.getClass.getSimpleName}")
-//        logger.info("... done. Obtained the following result:")
-//        logger.info(s"  $verificationResult")
+        logger.info(s"... done (with ${getNumberOfErrors(verificationResult)} Viper error(s))")
 
         verificationResult match {
           case silver.verifier.Success => /* Nothing left to do */
-          case silver.verifier.Failure(viperErrors) =>
-            logger.info("Back-translated verification errors:")
-            viperErrors.collect { case err: silver.verifier.VerificationError => err }
-                  .foreach (viperError => {
-//                    logger.info(s"  Error: $error")
-//                    logger.info(s"    Offending Viper node: ${error.offendingNode}")
-//                    val info = error.offendingNode.getPrettyMetadata._2
-//                    info.getUniqueInfo[SourceInfo] match {
-//                      case None =>
-//                        logger.info(s"    Node's info: $info")
-//                      case Some(SourceInfo(node)) =>
-//                        logger.info(s"    Source node: ${node.format}")
-//                    }
-                    val voilaError = errorBacktranslator.translate(viperError)
-                    logger.info(voilaError.message)
+          case failure: silver.verifier.Failure =>
+            extractVerificationFailures(failure) match {
+              case (Seq(), viperErrors) =>
+                /* No verification failures, but, e.g. type-checking failures */
+                logger.error("Found non-verification-failures:")
+                viperErrors foreach (ve => logger.error(ve.readableMessage))
+              case (viperErrors, Seq()) =>
+                /* Only verification failures */
+                logger.error(s"Voila found potential errors:")
+                viperErrors foreach (viperError =>
+                  errorBacktranslator.translate(viperError) match {
+                    case None =>
+                      /* Back-translation didn't work */
+                      logger.error(s"  ${viperError.readableMessage}")
+                    case Some(voilaError) =>
+                      logger.error(s"  ${voilaError.message(frontend.positions)}")
                   })
+            }
         }
     }
 
-    logger.info("Done")
+    logger.info("Voila finished")
     sys.exit(0)
+  }
+
+  private def getNumberOfErrors(verificationResult: silver.verifier.VerificationResult): Int = {
+    verificationResult match {
+      case silver.verifier.Success => 0
+      case silver.verifier.Failure(errors) => errors.length
+    }
+  }
+
+  private def extractVerificationFailures(failure: silver.verifier.Failure)
+                                         : (Seq[silver.verifier.VerificationError],
+                                            Seq[silver.verifier.AbstractError]) = {
+
+    failure.errors
+      .partition(_.isInstanceOf[silver.verifier.VerificationError])
+      .asInstanceOf[(Seq[silver.verifier.VerificationError], Seq[silver.verifier.AbstractError])]
   }
 
   def exitWithError(message: String, exitCode: Int = 1): Unit = {

@@ -9,30 +9,30 @@ package viper.voila.translator
 import viper.silver
 import viper.voila.frontend._
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.voila.reporting.{AssignmentFailed, UnhandledViperError, VoilaFailure}
+import viper.voila.reporting.{AssignmentFailed, VoilaFailure}
 
 trait ErrorBacktranslator {
-  def translate(error: silver.verifier.VerificationError): VoilaFailure
+  def translate(error: silver.verifier.VerificationError): Option[VoilaFailure]
 }
 
 class DefaultErrorBacktranslator extends ErrorBacktranslator {
-  def translate(error: viper.silver.verifier.VerificationError): VoilaFailure = {
+  def translate(error: viper.silver.verifier.VerificationError): Option[VoilaFailure] = {
     error match {
       case vprerr.AssignmentFailed(Source(sourceNode: PHeapRead), reason, _) =>
-        AssignmentFailed(PIdnExp(sourceNode.lhs), translate(reason))
+        Some(AssignmentFailed(sourceNode, translate(reason)))
       case vprerr.AssignmentFailed(Source(sourceNode: PHeapWrite), reason, _) =>
-        AssignmentFailed(PIdnExp(sourceNode.location), translate(reason))
+        Some(AssignmentFailed(sourceNode, translate(reason)))
       case vprerr.AssignmentFailed(Source(sourceNode: PAssign), reason, _) =>
-        AssignmentFailed(PIdnExp(sourceNode.lhs), translate(reason))
+        Some(AssignmentFailed(sourceNode, translate(reason)))
       case _ =>
-        UnhandledViperError(error)
+        None
     }
   }
 
   private def translate(reason: silver.verifier.ErrorReason): String = {
     reason match {
       case vprrea.InsufficientPermission(node) =>
-        s"There might be insufficient permission to access ${source(node)}"
+        s"There might be insufficient permission to dereference ${source(node)}"
       case _=>
         reason.readableMessage
     }
@@ -40,7 +40,7 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
 
   private def source(node: silver.ast.Node): String = {
     node match {
-      case Source(sourceNode) => sourceNode.format
+      case Source(sourceNode) => sourceNode.pretty
       case _ => node.toString()
     }
   }
@@ -49,12 +49,12 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
     def unapply(node: silver.ast.Node): Option[PAstNode] = {
       val info = node.getPrettyMetadata._2
 
-      println("\n[Source]")
-      println(s"  info = $info")
+//      println(s"Off. node: $node")
+//      println(s"  Info: $info")
 
       info.getUniqueInfo[SourceInfo] match {
         case Some(SourceInfo(sourceNode)) =>
-          println(s"  sourceNode = $sourceNode")
+//          println(s"  Source: $sourceNode")
           Some(sourceNode)
         case None => None
       }

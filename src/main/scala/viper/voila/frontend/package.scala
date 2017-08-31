@@ -10,4 +10,6 @@ import org.bitbucket.inkytonik.kiama.relation.Tree
 
 package object frontend {
   type VoilaTree = Tree[PAstNode, PProgram]
+
+  val defaultPrettyPrinter = new DefaultPrettyPrinter
 }
