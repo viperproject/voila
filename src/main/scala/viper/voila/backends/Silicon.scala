@@ -9,7 +9,7 @@ package viper.voila.backends
 import viper.silicon
 import viper.silver
 
-class Silicon() extends ViperVerifier {
+class Silicon(commandLineArguments: Seq[String]) extends ViperVerifier {
   var backend: silicon.Silicon = _
 
   def start(): Unit = {
@@ -17,7 +17,7 @@ class Silicon() extends ViperVerifier {
 
     backend = new silicon.Silicon(List("startedBy" -> s"Unit test ${this.getClass.getSimpleName}"))
 
-    backend.parseCommandLine(List("--ignoreFile", "dummy.sil"))
+    backend.parseCommandLine(commandLineArguments ++ Seq("--ignoreFile", "dummy.sil"))
     backend.start()
   }
 
