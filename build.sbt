@@ -12,14 +12,19 @@ lazy val root =
 
       scalaVersion := "2.11.8",
 
-      libraryDependencies += scalaTest % Test,
       libraryDependencies += kiama,
       libraryDependencies += scallop,
       libraryDependencies += logbackClassic,
       libraryDependencies += scalaLogging,
       libraryDependencies += commonsIO,
 
-      fork in run := true /* See http://stackoverflow.com/questions/21464673 */
+      fork := true
+        /* Serves two purposes:
+         *  - http://stackoverflow.com/questions/21464673
+         *  - avoid problems on Windows where modifying test files can result in remaining open
+         *    file handlers that prevent 'sbt test' from accessing the modifies test file
+         */
+      /* Disable if tests fail unexpectedly */
     ).dependsOn(silverSrc, siliconSrc)
 
 addCommandAlias("to", "test-only")
