@@ -44,7 +44,7 @@ class ParserTests extends FunSuite with Matchers {
                  Emp,
                  Emp,
                  Emp,
-                 None,
+                 Some(PSkip()),
                  PNotAtomic())
 
     frontend.parse(src) should matchPattern {

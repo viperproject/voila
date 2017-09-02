@@ -7,6 +7,9 @@ object Dependencies {
   lazy val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0" // Logging Frontend
   lazy val commonsIO = "commons-io" % "commons-io" % "2.5"
 
+  lazy val silver = "viper" %% "silver" % "0.1-SNAPSHOT"
   lazy val silverSrc = RootProject(new java.io.File("../silver"))
+
+  lazy val silicon = "viper" %% "silicon" % "1.1-SNAPSHOT"
   lazy val siliconSrc = RootProject(new java.io.File("../silicon"))
 }
