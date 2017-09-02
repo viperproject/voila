@@ -246,10 +246,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       }
 
     val vprRegionAccess =
-      vpr.PredicateAccess(
-        args = vprRegionArguments,
-        predicateName = region.id.name
-      )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+      vpr.PredicateAccessPredicate(
+        vpr.PredicateAccess(
+          args = vprRegionArguments,
+          predicateName = region.id.name
+        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos),
+        vpr.FullPerm()()
+      )()
 
     vpr.And(vprRegionAccess, vprStateConstraint)()
   }

@@ -511,7 +511,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case predicateExp @ PPredicateExp(id, args) =>
       semanticAnalyser.entity(id) match {
         case _: PredicateEntity =>
-          vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+          vpr.PredicateAccessPredicate(
+            vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos),
+            vpr.FullPerm()()
+          )()
 
         case _: RegionEntity =>
           translateUseOf(predicateExp)
