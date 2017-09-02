@@ -16,7 +16,7 @@ class Config(arguments: Seq[String])
 
   version(VoilaConstants.versionMessage)
 
-  banner(s"""Usage: ${VoilaConstants.toolName} [OPTIONS] -i <input-file> -o <output-file>
+  banner(s"""Usage: ${VoilaConstants.toolName} [OPTIONS] -i <input-file>
             |
             |Options:
             |""".stripMargin)
@@ -33,8 +33,7 @@ class Config(arguments: Seq[String])
 
   val outputFile: ScallopOption[String] = opt[String](
     name = "outputFile",
-    descr = "Generated Viper program is written to this file",
-    required = true
+    descr = "Generated Viper program is written to this file"
   )
 
   val logLevel: ScallopOption[String] = opt[String](
