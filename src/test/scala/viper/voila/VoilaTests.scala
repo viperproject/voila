@@ -6,58 +6,57 @@
 
 package viper.voila
 
+import java.nio.file.Path
+import org.scalatest.BeforeAndAfterAll
 import viper.silver
+import viper.voila.frontend.Config
+import viper.voila.reporting.{Failure, Success, VoilaError}
 import viper.silver.testing._
 
-//private case class VerifierUnderTest(verifier: Verifier)
-//    extends SystemUnderTest with TimingUtils {
-//
-//    val projectInfo: ProjectInfo = SilSuite.this.projectInfo.update(verifier.name)
-//
-//    def run(input: AnnotatedTestInput): Seq[AbstractOutput] = {
-//      val fe = frontend(verifier, input.files)
-//      val tPhases = fe.phases.map { p =>
-//        time(p.action)._2 + " (" + p.name + ")"
-//      }.mkString(", ")
-//      info(s"Verifier used: ${verifier.name} ${verifier.version}.")
-//      info(s"Time required: $tPhases.")
-//      val actualErrors = fe.result match {
-//        case Success => Nil
-//        case Failure(es) => es collect {
-//          case e: AbstractVerificationError =>
-//            e.transformedError()
-//          case rest: AbstractError => rest
-//        }
-//      }
-//      actualErrors.map(SilOutput)
-//    }
-//  }
+class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
+  val testDirectories: Seq[String] = Vector("regressions")
+  override val defaultTestPattern: String = ".*\\.vl"
 
-//case class SilOutput(error: AbstractError) extends AbstractOutput {
-//  def isSameLine(file: Path, lineNr: Int): Boolean = error.pos match {
-//    case p: SourcePosition => lineNr == p.line
-//    case p: TranslatedPosition => file == p.file && lineNr == p.line
-//    case _ => false
-//  }
-//
-//  def fullId: String = error.fullId
-//
-//  override def toString: String = error.toString
-//}
+  var voilaInstance: Voila = _
 
-class VoilaTests extends AnnotationBasedTestSuite {
-  val voilaInstance: Voila = null
+  override def beforeAll(): Unit = {
+    voilaInstance = new Voila()
+  }
+
+  override def afterAll(): Unit = {
+    voilaInstance = null
+  }
 
   val voilaInstanceUnderTest: SystemUnderTest =
     new SystemUnderTest with TimingUtils {
       val projectInfo: ProjectInfo = new ProjectInfo(List("Voila"))
 
-      def run(input: AnnotatedTestInput):Seq[AbstractOutput] = {
+      def run(testInput: AnnotatedTestInput): Seq[AbstractOutput] = {
+        val config =
+          new Config(Array(
+            "--logLevel", "ERROR",
+            "-i", testInput.file.toFile.getPath))
 
+        val (result, elapsed) = time(() => voilaInstance.verify(config))
+
+        info(s"Time required: $elapsed")
+
+        result match {
+          case None =>
+            info("Voial failed")
+            Vector.empty
+          case Some(Success) =>
+            Vector.empty
+          case Some(Failure(errors)) =>
+            errors map VoilaTestOutput
+        }
       }
     }
 
   def systemsUnderTest: Seq[silver.testing.SystemUnderTest] = Vector(voilaInstanceUnderTest)
+}
 
-  def testDirectories: Seq[String] = Vector("regressions")
+case class VoilaTestOutput(error: VoilaError) extends AbstractOutput {
+  def isSameLine(file: Path, lineNr: Int): Boolean = error.position.line == lineNr
+  def fullId: String = error.id
 }

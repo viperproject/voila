@@ -8,17 +8,19 @@ package viper.voila
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import ch.qos.logback.classic.{Level, Logger}
+import java.nio.file.Path
+import scala.collection.breakOut
 import scala.util.{Left, Right}
+import ch.qos.logback.classic.{Level, Logger}
 import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
+import viper.voila.backends.{MockViperFrontend, Silicon}
 import viper.voila.frontend.{Config, Frontend, SemanticAnalyser, VoilaTree}
-import viper.voila.translator.PProgramToViperTranslator
-import viper.voila.backends.Silicon
-import viper.voila.reporting.VoilaResult
+import viper.voila.reporting._
+import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
 
 object VoilaConstants {
   val toolName = "Voila"
@@ -31,140 +33,71 @@ object VoilaConstants {
 }
 
 object VoilaGlobalState {
-  var positions: Positions = null
+  var positions: Positions = _
 }
 
-class Voila {
-  def run(args: Array[String]): Unit = ???
+class Voila extends StrictLogging {
+  val defaultPreambleFile: File = {
+    val resource = getClass.getResource(VoilaConstants.preambleFile)
 
-  def run(config: Config): Unit = ???
+    if (resource == null)
+      exitWithError(s"Cannot access resource ${VoilaConstants.preambleFile}")
 
-  def verify(file: String): VoilaResult = verify(new File(file))
+    val file = new File(resource.getFile)
 
-  def verify(file: File): VoilaResult = {
-    val frontend = new Frontend()
+    if (!file.isFile) exitWithError(s"$file is not a file")
+    if (!file.canRead) exitWithError(s"Cannot read from $file")
 
-    VoilaGlobalState.positions = frontend.positions // TODO: Remove global state
+    file
+  }
 
-    frontend.parse(FileUtils.readFileToString(file, UTF_8)) match {
-      case Left(messages) =>
-        frontend.reportErrors(
-          s"Parsing $file failed with ${messages.length} error(s):",
-          messages)
+  lazy val defaultPreamble: Option[silver.ast.Program] = {
+    val preambleFile = defaultPreambleFile
+    val viperFrontend = new MockViperFrontend()
 
-        sys.exit(1)
-
-      case Right(program) =>
-        /* TODO: Move semantic analysis to the frontend */
-
-        logger.info("Parsed")
-        logger.info(s"  ${program.regions.length} region(s): ${program.regions.map(_.id.name).mkString(", ")}")
-        logger.info(s"  ${program.predicates.length} predicate(s): ${program.predicates.map(_.id.name).mkString(", ")}")
-        logger.info(s"  ${program.procedures.length} procedures(s): ${program.procedures.map(_.id.name).mkString(", ")}")
-
-        val tree = new VoilaTree(program)
-        val semanticAnalyser = new SemanticAnalyser(tree)
-        val messages = semanticAnalyser.errors
-
-        if (messages.nonEmpty) {
-          frontend.reportErrors(
-            s"Type-checking ${config.inputFile()} failed with ${messages.length} error(s):",
-            messages)
-
-          sys.exit(1)
-        }
-
-        val translator = new PProgramToViperTranslator(semanticAnalyser)
-        val (viperProgram, errorBacktranslator) = translator.translate(tree)
-
-        logger.debug(s"Taking Viper preamble from resources/${VoilaConstants.preambleFile}")
-
-        FileUtils.copyFile(preambleFile, outputFile)
-
-        logger.debug(s"Writing generated program to file ${config.outputFile()}")
-
-        FileUtils.writeStringToFile(
-          outputFile,
-          silver.ast.pretty.FastPrettyPrinter.pretty(viperProgram),
-          UTF_8,
-          true)
-
-//        tree.nodes foreach (n => {
-//          frontend.positions.getStart(n) match {
-//            case Some(x) =>
-//            case None => println(s"  NO POSITION FOR $n")
-//          }
-//        })
-
-        logger.info("Encoded Voila program in Viper")
-        logger.info("Verifying encoding using Silicon ...")
-        val silicon = new Silicon
-        silicon.start()
-        val verificationResult = silicon.handle(viperProgram)
-        silicon.stop()
-        logger.info(s"... done (with ${getNumberOfErrors(verificationResult)} Viper error(s))")
-
-        verificationResult match {
-          case silver.verifier.Success => /* Nothing left to do */
-          case failure: silver.verifier.Failure =>
-            extractVerificationFailures(failure) match {
-              case (Seq(), viperErrors) =>
-                /* No verification failures, but, e.g. type-checking failures */
-                logger.error("Found non-verification-failures:")
-                viperErrors foreach (ve => logger.error(ve.readableMessage))
-              case (viperErrors, Seq()) =>
-                /* Only verification failures */
-                logger.error(s"Voila found potential errors:")
-                viperErrors foreach (viperError =>
-                  errorBacktranslator.translate(viperError) match {
-                    case None =>
-                      /* Back-translation didn't work */
-                      logger.error(s"  ${viperError.readableMessage}")
-                    case Some(voilaError) =>
-                      logger.error(s"  ${voilaError.message(frontend.positions)}")
-                  })
-            }
-        }
+    viperFrontend.translate(preambleFile.toPath) match {
+      case (None, errors) =>
+        logger.error(s"Could not parse Viper preamble ${preambleFile.getPath}:")
+        errors foreach (error => logger.error(s"  ${error.readableMessage}"))
+        None
+      case (Some(viperProgram), Seq()) =>
+        Some(viperProgram)
     }
   }
-}
 
-object Voila extends StrictLogging {
-  def main(args: Array[String]) {
-    val config = new Config(args)
+  def verify(config: Config): Option[VoilaResult] = {
+    verify(new File(config.inputFile()), config)
+  }
 
+  def verify(file: String): Option[VoilaResult] = {
+    val config = new Config(Array("-i", file))
+
+    verify(new File(config.inputFile()), config)
+  }
+
+  def verify(path: Path): Option[VoilaResult] = {
+    val config = new Config(Array("-i", path.toFile.getPath))
+
+    verify(new File(config.inputFile()), config)
+  }
+
+  def verify(file: File, config: Config): Option[VoilaResult] = {
     setLogLevelsFromConfig(config)
-
-    val inputFile = new File(config.inputFile())
-    val outputFile = new File(config.outputFile())
-
-    val preambleFile = {
-      val resource = getClass.getResource(VoilaConstants.preambleFile)
-
-      if (resource == null)
-        exitWithError(s"Cannot access resource ${VoilaConstants.preambleFile}")
-
-      new File(resource.getFile)
-    }
 
     logger.info(VoilaConstants.versionMessage)
 
-    if (!inputFile.isFile) exitWithError(s"${config.inputFile()} is not a file")
-    if (!inputFile.canRead) exitWithError(s"Cannot read from ${config.inputFile()}")
-    if (!preambleFile.isFile) exitWithError(s"$preambleFile is not a file")
-    if (!preambleFile.canRead) exitWithError(s"Cannot read from $preambleFile")
+    if (!file.isFile) exitWithError(s"${config.inputFile()} is not a file")
+    if (!file.canRead) exitWithError(s"Cannot read from ${config.inputFile()}")
 
     logger.debug(s"Reading source program from file ${config.inputFile()}")
 
     val frontend = new Frontend()
 
-    frontend.parse(FileUtils.readFileToString(inputFile, UTF_8)) match {
-      case Left(messages) =>
-        frontend.reportErrors(
-          s"Parsing ${config.inputFile()} failed with ${messages.length} error(s):",
-          messages)
+    VoilaGlobalState.positions = frontend.positions // TODO: Remove global state
 
-        sys.exit(1)
+    frontend.parse(FileUtils.readFileToString(file, UTF_8)) match {
+      case Left(voilaErrors) =>
+        Some(Failure(voilaErrors))
 
       case Right(program) =>
         /* TODO: Move semantic analysis to the frontend */
@@ -179,27 +112,55 @@ object Voila extends StrictLogging {
         val messages = semanticAnalyser.errors
 
         if (messages.nonEmpty) {
-          frontend.reportErrors(
-            s"Type-checking ${config.inputFile()} failed with ${messages.length} error(s):",
-            messages)
+          val voilaErrors = frontend.translateToVoilaErrors(messages, TypecheckerError)
 
-          sys.exit(1)
+          return Some(Failure(voilaErrors))
         }
 
         val translator = new PProgramToViperTranslator(semanticAnalyser)
-        val (viperProgram, errorBacktranslator) = translator.translate(tree)
+        val (translatedProgram, errorBacktranslator) = translator.translate(tree)
 
-        logger.debug(s"Taking Viper preamble from resources/${VoilaConstants.preambleFile}")
+        logger.debug(s"Taking Viper preamble from ${defaultPreambleFile.getPath}")
 
-        FileUtils.copyFile(preambleFile, outputFile)
+        val preambleProgram =
+          defaultPreamble match {
+            case None =>
+              val msg = s"Could not parse Viper preamble ${defaultPreambleFile.getPath}"
 
-        logger.debug(s"Writing generated program to file ${config.outputFile()}")
+              return Some(Failure(Vector(ResourceError(msg))))
 
-        FileUtils.writeStringToFile(
-          outputFile,
-          silver.ast.pretty.FastPrettyPrinter.pretty(viperProgram),
-          UTF_8,
-          true)
+            case Some(preamble) =>
+              preamble
+          }
+
+        val programToVerify =
+          translatedProgram.copy(
+            domains = preambleProgram.domains ++ translatedProgram.domains,
+            fields = preambleProgram.fields ++ translatedProgram.fields,
+            functions = preambleProgram.functions ++ translatedProgram.functions,
+            predicates = preambleProgram.predicates ++ translatedProgram.predicates,
+            methods = preambleProgram.methods ++ translatedProgram.methods
+          )(translatedProgram.pos, translatedProgram.info, translatedProgram.errT)
+
+//        programToVerify.checkTransitively match {
+//          case Seq() => /* No errors, all good */
+//          case errors =>
+//            logger.error(s"Generated Viper program has ${errors.length} error(s):")
+//            errors foreach (e => logger.error(s"  ${e.readableMessage}"))
+//
+//            /* TODO: Return Voila errors instead */
+//            return Some(Failure(Vector.empty))
+//        }
+
+        /* Pretty-print the generated Viper program to a file, if requested */
+        config.outputFile.map(new File(_)).foreach(outputFile => {
+          logger.debug(s"Writing generated program to file ${config.outputFile()}")
+
+          FileUtils.writeStringToFile(
+            outputFile,
+            silver.ast.pretty.FastPrettyPrinter.pretty(programToVerify),
+            UTF_8)
+        })
 
 //        tree.nodes foreach (n => {
 //          frontend.positions.getStart(n) match {
@@ -210,37 +171,14 @@ object Voila extends StrictLogging {
 
         logger.info("Encoded Voila program in Viper")
         logger.info("Verifying encoding using Silicon ...")
-        val silicon = new Silicon
+        val silicon = new Silicon(Vector(/*"--logLevel", "DEBUG"*/))
         silicon.start()
-        val verificationResult = silicon.handle(viperProgram)
+        val verificationResult = silicon.handle(programToVerify)
         silicon.stop()
         logger.info(s"... done (with ${getNumberOfErrors(verificationResult)} Viper error(s))")
 
-        verificationResult match {
-          case silver.verifier.Success => /* Nothing left to do */
-          case failure: silver.verifier.Failure =>
-            extractVerificationFailures(failure) match {
-              case (Seq(), viperErrors) =>
-                /* No verification failures, but, e.g. type-checking failures */
-                logger.error("Found non-verification-failures:")
-                viperErrors foreach (ve => logger.error(ve.readableMessage))
-              case (viperErrors, Seq()) =>
-                /* Only verification failures */
-                logger.error(s"Voila found potential errors:")
-                viperErrors foreach (viperError =>
-                  errorBacktranslator.translate(viperError) match {
-                    case None =>
-                      /* Back-translation didn't work */
-                      logger.error(s"  ${viperError.readableMessage}")
-                    case Some(voilaError) =>
-                      logger.error(s"  ${voilaError.message(frontend.positions)}")
-                  })
-            }
-        }
+        backtranslateOrReportErrors(verificationResult, errorBacktranslator)
     }
-
-    logger.info("Voila finished")
-    sys.exit(0)
   }
 
   private def getNumberOfErrors(verificationResult: silver.verifier.VerificationResult): Int = {
@@ -259,14 +197,69 @@ object Voila extends StrictLogging {
       .asInstanceOf[(Seq[silver.verifier.VerificationError], Seq[silver.verifier.AbstractError])]
   }
 
-  def exitWithError(message: String, exitCode: Int = 1): Unit = {
-    logger.error(message)
+  private def backtranslateOrReportErrors(verificationResult: silver.verifier.VerificationResult,
+                                          errorBacktranslator: ErrorBacktranslator)
+                                         : Option[VoilaResult] = {
 
-    sys.exit(exitCode)
+    verificationResult match {
+      case silver.verifier.Success =>
+        Some(Success)
+      case failure: silver.verifier.Failure =>
+        extractVerificationFailures(failure) match {
+          case (Seq(), viperErrors) =>
+            /* No verification failures, but, e.g. type-checking failures */
+            logger.error("Found non-verification-failures:")
+            viperErrors foreach (ve => logger.error(s"  ${ve.readableMessage}"))
+
+            None
+
+          case (viperErrors, Seq()) =>
+            /* Only verification failures */
+            val voilaErrors: Vector[VoilaError] =
+              viperErrors.flatMap(viperError =>
+                errorBacktranslator.translate(viperError) match {
+                  case None =>
+                    /* Back-translation didn't work */
+                    logger.error("Failed to back-translate a Viper error")
+                    logger.error(s"  ${viperError.readableMessage}")
+
+                    None
+
+                  case Some(voilaError) =>
+                    Some(voilaError)
+                })(breakOut)
+
+            Some(Failure(voilaErrors))
+        }
+    }
   }
 
   private def setLogLevelsFromConfig(config: Config) {
     val logger = LoggerFactory.getLogger(this.getClass.getPackage.getName).asInstanceOf[Logger]
     logger.setLevel(Level.toLevel(config.logLevel()))
+  }
+
+
+  def exitWithError(message: String, exitCode: Int = 1): Unit = {
+    logger.error(message)
+
+    sys.exit(exitCode)
+  }
+}
+
+object VoilaRunner extends Voila {
+  def main(args: Array[String]) {
+    verify(new Config(args)) match {
+      case None =>
+        exitWithError("Voila failed unexpectedly")
+      case Some(result) =>
+        result match {
+          case Success =>
+            logger.info("Voila found no errors")
+          case Failure(errors) =>
+            logger.error(s"Voila found ${errors.length} error(s):")
+            errors foreach (e => logger.error(s"  ${e.formattedMessage}"))
+        }
+    }
   }
 }

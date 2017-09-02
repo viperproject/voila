@@ -22,31 +22,43 @@ sealed trait VoilaError {
   def position: Position
   def message: String
   def id: String
+
+  def formattedMessage: String =
+    s"$message (${position.line}:${position.column})"
 }
 
-case class VoilaParserError(message: String, position: Position) extends VoilaError {
+case class ResourceError(message: String) extends VoilaError {
+  val position: Position = null // TODO: Fix
+  val id = "resource.error"
+}
+
+case class ParserError(message: String, position: Position) extends VoilaError {
   val id = "parser.error"
 }
 
-sealed trait VoilaVerificationError extends VoilaError {
+case class TypecheckerError(message: String, position: Position) extends VoilaError {
+  val id = "typechecker.error"
+}
+
+sealed trait VerificationError extends VoilaError {
   def offendingNode: PAstNode
 
   def message: String
 
-  def message(positions: Positions): String = {
-    val formattedPosition: String =
-      positions.getStart(offendingNode) match {
-        case Some(pos) => s"${pos.line}:${pos.column}"
-        case None => "<unknown position>"
-      }
-
-    s"$message ($formattedPosition)"
-  }
+//  def message(positions: Positions): String = {
+//    val formattedPosition: String =
+//      positions.getStart(offendingNode) match {
+//        case Some(pos) => s"${pos.line}:${pos.column}"
+//        case None => "<unknown position>"
+//      }
+//
+//    s"$message ($formattedPosition)"
+//  }
 }
 
 // TODO: Remove dependency on global state (for positions)
 
-case class AssignmentFailed(offendingNode: PAstNode, reason: String) extends VoilaVerificationError {
+case class AssignmentFailed(offendingNode: PAstNode, reason: String) extends VerificationError {
   def position: Position = VoilaGlobalState.positions.getStart(offendingNode).get
   def id: String = "assignment.failed"
   val message: String = s"Assignment failed: $reason"
