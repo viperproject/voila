@@ -6,7 +6,7 @@
 
 package viper.voila.reporting
 
-import org.bitbucket.inkytonik.kiama.util.{Position, Positions}
+import org.bitbucket.inkytonik.kiama.util.Position
 import viper.voila.VoilaGlobalState
 import viper.voila.frontend.PAstNode
 
