@@ -29,3 +29,4 @@ lazy val root =
 
 addCommandAlias("to", "test-only")
 addCommandAlias("tn", "test-only -- -n")
+
