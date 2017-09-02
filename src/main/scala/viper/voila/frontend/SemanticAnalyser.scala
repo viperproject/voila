@@ -9,8 +9,8 @@ package viper.voila.frontend
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{id => _, _}
+import org.bitbucket.inkytonik.kiama.util.Messaging._
 import org.bitbucket.inkytonik.kiama.util.{Entity, MultipleEntity, UnknownEntity}
-import org.bitbucket.inkytonik.kiama.util.Messaging.{check, checkUse, collectMessages, Messages, message}
 
 class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   val symbolTable = new SymbolTable()
@@ -29,6 +29,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case exp: PExpression if typ(exp) == PUnknownType() =>
         message(exp, s"$exp could not be typed")
+
+      case PProcedure(_, _, _, _, pres, posts, _, _, _) =>
+        (pres.map(_.assertion) ++ posts.map(_.assertion))
+          .flatMap (exp =>
+            message(
+              exp,
+              s"Type error: expected $PBoolType(), but found ${typ(exp)}",
+              !isCompatible(typ(exp), PBoolType())))
 
       case PAssign(lhs, _) if !entity(lhs).isInstanceOf[LocalVariableEntity] =>
         message(lhs, s"Cannot assign to ${lhs.name}")
