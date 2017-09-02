@@ -7,6 +7,8 @@
 package viper.voila.frontend
 
 import org.bitbucket.inkytonik.kiama.output.PrettyExpression
+import viper.silver
+import viper.voila.VoilaGlobalState
 
 /*
  * Top-level nodes
@@ -17,6 +19,10 @@ sealed abstract class PAstNode extends Product {
     prettyPrinter.format(this)
 
   lazy val pretty: String = pretty()
+  override lazy val toString: String = pretty
+
+  def position: silver.ast.SourcePosition =
+    translate(VoilaGlobalState.positions.getStart(this).get)
 }
 
 case class PProgram(regions: Vector[PRegion],
@@ -298,18 +304,13 @@ case class PIrrelevantValue() extends PExpression
 
 sealed trait PType extends PAstNode
 
-case class PIntType() extends PType { override def toString = "int" }
-case class PBoolType() extends PType { override def toString = "bool" }
-case class PSetType(elementType: PType) extends PType { override def toString = "set" }
-
-case class PRefType(referencedType: PType) extends PType {
-  override def toString = s"$referencedType*"
-}
-
-case class PRegionIdType() extends PType { override def toString = "id" }
-case class PVoidType() extends PType { override def toString = "void" }
-
-case class PUnknownType() extends PType { override def toString = "<unknown>" }
+case class PIntType() extends PType
+case class PBoolType() extends PType
+case class PSetType(elementType: PType) extends PType
+case class PRefType(referencedType: PType) extends PType
+case class PRegionIdType() extends PType
+case class PVoidType() extends PType
+case class PUnknownType() extends PType
 
 /*
  * Miscellaneous

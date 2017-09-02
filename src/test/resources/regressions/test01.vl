@@ -1,0 +1,9 @@
+void testAbstractMethod()
+  requires true;
+  ensures false;
+
+void testEmptyMethodBody()
+  requires true;
+  //:: ExpectedOutput(postcondition.error)
+  ensures false;
+{}

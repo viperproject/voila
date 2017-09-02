@@ -8,6 +8,7 @@ package viper.voila
 
 import scala.reflect.{ClassTag, classTag}
 import scala.util.{Left, Right}
+import org.bitbucket.inkytonik.kiama.util.StringSource
 import org.scalatest.{FunSuite, Matchers}
 import viper.voila.frontend._
 
@@ -106,7 +107,7 @@ class ParserTests extends FunSuite with Matchers {
 
 class TestFrontend extends Frontend {
   private def parseOrFail[T: ClassTag](source: String, parser: syntaxAnalyser.Parser[T]): T = {
-    parse(source, parser) match {
+    parse(StringSource(source), parser) match {
       case Right(ast) if classTag[T].runtimeClass.isAssignableFrom(ast.getClass) => ast
       case Left(messages) => sys.error(s"Parsing failed: $messages")
       case Right(ast) => sys.error(s"Parsing resulted in unexpected AST node ${ast.getClass.getSimpleName}")

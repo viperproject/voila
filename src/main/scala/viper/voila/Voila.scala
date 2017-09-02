@@ -95,7 +95,7 @@ class Voila extends StrictLogging {
 
     VoilaGlobalState.positions = frontend.positions // TODO: Remove global state
 
-    frontend.parse(FileUtils.readFileToString(file, UTF_8)) match {
+    frontend.parse(file) match {
       case Left(voilaErrors) =>
         Some(Failure(voilaErrors))
 

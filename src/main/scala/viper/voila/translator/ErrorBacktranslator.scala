@@ -9,7 +9,7 @@ package viper.voila.translator
 import viper.silver
 import viper.voila.frontend._
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.voila.reporting.{AssignmentFailed, VoilaError}
+import viper.voila.reporting.{AssignmentError, PostconditionError, VoilaError}
 
 trait ErrorBacktranslator {
   def translate(error: silver.verifier.VerificationError): Option[VoilaError]
@@ -19,11 +19,13 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
   def translate(error: viper.silver.verifier.VerificationError): Option[VoilaError] = {
     error match {
       case vprerr.AssignmentFailed(Source(sourceNode: PHeapRead), reason, _) =>
-        Some(AssignmentFailed(sourceNode, translate(reason)))
+        Some(AssignmentError(sourceNode, translate(reason)))
       case vprerr.AssignmentFailed(Source(sourceNode: PHeapWrite), reason, _) =>
-        Some(AssignmentFailed(sourceNode, translate(reason)))
+        Some(AssignmentError(sourceNode, translate(reason)))
       case vprerr.AssignmentFailed(Source(sourceNode: PAssign), reason, _) =>
-        Some(AssignmentFailed(sourceNode, translate(reason)))
+        Some(AssignmentError(sourceNode, translate(reason)))
+      case vprerr.PostconditionViolated(Source(node), _, reason) =>
+        Some(PostconditionError(node, translate(reason)))
       case _ =>
         None
     }
@@ -32,7 +34,29 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
   private def translate(reason: silver.verifier.ErrorReason): String = {
     reason match {
       case vprrea.InsufficientPermission(node) =>
-        s"There might be insufficient permission to dereference ${source(node)}"
+        s"There might be insufficient permission to *${source(node)}"
+      case vprrea.AssertionFalse(node) =>
+        s"Assertion ${source(node)} might not hold"
+//      case vprrea.DummyReason =>
+//      case vprrea.InternalReason(offendingNode, explanation) =>
+//      case vprrea.FeatureUnsupported(offendingNode, explanation) =>
+//      case vprrea.UnexpectedNode(offendingNode, explanation, stackTrace) =>
+//      case vprrea.VariantNotDecreasing(offendingNode, decExp) =>
+//      case vprrea.TerminationNoBound(offendingNode, decExp) =>
+//      case vprrea.CallingNonTerminatingFunction(offendingNode, callee) =>
+//      case vprrea.NoDecClauseSpecified(offendingNode) =>
+//      case vprrea.EpsilonAsParam(offendingNode) =>
+//      case vprrea.ReceiverNull(offendingNode) =>
+//      case vprrea.DivisionByZero(offendingNode) =>
+//      case vprrea.NegativePermission(offendingNode) =>
+//      case vprrea.InvalidPermMultiplication(offendingNode) =>
+//      case vprrea.MagicWandChunkNotFound(offendingNode) =>
+//      case vprrea.NamedMagicWandChunkNotFound(offendingNode) =>
+//      case vprrea.MagicWandChunkOutdated(offendingNode) =>
+//      case vprrea.ReceiverNotInjective(offendingNode) =>
+//      case vprrea.LabelledStateNotReached(offendingNode) =>
+//      case vprrea.SeqIndexNegative(seq, offendingNode) =>
+//      case vprrea.SeqIndexExceedsLength(seq, offendingNode) =>
       case _=>
         reason.readableMessage
     }

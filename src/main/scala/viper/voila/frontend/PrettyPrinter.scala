@@ -124,5 +124,14 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PIrrelevantValue() => "_"
     }
 
-  def toDoc(typ: PType): Doc = ???
+  def toDoc(typ: PType): Doc =
+    typ match {
+      case PIntType() => "int"
+      case PBoolType() => "bool"
+      case PSetType(elementType) => "set" <> brackets(toDoc(elementType))
+      case PRefType(referencedType) => toDoc(referencedType) <> asterisk
+      case PRegionIdType() => "id"
+      case PVoidType() => "void"
+      case PUnknownType() => "<unknown>"
+    }
 }

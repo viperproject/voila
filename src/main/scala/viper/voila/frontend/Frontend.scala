@@ -1,25 +1,36 @@
 package viper.voila.frontend
 
+import java.io.File
 import com.typesafe.scalalogging.StrictLogging
 import org.bitbucket.inkytonik.kiama.parsing.{Failure, Success}
-import org.bitbucket.inkytonik.kiama.util.{Messaging, Position, PositionStore, StringSource}
+import org.bitbucket.inkytonik.kiama.util._
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, message}
 import viper.voila.reporting.{ParserError, VoilaError}
 
 class Frontend extends PositionStore with Messaging with StrictLogging {
   val syntaxAnalyser = new SyntaxAnalyser(positions)
 
-  def parse(source: String): Either[Vector[ParserError], PProgram] = {
+  def parse(file: File): Either[Vector[ParserError], PProgram] = {
+    parse(FileSource(file.getPath))
+  }
+
+  def parse(content: String): Either[Vector[ParserError], PProgram] = {
+    parse(StringSource(content))
+  }
+
+  protected def parse[T](source: Source): Either[Vector[ParserError], PProgram] = {
     parse(source, syntaxAnalyser.phrase(syntaxAnalyser.program)) match {
       case Right(program) => Right(program)
       case Left(messages) => Left(translateToVoilaErrors(messages, ParserError))
     }
   }
 
-  protected def parse[T](source: String, parser: syntaxAnalyser.Parser[T]): Either[Messages, T] = {
+  protected def parse[T](source: Source, parser: syntaxAnalyser.Parser[T])
+                        : Either[Messages, T] = {
+
     positions.reset()
 
-    syntaxAnalyser.parse(parser, StringSource(source)) match {
+    syntaxAnalyser.parse(parser, source) match {
       case Success(ast, _) =>
         Right(ast)
       case f @ Failure(label, next) =>

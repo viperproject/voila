@@ -370,7 +370,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             vpr.PredicateAccess(
               args = vprArguments,
               predicateName = predicate.name
-            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+            )()
 
           val acc =
             vpr.PredicateAccessPredicate(
@@ -484,26 +484,26 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(expression: PExpression): vpr.Exp = expression match {
-    case PTrueLit() => vpr.TrueLit()()
-    case PFalseLit() => vpr.FalseLit()()
-    case PIntLit(n) => vpr.IntLit(n)()
-    case PEquals(left, right) => vpr.EqCmp(translate(left), translate(right))()
-    case PAnd(left, right) => vpr.And(translate(left), translate(right))()
-    case POr(left, right) => vpr.Or(translate(left), translate(right))()
-    case PNot(operand) => vpr.Not(translate(operand))()
-    case PLess(left, right) => vpr.LtCmp(translate(left), translate(right))()
-    case PAtMost(left, right) => vpr.LeCmp(translate(left), translate(right))()
-    case PGreater(left, right) => vpr.GtCmp(translate(left), translate(right))()
-    case PAtLeast(left, right) => vpr.GeCmp(translate(left), translate(right))()
-    case PAdd(left, right) => vpr.Add(translate(left), translate(right))()
-    case PSub(left, right) => vpr.Sub(translate(left), translate(right))()
-    case PConditional(cond, thn, els) => vpr.CondExp(translate(cond), translate(thn), translate(els))()
-    case PExplicitSet(elements, _) => vpr.ExplicitSet(elements map translate)()
-    case PSetContains(element, set) => vpr.AnySetContains(translate(element), translate(set))()
-    case PIntSet() => intSet
-    case PNatSet() => natSet
-    case ret: PRet => returnVar(semanticAnalyser.typ(ret))
-    case PIdnExp(id) => translateUseOf(id)
+    case PTrueLit() => vpr.TrueLit()().withSource(expression)
+    case PFalseLit() => vpr.FalseLit()().withSource(expression)
+    case PIntLit(n) => vpr.IntLit(n)().withSource(expression)
+    case PEquals(left, right) => vpr.EqCmp(translate(left), translate(right))().withSource(expression)
+    case PAnd(left, right) => vpr.And(translate(left), translate(right))().withSource(expression)
+    case POr(left, right) => vpr.Or(translate(left), translate(right))().withSource(expression)
+    case PNot(operand) => vpr.Not(translate(operand))().withSource(expression)
+    case PLess(left, right) => vpr.LtCmp(translate(left), translate(right))().withSource(expression)
+    case PAtMost(left, right) => vpr.LeCmp(translate(left), translate(right))().withSource(expression)
+    case PGreater(left, right) => vpr.GtCmp(translate(left), translate(right))().withSource(expression)
+    case PAtLeast(left, right) => vpr.GeCmp(translate(left), translate(right))().withSource(expression)
+    case PAdd(left, right) => vpr.Add(translate(left), translate(right))().withSource(expression)
+    case PSub(left, right) => vpr.Sub(translate(left), translate(right))().withSource(expression)
+    case PConditional(cond, thn, els) => vpr.CondExp(translate(cond), translate(thn), translate(els))().withSource(expression)
+    case PExplicitSet(elements, _) => vpr.ExplicitSet(elements map translate)().withSource(expression)
+    case PSetContains(element, set) => vpr.AnySetContains(translate(element), translate(set))().withSource(expression)
+    case PIntSet() => intSet.withSource(expression)
+    case PNatSet() => natSet.withSource(expression)
+    case ret: PRet => returnVar(semanticAnalyser.typ(ret)).withSource(expression)
+    case PIdnExp(id) => translateUseOf(id).withSource(expression)
 
     case pointsTo: PPointsTo => translate(pointsTo)
     case guard: PGuardExp => translate(guard)
@@ -512,8 +512,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       semanticAnalyser.entity(id) match {
         case _: PredicateEntity =>
           vpr.PredicateAccessPredicate(
-            vpr.PredicateAccess(args map translate, id.name)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos),
-            vpr.FullPerm()()
+            vpr.PredicateAccess(args map translate, id.name)().withSource(expression),
+            vpr.FullPerm()().withSource(expression)
           )()
 
         case _: RegionEntity =>

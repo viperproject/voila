@@ -15,9 +15,12 @@ package object translator {
       val (pos, info, errT) = node.getPrettyMetadata
 
       require(info == vpr.NoInfo)
-      val newInfo = SourceInfo(source)
+      require(pos == vpr.NoPosition)
 
-      node.duplicateMeta((pos, newInfo, errT)).asInstanceOf[N]
+      val newInfo = SourceInfo(source)
+      val newPos = vpr.TranslatedPosition(source.position)
+
+      node.duplicateMeta((newPos, newInfo, errT)).asInstanceOf[N]
     }
   }
 

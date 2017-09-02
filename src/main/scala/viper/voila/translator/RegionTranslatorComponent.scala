@@ -32,7 +32,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       loc = vpr.PredicateAccess(
                 args = arguments,
                 predicateName = region.id.name
-            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos),
+            )(),
       perm = permissions
     )()
   }
@@ -250,7 +250,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.PredicateAccess(
           args = vprRegionArguments,
           predicateName = region.id.name
-        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos),
+        )(),
         vpr.FullPerm()()
       )()
 
@@ -306,11 +306,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
         val guardPredicateAccess =
           vpr.PredicateAccessPredicate(
-            loc = vpr.PredicateAccess(
-                    args = Vector(translate(PIdnExp(guardExp.regionId))),
-                    predicate = vprGuardPredicate
-                  )(pos = vpr.NoPosition, info = vpr.NoInfo),
-            perm = vpr.FullPerm()()
+            vpr.PredicateAccess(
+              Vector(translate(PIdnExp(guardExp.regionId))),
+              vprGuardPredicate.name
+            )(),
+            vpr.FullPerm()()
           )()
 
         guardPredicateAccess
@@ -400,7 +400,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.PredicateAccess(
         args = regionArguments,
         predicateName = region.id.name
-      )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+      )()
 
     /* perm(region(args)) */
     val currentPermissions = vpr.CurrentPerm(regionPredicateInstance)()
@@ -443,7 +443,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
               vpr.CurrentPerm(
                 vpr.PredicateAccess(
                   Vector(regionId),
-                  guardPredicate(guard, region)
+                  guardPredicate(guard, region).name
                 )()
               )())
           )()
