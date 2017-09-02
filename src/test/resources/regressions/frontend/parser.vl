@@ -1,0 +1,20 @@
+void test01(int* x) {}
+
+//:: ExpectedOutput(parser.error)
+void test02(id* x) {}
+
+void test03()
+  requires true
+{}
+
+void test04()
+  requires true;
+{
+  skip
+}
+
+void test05()
+  requires true;
+{
+  skip;
+}
