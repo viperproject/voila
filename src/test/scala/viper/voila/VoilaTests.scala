@@ -14,7 +14,7 @@ import viper.voila.reporting.{Failure, Success, VoilaError}
 import viper.silver.testing._
 
 class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
-  val testDirectories: Seq[String] = Vector("regressions")
+  val testDirectories: Seq[String] = Vector("regressions"/*, "examples"*/)
   override val defaultTestPattern: String = ".*\\.vl"
 
   var voilaInstance: Voila = _
@@ -43,7 +43,7 @@ class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
 
         result match {
           case None =>
-            info("Voial failed")
+            info("Voila failed")
             Vector.empty
           case Some(Success) =>
             Vector.empty
