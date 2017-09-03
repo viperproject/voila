@@ -20,6 +20,10 @@ lazy val voila = {
 
       libraryDependencies ++= externalDependencies,
 
+      /* Make sure Silicon doesn't overfow the stack */
+      javaOptions in run ++= Seq("-Xss64M"),
+      javaOptions in Test += "-Xss64M",
+
       fork := true,
         /* Serves two purposes:
          *  - http://stackoverflow.com/questions/21464673
