@@ -8,6 +8,7 @@ package viper.voila.frontend
 
 import scala.language.postfixOps
 import org.bitbucket.inkytonik.kiama.parsing.Parsers
+import org.bitbucket.inkytonik.kiama.rewriting.{Cloner, PositionedRewriter}
 import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
@@ -29,7 +30,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "interference", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
-    "if", "else", "while", "skip", "inhale", "exhale", "havoc",
+    "if", "else", "while", "do", "skip", "inhale", "exhale", "havoc",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "Int", "Nat"
   )
@@ -62,18 +63,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val guard: Parser[PGuardDecl] =
-    ("unique" | "duplicable").? ~ idndef <~ ";" ^^ {
-      case optDup ~ id =>
-        val modifier =
-          optDup match {
-            case None => PUniqueGuard()
-            case Some("unique") => PUniqueGuard()
-            case Some("duplicable") => PDuplicableGuard()
-            case Some(other) => sys.error(s"Unexpected guard modifier $other")
-          }
+    guardModifier ~ idndef <~ ";" ^^ { case mod ~ id => PGuardDecl(id, mod) }
 
-        PGuardDecl(id, modifier)
-    }
+  lazy val guardModifier: Parser[PGuardModifier] =
+    "unique" ^^^ PUniqueGuard() |
+    "duplicable" ^^^ PDuplicableGuard() |
+    success(PUniqueGuard())
 
   lazy val action: Parser[PAction] =
     (idnuse <~ ":") ~ binderOrExpression ~ ("~>" ~> expression <~ ";") ^^ PAction
@@ -86,37 +81,34 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val procedure: Parser[PProcedure] =
-    ("abstract_atomic" | "primitive_atomic").? ~
+    atomicityModifier ~
     typeOrVoid ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
     interference.* ~
     requires.* ~
     ensures .* ~
-    (("{" ~> varDeclStmt.*) ~ (statements.? <~ "}")).? ^^ {
-      case optAtomic ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBody =>
+    (("{" ~> varDeclStmt.*) ~ (statementsOrSkip <~ "}")).? ^^ {
+      case mod ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBraces =>
         val (locals, body) =
-          optBody match {
+          optBraces match {
             case None =>
               /* Abstract method, i.e. braces omitted */
               (Vector.empty, None)
-            case Some(l ~ None) =>
-              /* Concrete method, i.e. braces given, but no statements in the body */
-              (Vector.empty, Some(PSkip()))
             case Some(l ~ b) =>
               /* Concrete method with at least one statement in the body */
-              (l, b)
+              (l, Some(b))
           }
 
-        val atomicityModifier =
-          optAtomic match {
-            case None => PNotAtomic()
-            case Some("abstract_atomic") => PAbstractAtomic()
-            case Some("primitive_atomic") => PPrimitiveAtomic()
-            case Some(other) => sys.error(s"Unexpected atomicity modifier $other")
-          }
-
-        PProcedure(id, args, tpe, inters, pres, posts, locals, body, atomicityModifier)
+        PProcedure(id, args, tpe, inters, pres, posts, locals, body, mod)
     }
+
+  lazy val statementsOrSkip: Parser[PStatement] =
+    statements | success(PSkip())
+
+  lazy val atomicityModifier: Parser[PAtomicityModifier] =
+    "abstract_atomic" ^^^ PAbstractAtomic() |
+    "primitive_atomic" ^^^ PPrimitiveAtomic() |
+    success(PNotAtomic())
 
   lazy val formalArgs: Parser[Vector[PFormalArgumentDecl]] =
     repsep(formalArg, ",")
@@ -141,12 +133,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     singleStatement
 
   lazy val singleStatement: Parser[PStatement] =
-    "skip" <~ ";" ^^ (_ => PSkip()) |
+    "skip" <~ ";" ^^^ PSkip() |
     "if" ~> ("(" ~> expression <~ ")") ~ ("{" ~> statements <~ "}") ~ ("else" ~> "{" ~> statements <~ "}").? ^^ PIf |
-    ("do" ~> invariant.*) ~ ("{" ~> statements <~ "}") ~ ("while" ~> "(" ~> expression <~ ")") <~ ";" ^^ {
-      case invs ~ stmts ~ cond => PSeqComp(stmts, PWhile(cond, invs, stmts))
-    } |
     "while" ~> ("(" ~> expression <~ ")") ~ invariant.* ~ ("{" ~> statements <~ "}") ^^ PWhile |
+    parseAndUnrollDoWhileLoop ^^ { case unrolled ~ loop => PSeqComp(unrolled, loop) } |
     "fold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PFold |
     "unfold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PUnfold |
     "inhale" ~> expression <~ ";" ^^ PInhale |
@@ -163,6 +153,31 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     } |
     idnuse ~ (":=" ~> "*" ~> idnuse) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
+
+  /* Parses and unrolls a do-while loop.
+   * Several hack-ish steps are performed to avoid node sharing while ensuring correct
+   * position information bookkeeping.
+   */
+  private lazy val parseAndUnrollDoWhileLoop: Parser[~[PStatement, PWhile]] =
+    parseDoWhileLoop ^^ {
+      case tuple @ (invs, stmts, cond) =>
+        /* Since the tuple is obtained from a parser (i.e. returned as a `Parser[...]`) its
+         * position has been recorded in `this.positions`. We assign this position to the
+         * synthesised while-loop node.
+         */
+        val loop = PWhile(cond, invs, positionedRewriter.deepclone(stmts))
+        positions.dupPos(tuple, loop)
+
+        new ~(stmts, loop)
+    }
+
+  /* Parses a do-while loop and returns a tuple with all constituents of the loop.
+   * The tuple's position, looked up in `this.positions`, spans the whole do-while loop.
+   */
+  lazy val parseDoWhileLoop: Parser[(Vector[PInvariantClause], PStatement, PExpression)] =
+    ("do" ~> invariant.*) ~ ("{" ~> statements <~ "}") ~ ("while" ~> "(" ~> expression <~ ")") <~ ";" ^^ {
+      case invs ~ stmts ~ cond => (invs, stmts, cond)
+    }
 
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
@@ -203,7 +218,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     exp90
 
   lazy val exp90: PackratParser[PExpression] = /* Right-associative */
-    exp85 ~ ("==>" ~> exp90) ^^ { case lhs ~ rhs => PConditional(lhs, rhs, PTrueLit()) } |
+    exp85 ~ ("==>" ~> exp90) ^^ {
+      case lhs ~ rhs => PConditional(lhs, rhs, PTrueLit().at(lhs))
+    } |
     exp85
 
   lazy val exp85: PackratParser[PExpression] = /* Left-associative*/
@@ -216,7 +233,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val exp70: PackratParser[PExpression] = /* Left-associative*/
     exp70 ~ ("==" ~> exp60) ^^ PEquals |
-    exp70 ~ ("!=" ~> exp60) ^^ { case lhs ~ rhs => PNot(PEquals(lhs, rhs)) } |
+    exp70 ~ ("!=" ~> exp60) ^^ {
+      case lhs ~ rhs => PNot(PEquals(lhs, rhs).range(lhs, rhs))
+    } |
     exp60
 
   lazy val exp60: PackratParser[PExpression] = /* Left-associative*/
@@ -238,10 +257,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     exp0
 
   lazy val exp0: PackratParser[PExpression] =
-    "true" ^^ (_ => PTrueLit()) |
-    "false" ^^ (_ => PFalseLit()) |
-    "ret" ^^ (_ => PRet()) |
-    "_" ^^ (_ => PIrrelevantValue()) |
+    "true" ^^^ PTrueLit() |
+    "false" ^^^ PFalseLit() |
+    "ret" ^^^ PRet() |
+    "_" ^^^ PIrrelevantValue() |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     predicateExp |
@@ -264,8 +283,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Set" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
       case typeAnnotation ~ elements => PExplicitSet(elements, typeAnnotation)
     } |
-    "Int" ^^ (_ => PIntSet()) |
-    "Nat" ^^ (_=> PNatSet())
+    "Int" ^^^ PIntSet() |
+    "Nat" ^^^ PNatSet()
 
   lazy val binder: Parser[PLogicalVariableBinder] =
     "?" ~> idndef ^^ (id => PLogicalVariableBinder(id))
@@ -281,15 +300,14 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     repsep(binderOrExpression, ",")
 
   lazy val typeOrVoid: Parser[PType] =
-    "void" ^^ (_ => PVoidType()) |
+    "void" ^^^ PVoidType() |
     typ
 
-  lazy val typ: Parser[PType] =
-    "int*" ^^ (_ => PRefType(PIntType())) |
-    "int" ^^ (_ => PIntType()) |
-    "bool*" ^^ (_ => PRefType(PBoolType())) |
-    "bool" ^^ (_ => PBoolType()) |
-    "id" ^^ (_ => PRegionIdType())
+  lazy val typ: PackratParser[PType] =
+    typ <~ "*" ^^ PRefType |
+    "int" ^^^ PIntType() |
+    "bool" ^^^ PBoolType() |
+    "id" ^^^ PRegionIdType()
 
   lazy val idndef: Parser[PIdnDef] =
     identifier ^^ PIdnDef
@@ -304,4 +322,18 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       else
         success(s)
     })
+
+  object positionedRewriter extends PositionedRewriter with Cloner {
+    override val positions: Positions = SyntaxAnalyser.this.positions
+  }
+
+  implicit class PositionedPAstNode[N <: PAstNode](node: N) {
+    def at(other: PAstNode): N = {
+      positions.dupPos(other, node)
+    }
+
+    def range(from: PAstNode, to: PAstNode): N = {
+      positions.dupRangePos(from, to, node)
+    }
+  }
 }
