@@ -8,7 +8,7 @@ package viper.voila
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Path
+import java.nio.file.{Files, Path, Paths}
 import scala.collection.breakOut
 import scala.util.{Left, Right}
 import ch.qos.logback.classic.{Level, Logger}
@@ -37,16 +37,16 @@ object VoilaGlobalState {
 }
 
 class Voila extends StrictLogging {
-  val defaultPreambleFile: File = {
+  val defaultPreambleFile: Path = {
     val resource = getClass.getResource(VoilaConstants.preambleFile)
 
     if (resource == null)
       exitWithError(s"Cannot access resource ${VoilaConstants.preambleFile}")
 
-    val file = new File(resource.getFile)
+    val file = silver.utility.Paths.pathFromResource(resource)
 
-    if (!file.isFile) exitWithError(s"$file is not a file")
-    if (!file.canRead) exitWithError(s"Cannot read from $file")
+    if (!Files.isRegularFile(file)) exitWithError(s"$file is not a file")
+    if (!Files.isReadable(file)) exitWithError(s"Cannot read from $file")
 
     file
   }
@@ -55,9 +55,9 @@ class Voila extends StrictLogging {
     val preambleFile = defaultPreambleFile
     val viperFrontend = new MockViperFrontend()
 
-    viperFrontend.translate(preambleFile.toPath) match {
+    viperFrontend.translate(preambleFile) match {
       case (None, errors) =>
-        logger.error(s"Could not parse Viper preamble ${preambleFile.getPath}:")
+        logger.error(s"Could not parse Viper preamble $preambleFile:")
         errors foreach (error => logger.error(s"  ${error.readableMessage}"))
         None
       case (Some(viperProgram), Seq()) =>
@@ -66,28 +66,28 @@ class Voila extends StrictLogging {
   }
 
   def verify(config: Config): Option[VoilaResult] = {
-    verify(new File(config.inputFile()), config)
+    verify(Paths.get(config.inputFile()), config)
   }
 
   def verify(file: String): Option[VoilaResult] = {
     val config = new Config(Array("-i", file))
 
-    verify(new File(config.inputFile()), config)
+    verify(Paths.get(config.inputFile()), config)
   }
 
   def verify(path: Path): Option[VoilaResult] = {
     val config = new Config(Array("-i", path.toFile.getPath))
 
-    verify(new File(config.inputFile()), config)
+    verify(Paths.get(config.inputFile()), config)
   }
 
-  def verify(file: File, config: Config): Option[VoilaResult] = {
+  def verify(file: Path, config: Config): Option[VoilaResult] = {
     setLogLevelsFromConfig(config)
 
     logger.info(VoilaConstants.versionMessage)
 
-    if (!file.isFile) exitWithError(s"${config.inputFile()} is not a file")
-    if (!file.canRead) exitWithError(s"Cannot read from ${config.inputFile()}")
+    if (!Files.isRegularFile(file)) exitWithError(s"${config.inputFile()} is not a file")
+    if (!Files.isReadable(file)) exitWithError(s"Cannot read from ${config.inputFile()}")
 
     logger.debug(s"Reading source program from file ${config.inputFile()}")
 
@@ -120,12 +120,12 @@ class Voila extends StrictLogging {
         val translator = new PProgramToViperTranslator(semanticAnalyser)
         val (translatedProgram, errorBacktranslator) = translator.translate(tree)
 
-        logger.debug(s"Taking Viper preamble from ${defaultPreambleFile.getPath}")
+        logger.debug(s"Taking Viper preamble from ${defaultPreambleFile.toString}")
 
         val preambleProgram =
           defaultPreamble match {
             case None =>
-              val msg = s"Could not parse Viper preamble ${defaultPreambleFile.getPath}"
+              val msg = s"Could not parse Viper preamble ${defaultPreambleFile.toString}"
 
               return Some(Failure(Vector(ResourceError(msg))))
 

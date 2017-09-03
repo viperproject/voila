@@ -1,17 +1,17 @@
 package viper.voila.frontend
 
-import java.io.File
+import java.nio.file.Path
 import com.typesafe.scalalogging.StrictLogging
 import org.bitbucket.inkytonik.kiama.parsing.{Failure, Success}
-import org.bitbucket.inkytonik.kiama.util._
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, message}
+import org.bitbucket.inkytonik.kiama.util._
 import viper.voila.reporting.{ParserError, VoilaError}
 
 class Frontend extends PositionStore with Messaging with StrictLogging {
   val syntaxAnalyser = new SyntaxAnalyser(positions)
 
-  def parse(file: File): Either[Vector[ParserError], PProgram] = {
-    parse(FileSource(file.getPath))
+  def parse(file: Path): Either[Vector[ParserError], PProgram] = {
+    parse(FileSource(file.toFile.getPath))
   }
 
   def parse(content: String): Either[Vector[ParserError], PProgram] = {
