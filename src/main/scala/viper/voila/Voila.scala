@@ -18,7 +18,7 @@ import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
 import viper.voila.backends.{MockViperFrontend, Silicon}
-import viper.voila.frontend.{Config, Frontend, SemanticAnalyser, VoilaTree}
+import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
 
@@ -108,6 +108,18 @@ class Voila extends StrictLogging {
         logger.info(s"  ${program.procedures.length} procedures(s): ${program.procedures.map(_.id.name).mkString(", ")}")
 
         val tree = new VoilaTree(program)
+
+        var stop = false
+        tree.nodes foreach (n => {
+          frontend.positions.getStart(n) match {
+            case Some(x) =>
+            case None =>
+              stop = true
+              println(s"### NO POSITION FOR ${n.getClass.getSimpleName}:\n  $n")
+          }
+        })
+        if (stop) exitWithError("Position problems!", 10)
+
         val semanticAnalyser = new SemanticAnalyser(tree)
         val messages = semanticAnalyser.errors
 
@@ -161,13 +173,6 @@ class Voila extends StrictLogging {
             silver.ast.pretty.FastPrettyPrinter.pretty(programToVerify),
             UTF_8)
         })
-
-//        tree.nodes foreach (n => {
-//          frontend.positions.getStart(n) match {
-//            case Some(x) =>
-//            case None => println(s"  NO POSITION FOR $n")
-//          }
-//        })
 
         logger.info("Encoded Voila program in Viper")
         logger.info("Verifying encoding using Silicon ...")
