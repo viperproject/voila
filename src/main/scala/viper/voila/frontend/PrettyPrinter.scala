@@ -22,21 +22,63 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
   def toDoc(node: PAstNode): Doc =
     node match {
       case program: PProgram => toDoc(program)
+      case declaration: PDeclaration => toDoc(declaration)
       case statement: PStatement => toDoc(statement)
       case expression: PExpression => toDoc(expression)
       case typ: PType => toDoc(typ)
-
       case _: PPredicateAccess => ???
-      case _: PModifier => ???
+      case modifier: PModifier => toDoc(modifier)
+      case id: PIdnNode => toDoc(id)
+      case clause: PSpecificationClause => toDoc(clause)
+      case PAction(guard, from, to) => ???
+    }
 
+  def toDoc(clause: PSpecificationClause): Doc = {
+    clause match {
+      case PPreconditionClause(assertion) => "requires" <+> toDoc(assertion)
+      case PPostconditionClause(assertion) => "ensures" <+> toDoc(assertion)
+      case PInvariantClause(assertion) => "invariant" <+> toDoc(assertion)
+
+      case PInterferenceClause(variable, set, region) =>
+        (  "interference" <+> "?" <> toDoc(variable: PDeclaration)
+         <+> "in" <+> toDoc(set)
+         <+> "on" <+> toDoc(region))
+    }
+  }
+
+  def toDoc(action: PAction): Doc = action match {
+    case PAction(guard, from, to) => toDoc(guard) <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
+  }
+
+  def toDoc(modifier: PModifier): Doc = {
+    modifier match {
+      case modifier: PAtomicityModifier => toDoc(modifier)
+      case modifier: PGuardModifier => toDoc(modifier)
+    }
+  }
+
+  def toDoc(modifier: PAtomicityModifier): Doc = {
+    modifier match {
+      case PNotAtomic() => emptyDoc
+      case PPrimitiveAtomic() => "primitive_atomic"
+      case PAbstractAtomic() => "abstract_atomic"
+    }
+  }
+
+  def toDoc(modifier: PGuardModifier): Doc = {
+    modifier match {
+      case PUniqueGuard() => "unique"
+      case PDuplicableGuard() => "duplicable"
+    }
+  }
+
+  def toDoc(id: PIdnNode): Doc = {
+    id match {
       case PIdnDef(name) => name
       case PIdnUse(name) => name
-
-      case _: PDeclaration => ???
-      case _: PSpecificationClause => ???
-      case PAction(guard, from, to) => ???
-//      case _: PBindingContext => ???
     }
+  }
+
 
   def toDoc(program: PProgram): Doc = {
     val PProgram(regions, predicates, procedures) = program
@@ -48,14 +90,52 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       <> ssep(procedures map toDoc, line))
   }
 
-  def toDoc(region: PRegion): Doc = ???
-  def toDoc(predicate: PPredicate): Doc = ???
+  def toDoc(declaration: PDeclaration): Doc = {
+    declaration match {
+      case member: PMember => toDoc(member)
+
+      case PFormalArgumentDecl(id, typ) => toDoc(id) <> ":" <+> toDoc(typ)
+      case PLocalVariableDecl(id, typ) =>  toDoc(typ) <+> toDoc(id)
+      case PGuardDecl(id, modifier) =>  toDoc(modifier) <+> toDoc(id)
+      case PLogicalVariableBinder(id) =>  "?" <> toDoc(id)
+    }
+  }
+
+  def toDoc(member: PMember): Doc = {
+    member match {
+      case PRegion(id, regionId, formalArgs, guards, interpretation, state, actions) =>
+        (   "region" <+> toDoc(id) <> asFormalArguments(formalArgs)
+         <> nest("guards" <+> braces(ssep(guards map toDoc, semi <> line)))
+         <> nest("interpretation" <+> braces(toDoc(interpretation)))
+         <> nest("state" <+> braces(toDoc(state)))
+         <> nest("actions" <+> braces(ssep(actions map toDoc, semi <> line))))
+
+      case PProcedure(id, formalArgs, typ, inters, pres, posts, locals, optBody, atomicity) =>
+        (   toDoc(atomicity) <+> toDoc(typ) <+> toDoc(id) <+> asFormalArguments(formalArgs) <> line
+         <> nest(ssep(inters map toDoc, semi <> line)) <> line
+         <> nest(ssep(pres map toDoc, semi <> line)) <> line
+         <> (optBody match {
+              case None =>
+                require(locals.isEmpty)
+                emptyDoc
+              case Some(body) =>
+                braces(ssep(locals map toDoc, semi <> line <> toDoc(body)))
+            }))
+
+      case PPredicate(id, formalArgs, optBody) =>
+        (    "predicate" <+> toDoc(id) <> asFormalArguments(formalArgs)
+         <+> (optBody match {
+                case None => emptyDoc
+                case Some(body) => braces(nest(toDoc(body)))
+              }))
+    }
+  }
 
   def toDoc(procedure: PProcedure): Doc = {
     val PProcedure(id, formalArgs, typ, inters, pres, posts, locals, body, atomicity) = procedure
 
     val signatureDoc =
-      toDoc(typ) <+> id.name <> parens(ssep(formalArgs map toDoc, comma <> space))
+      toDoc(typ) <+> toDoc(id) <> asFormalArguments(formalArgs)
 
     val contractDoc = emptyDoc // TODO: Implement
 
@@ -69,20 +149,70 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
   def toDoc(statement: PStatement): Doc =
     statement match {
-      case _: PCompoundStatement => ???
+      case rule: PRuleStatement => toDoc(rule)
+      case ghost: PGhostStatement => toDoc(ghost)
+      case PSeqComp(first, second) => toDoc(first) <> semi <> line <> toDoc(second)
       case PSkip() => "skip" <> semi
       case PAssign(lhs, rhs) => toDoc(lhs) <+> ":=" <+> toDoc(rhs)
       case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> "*" <> toDoc(location)
       case PHeapWrite(location, rhs) => "*" <> toDoc(location) <+> ":=" <+> toDoc(rhs)
 
-      case PProcedureCall(procedure, arguments, rhs) => ???
-      case _: PGhostStatement => ???
-//      case _: PRuleStatement => ???
+      case PIf(cond, thn, els) => ???
+
+      case PWhile(cond, invariants, body) =>
+        (   "while" <> parens(toDoc(cond)) <> line
+         <> nest(ssep(invariants map toDoc, semi <> line)) <> line
+         <> braces(nest(toDoc(body))))
+
+      case PProcedureCall(procedure, arguments, optRhs) =>
+        val lhsDoc = toDoc(procedure) <> asArguments(arguments)
+
+        optRhs match {
+          case Some(rhs) => toDoc(rhs) <+> ":=" <+> lhsDoc
+          case None => lhsDoc
+        }
     }
+
+  def toDoc(statement: PGhostStatement): Doc = {
+    statement match {
+      case PFold(predicate, arguments) => "fold" <+> toDoc(predicate) <> asArguments(arguments)
+      case PUnfold(predicate, arguments) => "unfold" <+> toDoc(predicate) <> asArguments(arguments)
+      case PInhale(assertion) => "inhale" <+> toDoc(assertion)
+      case PExhale(assertion) => "exhale" <+> toDoc(assertion)
+      case PHavoc(variable) => "havoc" <+> toDoc(variable)
+    }
+  }
+
+  def asArguments(arguments: Vector[PExpression]): Doc =
+    parens(ssep(arguments map toDoc, comma <> space))
+
+  def asFormalArguments(arguments: Vector[PFormalArgumentDecl]): Doc =
+    parens(ssep(arguments map toDoc, comma <> space))
+
+  def toDoc(rule: PRuleStatement): Doc = {
+    rule match {
+      case PMakeAtomic(regionPredicate, guard, body) =>
+        (   "make_atomic" <> line
+         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> toDoc(guard) <> semi) <> line
+         <> braces(nest(toDoc(body))))
+      case PUseAtomic(regionPredicate, guard, body) =>
+        (   "use_atomic" <> line
+         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> toDoc(guard) <> semi) <> line
+         <> braces(nest(toDoc(body))))
+      case PUpdateRegion(regionPredicate, body) =>
+        (   "update_region" <> line
+         <> nest("using" <+> toDoc(regionPredicate) <> semi) <> line
+         <> braces(nest(toDoc(body))))
+      case POpenRegion(regionPredicate, body) =>
+        (   "open_region" <> line
+         <> nest("using" <+> toDoc(regionPredicate) <> semi) <> line
+         <> braces(nest(toDoc(body))))
+    }
+  }
 
   def toDoc(expression: PExpression): Doc =
     expression match {
-      case PLogicalVariableBinder(id) => "?" <> id.name
+      case PLogicalVariableBinder(id) => "?" <> toDoc(id)
 
       case PTrueLit() => "true"
       case PFalseLit() => "false"
@@ -111,15 +241,15 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PConditional(cond, thn, els) =>
         parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
         
-      case PIdnExp(id) => id.name
+      case PIdnExp(id) => toDoc(id)
       case PPredicateExp(predicate, arguments) =>
-        predicate.name <> "(" <> ssep(arguments map toDoc, comma <> space) <> ")"
+        toDoc(predicate) <> "(" <> ssep(arguments map toDoc, comma <> space) <> ")"
 
-      case PPointsTo(id, value) => id.name <+> "|->" <+> toDoc(value)
-      case PGuardExp(guard, regionId) => guard.name <> "@" <> regionId.name
-      case PDiamond(regionId) => regionId.name <+> "|=>" <+> "<D>"
+      case PPointsTo(id, value) => toDoc(id) <+> "|->" <+> toDoc(value)
+      case PGuardExp(guard, regionId) => toDoc(guard) <> "@" <> toDoc(regionId)
+      case PDiamond(regionId) => toDoc(regionId) <+> "|=>" <+> "<D>"
       case PRegionUpdateWitness(regionId, from, to) =>
-        regionId.name <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"
+        toDoc(regionId) <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"
 
       case PIrrelevantValue() => "_"
     }
