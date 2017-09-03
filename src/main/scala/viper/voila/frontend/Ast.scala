@@ -21,8 +21,12 @@ sealed abstract class PAstNode extends Product {
   lazy val pretty: String = pretty()
   override lazy val toString: String = pretty
 
-  def position: silver.ast.SourcePosition =
-    translate(VoilaGlobalState.positions.getStart(this).get)
+  def position: silver.ast.SourcePosition = {
+    VoilaGlobalState.positions.getStart(this) match {
+      case Some(position) => translate(position)
+      case None => sys.error(s"Failed to find position for node ${this.getClass.getSimpleName}: $this")
+    }
+  }
 }
 
 case class PProgram(regions: Vector[PRegion],
