@@ -1,0 +1,2 @@
+void test01(int* x) {}
+void test02(id* x) {}

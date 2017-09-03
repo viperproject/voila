@@ -1,0 +1,12 @@
+void test01()
+  requires true;
+{
+  skip;
+}
+
+void test02()
+  requires true;
+{
+  skip
+  //:: ExpectedOutput(parser.error)
+}

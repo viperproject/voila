@@ -1,0 +1,9 @@
+void test01()
+  requires true;
+{}
+
+void test02()
+  requires true
+  //:: ExpectedOutput(parser.error)
+{}
+
