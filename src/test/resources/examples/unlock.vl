@@ -9,16 +9,13 @@ region Lock(id a, int* x)
     G: 1 ~> Set(1, 0);
   }
 
-/*
-predicate U(id a, int* x) {
-  Lock(a, x, 0) && G@a
-}
-
-predicate L(id a, int* x) {
-  Lock(a, x, 1) && G@a
-}
-*/
-
+//predicate U(id a, int* x) {
+//  Lock(a, x, 0) && G@a
+//}
+//
+//predicate L(id a, int* x) {
+//  Lock(a, x, 1) && G@a
+//}
 
 predicate Inv() /* Invariant of CAP lock (left abstract) */
 
