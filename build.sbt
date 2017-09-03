@@ -20,12 +20,16 @@ lazy val voila = {
 
       libraryDependencies ++= externalDependencies,
 
-      fork := true
+      fork := true,
         /* Serves two purposes:
          *  - http://stackoverflow.com/questions/21464673
          *  - avoid problems on Windows where modifying test files can result in remaining open
          *    file handlers that prevent 'sbt test' from accessing the modifies test file
          */
+
+      test in assembly := {},
+      mainClass in assembly := Some("viper.voila.Voila"),
+      assemblyJarName in assembly := "voila.jar"
     ))
 
   for (dep <- internalDependencies) {
