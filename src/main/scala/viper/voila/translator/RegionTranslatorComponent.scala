@@ -307,7 +307,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         val guardPredicateAccess =
           vpr.PredicateAccessPredicate(
             vpr.PredicateAccess(
-              Vector(translate(PIdnExp(guardExp.regionId))),
+              Vector(translateUseOf(guardExp.regionId)),
               vprGuardPredicate.name
             )(),
             vpr.FullPerm()()
