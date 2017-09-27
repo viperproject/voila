@@ -69,8 +69,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
     // TODO: Actually use computed interference
 
-    val havoc1 = havocSingleRegionInstance(region,regionArgs)
-    val havoc2 = havocSingleRegionInstance(region,regionArgs)
+    val havoc1 = havocSingleRegionInstance(region, regionArgs)
+    val havoc2 = havocSingleRegionInstance(region, regionArgs)
 
     val ruleBody = translate(makeAtomic.body)
 
@@ -288,6 +288,12 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         )()
       )()
 
+    val havocs =
+      vpr.Seqn(
+        tree.root.regions.map(region => havocAllRegionsInstances(region)),
+        Vector.empty
+      )()
+
     val result =
       vpr.Seqn(
         Vector(
@@ -296,7 +302,13 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           unfoldRegionPredicate,
           ruleBody,
           foldRegionPredicate,
-          stateChangePermitted),
+          stateChangePermitted,
+          havocs),
+              /* TODO: Havocking after use-atomic is in general too eager.
+               *       Instead, we want to havoc if an atomic-triple-rule is used
+               *       in the proof of a non-atomic triple.
+               *       See also the comments in the manual encoding outline_translation-capslock.vpr.
+               */
         Vector.empty
       )()
 

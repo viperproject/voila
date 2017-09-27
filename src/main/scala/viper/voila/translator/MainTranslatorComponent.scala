@@ -98,10 +98,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   private def indent(depth: Int = translationIndentation): String = " " * 2 * depth
 
-  private var tree: VoilaTree = _
+  private var _tree: VoilaTree = _
+  protected def tree: VoilaTree = _tree
 
   def translate(tree: VoilaTree): (vpr.Program, ErrorBacktranslator) = {
-    this.tree = tree
+    this._tree = tree
 
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
@@ -133,7 +134,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         m.copy(body = bodyWithAdditionalLocalVariables)(m.pos, m.info, m.errT)
       }
 
-    this.tree = null
+    this._tree = null
 
     val vprProgram =
       vpr.Program(
@@ -280,7 +281,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val predicateExp = semanticAnalyser.usedWithRegionPredicate(interference.region)
     val vprRegionState = regionState(predicateExp)
 
-    vpr.AnySetContains(vprRegionState, vprSet)()
+    vpr.AnySetContains(vprRegionState, vprSet)().withSource(interference)
   }
 
   def translate(statement: PStatement): vpr.Stmt = {
@@ -329,6 +330,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           surroundWithSectionComments(statement.statementName, vprIf)
 
         case PWhile(cond, invs, body) =>
+          // TODO: Add region state havocking
+
           var vprWhile =
             vpr.While(
               cond = translate(cond),
@@ -427,7 +430,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               procedure.id.name,
               vprArguments,
               vprFormalReturns map (_.localVar)
-            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos).withSource(statement)
 
           surroundWithSectionComments(statement.statementName, vprCall)
 
