@@ -40,7 +40,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PInvariantClause(assertion) => "invariant" <+> toDoc(assertion)
 
       case PInterferenceClause(variable, set, region) =>
-        (  "interference" <+> "?" <> toDoc(variable: PDeclaration)
+        (  "interference" <+> toDoc(variable: PDeclaration)
          <+> "in" <+> toDoc(set)
          <+> "on" <+> toDoc(region))
     }
