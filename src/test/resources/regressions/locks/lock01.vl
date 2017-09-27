@@ -1,0 +1,146 @@
+region Lock(id a, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?v && (v == 0 || v == 1)
+  }
+  state { v }
+  actions {
+    G: 0 ~> Set(0, 1);
+    G: 1 ~> Set(1, 0);
+  }
+
+predicate Inv() /* Invariant of CAP lock (left abstract) */
+
+region CAPLock(id r, id a, int* x)
+  guards {
+    duplicable Z;
+    unique K;
+  }
+  interpretation {
+       Lock(a, x, ?v) && G@a // Included in both L(a, x) and U(a, x)
+    && (v == 0 ==> K@r && Inv())
+    && (v == 1 ==> true)
+  }
+  state { v }
+  actions {
+    Z: 0 ~> Set(0, 1);
+    K: 1 ~> Set(1, 0);
+  }
+
+predicate isLock(id r, id a, int* x) {
+  CAPLock(r, a, x, ?v) && (v == 0 || v == 1) // v in Set(0, 1) // TODO: Support simple set expressions
+}
+
+predicate Locked(id r, id a, int* x) {
+  CAPLock(r, a, x, ?v) && v == 1 && K@r
+}
+
+
+
+primitive_atomic bool CAS(int* x, int now, int thn)
+  requires x |-> ?v;
+  ensures  v == now
+              ? ret && x |-> thn
+              : !ret && x |-> v;
+
+
+
+abstract_atomic void unlock(id a, int* x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a; // L(a, x)
+  ensures Lock(a, x, 0) && G@a; // U(a, x)
+{
+  // unfold L(a, x);
+
+  make_atomic
+    using Lock(a, x) with G@a;
+  {
+    update_region
+      using Lock(a, x);
+    {
+      *x := 0;
+    }
+  }
+
+  // fold U(a, x);
+}
+
+void non_atomic_unlock(id r, id a, int* x)
+  requires Locked(r, a, x);
+  requires Inv();
+{
+  unfold Locked(r, a, x); // TODO: Contains a region predicate --> region must be havocked
+  // unfold CAPLock(r, a, x);
+  // fold L(a, x);
+
+  skip;
+
+  use_atomic
+    using CAPLock(r, a, x) with K@r;
+  {
+    unlock(a, x);
+  }
+}
+
+
+
+
+abstract_atomic void lock(id a, int* x)
+  interference ?s in Set(0, 1) on a;
+  // requires s == 0 ? U(a, x) : L(a, x);
+  requires Lock(a, x, s) && G@a;
+  // ensures L(a, x) && s == 0;
+  ensures Lock(a, x, 1) && G@a && s == 0;
+{
+  bool b;
+
+  // if (s == 0) { unfold U(a, x); }
+  // else { unfold L(a, x); }
+
+  make_atomic
+    using Lock(a, x) with G@a;
+  {
+    do
+      invariant Lock(a, x);
+      invariant !b ==> a |=> <D>;
+      invariant  b ==> a |=> (0, 1);
+    {
+      update_region
+        using Lock(a, x);
+      {
+        b := CAS(x, 0, 1);
+      }
+    } while (!b);
+  }
+
+  // fold L(a, x);
+}
+
+void non_atomic_lock(id r, id a, int* x)
+  requires isLock(r, a, x);
+  ensures  Locked(r, a, x);
+  // ensures  isLock(r, a, x);
+{
+  unfold isLock(r, a, x);
+
+  use_atomic
+    using CAPLock(r, a, x) with Z@r;
+  {
+    lock(a, x);
+  }
+
+  fold Locked(r, a, x);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
