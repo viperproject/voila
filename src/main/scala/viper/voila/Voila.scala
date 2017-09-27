@@ -174,9 +174,15 @@ class Voila extends StrictLogging {
             UTF_8)
         })
 
+
+        var siliconOptions: Vector[String] = Vector.empty
+        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
+//        siliconOptions ++= Vector("--logLevel", "DEBUG")
+
         logger.info("Encoded Voila program in Viper")
         logger.info("Verifying encoding using Silicon ...")
-        val silicon = new Silicon(Vector(/*"--logLevel", "DEBUG"*/))
+        val silicon = new Silicon(siliconOptions)
+
         silicon.start()
         val verificationResult = silicon.handle(programToVerify)
         silicon.stop()
