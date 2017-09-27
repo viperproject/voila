@@ -299,7 +299,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vprRegionArguments)()
   }
 
-  def translate(guardExp: PGuardExp): vpr.Exp = {
+  def translate(guardExp: PGuardExp): vpr.PredicateAccessPredicate = {
     semanticAnalyser.entity(guardExp.guard) match {
       case GuardEntity(guardDecl, region) =>
         val vprGuardPredicate = guardPredicate(guardDecl, region)

@@ -64,7 +64,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId)))()
 
     val exhaleGuard =
-      vpr.Exhale(translate(makeAtomic.guard))()
+      vpr.Exhale(guardAccessIfNotDuplicable(makeAtomic.guard))()
 
     val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
     // TODO: Actually use computed interference
@@ -255,7 +255,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val label = freshPreUseAtomicLabel()
 
     val checkGuard =
-      vpr.Assert(translate(useAtomic.guard))()
+      vpr.Assert(guardAccessIfNotDuplicable(useAtomic.guard))()
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
@@ -325,5 +325,15 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       )()
 
     surroundWithSectionComments(openRegion.statementName, result)
+  }
+
+  protected def guardAccessIfNotDuplicable(guardExp: PGuardExp): vpr.Exp = {
+    val guardDecl = semanticAnalyser.entity(guardExp.guard).asInstanceOf[GuardEntity]
+                                    .declaration
+
+    guardDecl.modifier match {
+      case PUniqueGuard() => translate(guardExp)
+      case PDuplicableGuard() => vpr.TrueLit()()
+    }
   }
 }
