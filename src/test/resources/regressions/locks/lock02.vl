@@ -17,7 +17,7 @@ region CAPLock(id r, id a, int* x)
     duplicable K; // [XXX] Wrong modifier: duplicable instead of unique
   }
   interpretation {
-       Lock(a, x, ?v) && G@a
+       Lock(a, x, ?v) && G@a // Included in both L(a, x) and U(a, x)
     && (v == 0 ==> K@r && Inv())
     && (v == 1 ==> true)
   }
@@ -37,37 +37,19 @@ primitive_atomic bool CAS(int* x, int now, int thn)
 
 
 
-abstract_atomic void unlock(id a, int* x)
-  interference ?s in Set(1) on a;
+abstract_atomic void lock(id a, int* x)
+  interference ?s in Set(0, 1) on a;
   requires Lock(a, x, s) && G@a;
-  ensures Lock(a, x, 0) && G@a;
+  ensures Lock(a, x, 1) && G@a && s == 0;
 
-void non_atomic_unlock01(id r, id a, int* x)
-  requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
-  requires Inv();
-{
-  skip;
-
-  // Havoc CAPLock region. Since K is incorrectly marked as duplicable,
-  // holding K does not guarantee that the region's state won't change.
-
-  use_atomic
-    using CAPLock(r, a, x) with K@r;
-  {
-    //:: ExpectedOutput(precondition.error)
-    unlock(a, x);
-  }
-}
-
-void non_atomic_unlock02(id r, id a, int* x)
-  requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
-  requires Inv();
+void non_atomic_lock(id r, id a, int* x)
+  requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
   //:: MissingOutput(postcondition.error, /voila/issue/000000000000000000000000000000000/)
-  ensures CAPLock(r, a, x, 0);
+  ensures  CAPLock(r, a, x, ?w) && w == 1 && K@r;
 {
   use_atomic
-    using CAPLock(r, a, x) with K@r;
+    using CAPLock(r, a, x) with Z@r;
   {
-    unlock(a, x);
+    lock(a, x);
   }
 }
