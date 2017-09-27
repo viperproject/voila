@@ -9,7 +9,7 @@ package viper.voila.translator
 import viper.silver
 import viper.voila.frontend._
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.voila.reporting.{AssignmentError, PostconditionError, VoilaError}
+import viper.voila.reporting.{AssignmentError, PostconditionError, PreconditionError, VoilaError}
 
 trait ErrorBacktranslator {
   def translate(error: silver.verifier.VerificationError): Option[VoilaError]
@@ -26,6 +26,8 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
         Some(AssignmentError(sourceNode, translate(reason)))
       case vprerr.PostconditionViolated(Source(node), _, reason) =>
         Some(PostconditionError(node, translate(reason)))
+      case vprerr.PreconditionInCallFalse(Source(node), reason, _) =>
+        Some(PreconditionError(node, translate(reason)))
       case _ =>
         None
     }
@@ -36,7 +38,7 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
       case vprrea.InsufficientPermission(node) =>
         s"There might be insufficient permission to *${source(node)}"
       case vprrea.AssertionFalse(node) =>
-        s"Assertion ${source(node)} might not hold"
+        s"""Assertion "${source(node)}" might not hold"""
 //      case vprrea.DummyReason =>
 //      case vprrea.InternalReason(offendingNode, explanation) =>
 //      case vprrea.FeatureUnsupported(offendingNode, explanation) =>

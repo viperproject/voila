@@ -68,3 +68,10 @@ case class PostconditionError(offendingNode: PAstNode, reason: String)
   def id: String = "postcondition.error"
   val message: String = s"Postcondition might not hold: $reason"
 }
+
+case class PreconditionError(offendingNode: PAstNode, reason: String)
+    extends AbstractVerificationError {
+
+  def id: String = "precondition.error"
+  val message: String = s"Precondition might not hold: $reason"
+}
