@@ -233,6 +233,13 @@ class Voila extends StrictLogging {
                     /* Back-translation didn't work */
                     logger.error("Failed to back-translate a Viper error")
                     logger.error(s"  ${viperError.readableMessage}")
+                    logger.debug(s"    error is ${viperError.getClass.getSimpleName}")
+                    logger.debug(s"    error off. node = ${viperError.offendingNode}")
+                    logger.debug(s"    error off. node src = ${translator.Source.unapply(viperError.offendingNode)}")
+                    logger.debug(s"    reason is ${viperError.reason.getClass.getSimpleName}")
+                    logger.debug(s"    reason off. node = ${viperError.reason.offendingNode}")
+                    logger.debug(s"    reason off. node src = ${translator.Source.unapply(viperError.reason.offendingNode)}")
+
 
                     None
 

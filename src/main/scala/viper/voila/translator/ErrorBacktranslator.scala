@@ -9,36 +9,37 @@ package viper.voila.translator
 import viper.silver
 import viper.voila.frontend._
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.voila.reporting.{AssignmentError, PostconditionError, PreconditionError, VoilaError}
+import viper.voila.reporting._
 
 trait ErrorBacktranslator {
   def translate(error: silver.verifier.VerificationError): Option[VoilaError]
+  def translate(reason: silver.verifier.ErrorReason): String
+
+  def addErrorTransformer(transformer: ErrorTransformer): Unit
+  def addReasonTransformer(transformer: ReasonTransformer): Unit
 }
 
 class DefaultErrorBacktranslator extends ErrorBacktranslator {
-  def translate(error: viper.silver.verifier.VerificationError): Option[VoilaError] = {
-    error match {
+  protected val defaultErrorTransformer: ErrorTransformer = {
       case vprerr.AssignmentFailed(Source(sourceNode: PHeapRead), reason, _) =>
-        Some(AssignmentError(sourceNode, translate(reason)))
+        AssignmentError(sourceNode, translate(reason))
       case vprerr.AssignmentFailed(Source(sourceNode: PHeapWrite), reason, _) =>
-        Some(AssignmentError(sourceNode, translate(reason)))
+        AssignmentError(sourceNode, translate(reason))
       case vprerr.AssignmentFailed(Source(sourceNode: PAssign), reason, _) =>
-        Some(AssignmentError(sourceNode, translate(reason)))
-      case vprerr.PostconditionViolated(Source(node), _, reason) =>
-        Some(PostconditionError(node, translate(reason)))
-      case vprerr.PreconditionInCallFalse(Source(node), reason, _) =>
-        Some(PreconditionError(node, translate(reason)))
-      case _ =>
-        None
+        AssignmentError(sourceNode, translate(reason))
+      case vprerr.PostconditionViolated(Source(sourceNode), _, reason) =>
+        PostconditionError(sourceNode, translate(reason))
+      case vprerr.PreconditionInCallFalse(Source(sourceNode), reason, _) =>
+        PreconditionError(sourceNode, translate(reason))
+      case vprerr.AssertFailed(Source(sourceNode), reason, _) =>
+        AssertionError(sourceNode, translate(reason))
     }
-  }
 
-  private def translate(reason: silver.verifier.ErrorReason): String = {
-    reason match {
-      case vprrea.InsufficientPermission(node) =>
-        s"There might be insufficient permission to *${source(node)}"
-      case vprrea.AssertionFalse(node) =>
-        s"""Assertion "${source(node)}" might not hold"""
+  protected val defaultReasonTransformer: ReasonTransformer = {
+    case vprrea.InsufficientPermission(node) =>
+      s"There might be insufficient permission to ${source(node)}"
+    case vprrea.AssertionFalse(node) =>
+      s"""Assertion "${source(node)}" might not hold"""
 //      case vprrea.DummyReason =>
 //      case vprrea.InternalReason(offendingNode, explanation) =>
 //      case vprrea.FeatureUnsupported(offendingNode, explanation) =>
@@ -59,9 +60,25 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
 //      case vprrea.LabelledStateNotReached(offendingNode) =>
 //      case vprrea.SeqIndexNegative(seq, offendingNode) =>
 //      case vprrea.SeqIndexExceedsLength(seq, offendingNode) =>
-      case _=>
-        reason.readableMessage
-    }
+  }
+
+  private var errorTransformer = defaultErrorTransformer
+  private var reasonTransformer = defaultReasonTransformer
+
+  def translate(error: viper.silver.verifier.VerificationError): Option[VoilaError] = {
+    errorTransformer.lift.apply(error)
+  }
+
+  def translate(reason: silver.verifier.ErrorReason): String = {
+    reasonTransformer.applyOrElse[silver.verifier.ErrorReason, String](reason, _.readableMessage)
+  }
+
+  def addErrorTransformer(transformer: ErrorTransformer): Unit = {
+    errorTransformer = transformer.orElse(errorTransformer)
+  }
+
+  def addReasonTransformer(transformer: ReasonTransformer): Unit = {
+    reasonTransformer = transformer.orElse(reasonTransformer)
   }
 
   private def source(node: silver.ast.Node): String = {
@@ -70,20 +87,20 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
       case _ => node.toString()
     }
   }
+}
 
-  object Source {
-    def unapply(node: silver.ast.Node): Option[PAstNode] = {
-      val info = node.getPrettyMetadata._2
+object Source {
+  def unapply(node: silver.ast.Node): Option[PAstNode] = {
+    val info = node.getPrettyMetadata._2
 
 //      println(s"Off. node: $node")
 //      println(s"  Info: $info")
 
-      info.getUniqueInfo[SourceInfo] match {
-        case Some(SourceInfo(sourceNode)) =>
+    info.getUniqueInfo[SourceInfo] match {
+      case Some(SourceInfo(sourceNode)) =>
 //          println(s"  Source: $sourceNode")
-          Some(sourceNode)
-        case None => None
-      }
+        Some(sourceNode)
+      case None => None
     }
   }
 }

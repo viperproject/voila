@@ -9,6 +9,7 @@ package viper.voila.translator
 import scala.collection.mutable
 import viper.voila.frontend._
 import viper.silver.{ast => vpr}
+import viper.silver.verifier.{reasons => vprrea}
 
 trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   private val regionStateFunctionCache =
@@ -218,7 +219,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             stateFunction))
   }
 
-  def translateUseOf(regionPredicate: PPredicateExp): vpr.Exp = {
+  def translateUseOf(regionPredicate: PPredicateExp): (vpr.PredicateAccessPredicate, vpr.Exp) = {
     val (region, vprRegionArguments, vprRegionStateArgument) =
       getAndTranslateRegionPredicateDetails(regionPredicate)
 
@@ -245,16 +246,26 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           }
       }
 
+    val vprRegionPredicate =
+      vpr.PredicateAccess(
+        args = vprRegionArguments,
+        predicateName = region.id.name
+      )().withSource(regionPredicate)
+
     val vprRegionAccess =
       vpr.PredicateAccessPredicate(
-        vpr.PredicateAccess(
-          args = vprRegionArguments,
-          predicateName = region.id.name
-        )(),
+        vprRegionPredicate,
         vpr.FullPerm()()
-      )()
+      )().withSource(regionPredicate)
 
-    vpr.And(vprRegionAccess, vprStateConstraint)()
+    errorBacktranslator.addReasonTransformer {
+      case vprrea.InsufficientPermission(`vprRegionPredicate`) =>
+        s"Region $regionPredicate might not be accessible."
+      case vprrea.AssertionFalse(`vprStateConstraint`) =>
+        s"Region $regionPredicate might not be in the expected state."
+    }
+
+    (vprRegionAccess, vprStateConstraint)
   }
 
   def getRegionPredicateDetails(predicateExp: PPredicateExp)

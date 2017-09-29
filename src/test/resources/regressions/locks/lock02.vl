@@ -44,7 +44,7 @@ abstract_atomic void lock(id a, int* x)
 
 void non_atomic_lock(id r, id a, int* x)
   requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
-  //:: MissingOutput(postcondition.error, /voila/issue/000000000000000000000000000000000/)
+  //:: ExpectedOutput(postcondition.error)
   ensures  CAPLock(r, a, x, ?w) && w == 1 && K@r;
 {
   use_atomic

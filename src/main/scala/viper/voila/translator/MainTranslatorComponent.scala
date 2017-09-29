@@ -8,6 +8,7 @@ package viper.voila.translator
 
 import scala.collection.breakOut
 import viper.silver.{ast => vpr}
+import viper.silver.verifier.{reasons => vprrea}
 import viper.voila.frontend._
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
@@ -101,8 +102,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   private var _tree: VoilaTree = _
   protected def tree: VoilaTree = _tree
 
+  private var _errorBacktranslator: ErrorBacktranslator = _
+  protected def errorBacktranslator: ErrorBacktranslator = _errorBacktranslator
+
   def translate(tree: VoilaTree): (vpr.Program, ErrorBacktranslator) = {
-    this._tree = tree
+    _tree = tree
+    _errorBacktranslator = new DefaultErrorBacktranslator
 
     val members: Vector[vpr.Member] = (
          heapLocations(tree)
@@ -134,8 +139,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         m.copy(body = bodyWithAdditionalLocalVariables)(m.pos, m.info, m.errT)
       }
 
-    this._tree = null
-
     val vprProgram =
       vpr.Program(
         domains = Nil,
@@ -145,7 +148,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         methods = methods
       )()
 
-    (vprProgram, new DefaultErrorBacktranslator)
+    val backtranslator = _errorBacktranslator
+
+    _tree = null
+    _errorBacktranslator = null
+
+    (vprProgram, backtranslator)
   }
 
   def translate(member: PMember): vpr.Member =
@@ -236,7 +244,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       pres = vprPres,
       posts = vprPosts,
       body = vprBody
-    )()
+    )().withSource(procedure)
   }
 
   def translateStandardProcedure(procedure: PProcedure): vpr.Method = {
@@ -270,7 +278,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       pres = pres,
       posts = procedure.posts map (post => translate(post.assertion)),
       body = body
-    )()
+    )().withSource(procedure)
   }
 
   def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
@@ -281,7 +289,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val predicateExp = semanticAnalyser.usedWithRegionPredicate(interference.region)
     val vprRegionState = regionState(predicateExp)
 
-    vpr.AnySetContains(vprRegionState, vprSet)().withSource(interference)
+    val vprRegionConstraint =
+      vpr.AnySetContains(vprRegionState, vprSet)().withSource(interference)
+
+    errorBacktranslator.addReasonTransformer {
+      case vprrea.AssertionFalse(`vprRegionConstraint`) =>
+        s"Interference '$interference' might not hold."
+    }
+
+    vprRegionConstraint
   }
 
   def translate(statement: PStatement): vpr.Stmt = {
@@ -400,6 +416,20 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           surroundWithSectionComments(statement.statementName, exhale)
 
+        case PAssume(assertion) =>
+          var assume = vpr.Inhale(translate(assertion))()
+
+          assume = assume.withSource(statement)
+
+          surroundWithSectionComments(statement.statementName, assume)
+
+        case PAssert(assertion) =>
+          var assert = vpr.Assert(translate(assertion))()
+
+          assert = assert.withSource(statement)
+
+          surroundWithSectionComments(statement.statementName, assert)
+
         case PHavoc(variable) =>
           var vprHavoc = havoc(variable)
 
@@ -517,10 +547,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.PredicateAccessPredicate(
             vpr.PredicateAccess(args map translate, id.name)().withSource(expression),
             vpr.FullPerm()().withSource(expression)
-          )()
+          )().withSource(predicateExp)
 
         case _: RegionEntity =>
-          translateUseOf(predicateExp)
+          val (vprRegionAccess, vprRegionStateConstraint) = translateUseOf(predicateExp)
+
+          vpr.And(vprRegionAccess, vprRegionStateConstraint)().withSource(predicateExp)
 
         case other =>
           sys.error(s"Not yet supported: $other")

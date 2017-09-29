@@ -6,10 +6,15 @@
 
 package viper.voila
 
+import viper.silver
 import viper.silver.{ast => vpr}
 import viper.voila.frontend.{DefaultPrettyPrinter, PAstNode, PrettyPrinter}
+import viper.voila.reporting.VoilaError
 
 package object translator {
+  type ErrorTransformer = PartialFunction[silver.verifier.VerificationError, VoilaError]
+  type ReasonTransformer = PartialFunction[silver.verifier.ErrorReason, String]
+
   implicit class RichViperNode[N <: vpr.Node](node: N) {
     def withSource(source: PAstNode): N = {
       val (pos, info, errT) = node.getPrettyMetadata

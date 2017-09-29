@@ -198,6 +198,8 @@ case class PUnfold(predicate: PIdnUse, arguments: Vector[PExpression])
 
 case class PInhale(assertion: PExpression) extends PGhostStatement { val statementName = "inhale" }
 case class PExhale(assertion: PExpression) extends PGhostStatement { val statementName = "exhale" }
+case class PAssume(assertion: PExpression) extends PGhostStatement { val statementName = "assume" }
+case class PAssert(assertion: PExpression) extends PGhostStatement { val statementName = "assert" }
 case class PHavoc(variable: PIdnUse) extends PGhostStatement { val statementName = "havoc" }
 
 sealed trait PRuleStatement extends PStatement

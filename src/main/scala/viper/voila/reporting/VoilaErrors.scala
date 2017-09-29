@@ -75,3 +75,10 @@ case class PreconditionError(offendingNode: PAstNode, reason: String)
   def id: String = "precondition.error"
   val message: String = s"Precondition might not hold: $reason"
 }
+
+case class AssertionError(offendingNode: PAstNode, reason: String)
+    extends AbstractVerificationError {
+
+  def id: String = "assertion.error"
+  val message: String = s"Assertion might not hold: $reason"
+}

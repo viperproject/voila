@@ -179,6 +179,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PUnfold(predicate, arguments) => "unfold" <+> toDoc(predicate) <> asArguments(arguments)
       case PInhale(assertion) => "inhale" <+> toDoc(assertion)
       case PExhale(assertion) => "exhale" <+> toDoc(assertion)
+      case PAssume(assertion) => "assume" <+> toDoc(assertion)
+      case PAssert(assertion) => "assert" <+> toDoc(assertion)
       case PHavoc(variable) => "havoc" <+> toDoc(variable)
     }
   }
@@ -240,7 +242,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PSetContains(element, set) => parens(toDoc(element) <+> "in" <+> toDoc(set))
       case PConditional(cond, thn, els) =>
         parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
-        
+
       case PIdnExp(id) => toDoc(id)
       case PPredicateExp(predicate, arguments) =>
         toDoc(predicate) <> "(" <> ssep(arguments map toDoc, comma <> space) <> ")"

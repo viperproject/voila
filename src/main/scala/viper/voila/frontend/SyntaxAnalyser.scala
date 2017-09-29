@@ -30,7 +30,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "interference", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
-    "if", "else", "while", "do", "skip", "inhale", "exhale", "havoc",
+    "if", "else", "while", "do", "skip", "inhale", "exhale", "havoc", "assume", "assert",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "Int", "Nat"
   )
@@ -141,6 +141,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "unfold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PUnfold |
     "inhale" ~> expression <~ ";" ^^ PInhale |
     "exhale" ~> expression <~ ";" ^^ PExhale |
+    "assume" ~> expression <~ ";" ^^ PAssume |
+    "assert" ~> expression <~ ";" ^^ PAssert |
     "havoc" ~> idnuse <~ ";" ^^ PHavoc |
     ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     makeAtomic |
