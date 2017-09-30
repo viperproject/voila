@@ -14,7 +14,7 @@ predicate Inv()
 region CAPLock(id r, id a, int* x)
   guards {
     duplicable Z;
-    duplicable K; // [XXX] Wrong modifier: duplicable instead of unique
+    unique K;
   }
   interpretation {
        Lock(a, x, ?v) && G@a
@@ -24,9 +24,9 @@ region CAPLock(id r, id a, int* x)
   state { v }
   actions {
     Z: 0 ~> Set(0, 1);
+    Z: 1 ~> Set(0, 1); // [XXX] Added action: Z also allows to unlock
     K: 1 ~> Set(1, 0);
   }
-
 
 
 
@@ -35,25 +35,21 @@ abstract_atomic void lock(id a, int* x)
   requires Lock(a, x, s) && G@a;
   ensures Lock(a, x, 1) && G@a && s == 0;
 
-void non_atomic_lock01(id r, id a, int* x)
+abstract_atomic void unlock(id a, int* x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures Lock(a, x, 0) && G@a;
+
+
+
+void test01(id r, id a, int* x)
   requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
   //:: ExpectedOutput(postcondition_error:assertion_error)
-  ensures  CAPLock(r, a, x, ?w) && w == 1 && K@r;
+  ensures CAPLock(r, a, x, ?w) && w == 1 && K@r;
 {
   use_atomic
     using CAPLock(r, a, x) with Z@r;
   {
-    lock(a, x);
-  }
-}
-
-void non_atomic_lock02(id r, id a, int* x)
-  requires CAPLock(r, a, x, ?v);
-{
-  use_atomic
-    using CAPLock(r, a, x) with Z@r;
-  {
-    //:: ExpectedOutput(precondition_error:interference_error)
     lock(a, x);
   }
 }

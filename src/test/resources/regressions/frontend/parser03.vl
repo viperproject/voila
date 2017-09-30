@@ -8,5 +8,5 @@ void test02()
   requires true;
 {
   skip
-  //:: ExpectedOutput(parser.error)
+  //:: ExpectedOutput(parser_error)
 }

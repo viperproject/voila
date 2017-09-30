@@ -9,7 +9,7 @@ region Lock(id a, int* x)
     G: 1 ~> Set(1, 0);
   }
 
-predicate Inv() /* Invariant of CAP lock (left abstract) */
+predicate Inv()
 
 region CAPLock(id r, id a, int* x)
   guards {
@@ -46,7 +46,7 @@ void non_atomic_unlock01(id r, id a, int* x)
   use_atomic
     using CAPLock(r, a, x) with K@r;
   {
-    //:: ExpectedOutput(precondition.error)
+    //:: ExpectedOutput(precondition_error:interference_error)
     unlock(a, x);
   }
 }
@@ -54,7 +54,7 @@ void non_atomic_unlock01(id r, id a, int* x)
 void non_atomic_unlock02(id r, id a, int* x)
   requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
   requires Inv();
-  //:: ExpectedOutput(postcondition.error)
+  //:: ExpectedOutput(postcondition_error:region_state_error)
   ensures CAPLock(r, a, x, 0);
 {
   use_atomic
@@ -69,7 +69,7 @@ void non_atomic_unlock02(id r, id a, int* x)
 void non_atomic_unlock03(id r, id a, int* x)
   requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
   requires Inv();
-  //:: ExpectedOutput(postcondition.error)
+  //:: ExpectedOutput(postcondition_error:region_state_error)
   ensures CAPLock(r, a, x, 0);
 {
   use_atomic

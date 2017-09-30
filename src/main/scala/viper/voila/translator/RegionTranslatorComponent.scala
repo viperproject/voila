@@ -8,6 +8,7 @@ package viper.voila.translator
 
 import scala.collection.mutable
 import viper.voila.frontend._
+import viper.voila.reporting.{InsufficientRegionPermissionError, RegionStateError}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
 
@@ -141,7 +142,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                     case vpr.LocalVar(iddef.name) => from /* TODO: Fragile, relies on 'x' being translated to 'x' */
                   }
 
-                case exp =>
+                case _ =>
                   /* Source: e ~> e'
                    * Encode: from == e ? e' : Set(from)
                    */
@@ -259,9 +260,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     errorBacktranslator.addReasonTransformer {
       case vprrea.InsufficientPermission(`vprRegionPredicate`) =>
-        s"Region $regionPredicate might not be accessible."
+        InsufficientRegionPermissionError(regionPredicate)
       case vprrea.AssertionFalse(`vprStateConstraint`) =>
-        s"Region $regionPredicate might not be in the expected state."
+        RegionStateError(regionPredicate)
     }
 
     (vprRegionAccess, vprStateConstraint)

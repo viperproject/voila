@@ -4,6 +4,6 @@ void testAbstractMethod()
 
 void testEmptyMethodBody()
   requires true;
-  //:: ExpectedOutput(postcondition.error)
+  //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures false;
 {}

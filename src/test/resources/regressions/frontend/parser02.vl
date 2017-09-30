@@ -4,6 +4,6 @@ void test01()
 
 void test02()
   requires true
-  //:: ExpectedOutput(parser.error)
+  //:: ExpectedOutput(parser_error)
 {}
 

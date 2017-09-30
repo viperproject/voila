@@ -10,6 +10,7 @@ import scala.collection.breakOut
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
 import viper.voila.frontend._
+import viper.voila.reporting.InterferenceError
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   val returnVarName = "ret"
@@ -293,8 +294,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.AnySetContains(vprRegionState, vprSet)().withSource(interference)
 
     errorBacktranslator.addReasonTransformer {
-      case vprrea.AssertionFalse(`vprRegionConstraint`) =>
-        s"Interference '$interference' might not hold."
+      case vprrea.AssertionFalse(`vprRegionConstraint`) => InterferenceError(interference)
     }
 
     vprRegionConstraint

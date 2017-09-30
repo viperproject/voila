@@ -15,7 +15,7 @@ void test02(id c, int* x)
 void test03(id c, int* x)
   requires Cell(c, x, ?v);
   ensures Cell(c, x, ?w);
-  //:: ExpectedOutput(postcondition.error)
+  //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures v == w;
 {
   skip;

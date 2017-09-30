@@ -7,7 +7,7 @@ region R(id a, bool v)
 void test01(id a)
   requires R(a, true) && X@a;
 {
-  //:: ExpectedOutput(use-atomic.error)
+  //:: ExpectedOutput(use-atomic_error:guard_permission_error)
   use_atomic
     using R(a, true) with Y@a;
   {
@@ -18,7 +18,7 @@ void test01(id a)
 void test02(id a)
   requires R(a, true) && X@a;
 {
-  //:: ExpectedOutput(use-atomic.error)
+  //:: ExpectedOutput(use-atomic_error:region_permission_error)
   use_atomic
     using R(a, false) with X@a;
   {

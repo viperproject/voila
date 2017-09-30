@@ -7,13 +7,13 @@
 package viper.voila
 
 import viper.silver
-import viper.silver.{ast => vpr}
 import viper.voila.frontend.{DefaultPrettyPrinter, PAstNode, PrettyPrinter}
-import viper.voila.reporting.VoilaError
+import viper.voila.reporting.VerificationError
+import viper.silver.{ast => vpr}
 
 package object translator {
-  type ErrorTransformer = PartialFunction[silver.verifier.VerificationError, VoilaError]
-  type ReasonTransformer = PartialFunction[silver.verifier.ErrorReason, String]
+  type ErrorTransformer = PartialFunction[silver.verifier.VerificationError, VerificationError]
+  type ReasonTransformer = PartialFunction[silver.verifier.ErrorReason, VerificationError]
 
   implicit class RichViperNode[N <: vpr.Node](node: N) {
     def withSource(source: PAstNode): N = {

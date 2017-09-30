@@ -7,7 +7,7 @@
 package viper.voila.translator
 
 import viper.voila.frontend._
-import viper.voila.reporting.UseAtomicError
+import viper.voila.reporting.{InsufficientGuardPermissionError, InsufficientRegionPermissionError, MakeAtomicError, RegionStateChangeError, UpdateRegionError, UseAtomicError, liftVerificationErrorToOption}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 
@@ -67,6 +67,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val exhaleGuard =
       vpr.Exhale(guardAccessIfNotDuplicable(makeAtomic.guard))()
+
+    errorBacktranslator.addErrorTransformer {
+      case vprerr.ExhaleFailed(`exhaleGuard`, _: vprrea.InsufficientPermission, _) =>
+        MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
+    }
 
     val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
     // TODO: Actually use computed interference
@@ -177,10 +182,21 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
 
+    errorBacktranslator.addErrorTransformer {
+      case vprerr.UnfoldFailed(`unfoldRegionPredicate`, _: vprrea.InsufficientPermission, _) =>
+        UpdateRegionError(updateRegion, InsufficientRegionPermissionError(updateRegion.regionPredicate))
+    }
+
     val ruleBody = translate(updateRegion.body)
 
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+
+    val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
+    errorBacktranslator.addErrorTransformer {
+      case vprerr.FoldFailed(`foldRegionPredicate`, reason, _) =>
+        UpdateRegionError(updateRegion, ebt.translate(reason))
+    }
 
     val currentState =
       vpr.FuncApp(
@@ -261,7 +277,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     errorBacktranslator.addErrorTransformer {
       case vprerr.AssertFailed(`checkGuard`, _: vprrea.InsufficientPermission, _) =>
-        UseAtomicError(useAtomic, s"Guard ${useAtomic.guard} might not be available")
+        UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
     }
 
     val unfoldRegionPredicate =
@@ -269,13 +285,18 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     errorBacktranslator.addErrorTransformer {
       case vprerr.UnfoldFailed(`unfoldRegionPredicate`, _: vprrea.InsufficientPermission, _) =>
-        UseAtomicError(useAtomic, s"Region predicate ${useAtomic.regionPredicate} might not be available")
+        UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
     }
 
     val ruleBody = translate(useAtomic.body)
 
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+
+    errorBacktranslator.addErrorTransformer {
+      case vprerr.FoldFailed(`unfoldRegionPredicate`, _: vprrea.InsufficientPermission, _) =>
+        UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
+    }
 
     val currentState =
       vpr.FuncApp(
@@ -302,7 +323,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     errorBacktranslator.addErrorTransformer {
       case vprerr.ExhaleFailed(`stateChangePermitted`, _: vprrea.AssertionFalse, _) =>
-        UseAtomicError(useAtomic, s"Performed state change not permitted")
+        UseAtomicError(useAtomic, RegionStateChangeError(useAtomic.body))
     }
 
     val havocs =

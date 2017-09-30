@@ -1,16 +1,16 @@
 int test02(bool b) {
-  //:: ExpectedOutput(typechecker.error)
+  //:: ExpectedOutput(typechecker_error)
   ret := b;
 }
 
 void test03(int* x) {
   bool v;
 
-  //:: ExpectedOutput(typechecker.error)
+  //:: ExpectedOutput(typechecker_error)
   v := *x;
 }
 
 void test04()
-  //:: ExpectedOutput(typechecker.error)
+  //:: ExpectedOutput(typechecker_error)
   requires 0;
 {}

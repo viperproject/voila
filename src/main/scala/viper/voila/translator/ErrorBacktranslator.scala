@@ -12,8 +12,8 @@ import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.reporting._
 
 trait ErrorBacktranslator {
-  def translate(error: silver.verifier.VerificationError): Option[VoilaError]
-  def translate(reason: silver.verifier.ErrorReason): String
+  def translate(error: silver.verifier.VerificationError): Option[VerificationError]
+  def translate(reason: silver.verifier.ErrorReason): Option[VerificationError]
 
   def addErrorTransformer(transformer: ErrorTransformer): Unit
   def addReasonTransformer(transformer: ReasonTransformer): Unit
@@ -36,10 +36,10 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
     }
 
   protected val defaultReasonTransformer: ReasonTransformer = {
-    case vprrea.InsufficientPermission(node) =>
-      s"There might be insufficient permission to ${source(node)}"
-    case vprrea.AssertionFalse(node) =>
-      s"""Assertion "${source(node)}" might not hold"""
+    case vprrea.InsufficientPermission(Source(sourceNode)) =>
+      InsufficientPermissionError(sourceNode)
+    case vprrea.AssertionFalse(Source(sourceNode)) =>
+      AssertionError(sourceNode)
 //      case vprrea.DummyReason =>
 //      case vprrea.InternalReason(offendingNode, explanation) =>
 //      case vprrea.FeatureUnsupported(offendingNode, explanation) =>
@@ -65,12 +65,12 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
   private var errorTransformer = defaultErrorTransformer
   private var reasonTransformer = defaultReasonTransformer
 
-  def translate(error: viper.silver.verifier.VerificationError): Option[VoilaError] = {
+  def translate(error: viper.silver.verifier.VerificationError): Option[VerificationError] = {
     errorTransformer.lift.apply(error)
   }
 
-  def translate(reason: silver.verifier.ErrorReason): String = {
-    reasonTransformer.applyOrElse[silver.verifier.ErrorReason, String](reason, _.readableMessage)
+  def translate(reason: silver.verifier.ErrorReason): Option[VerificationError] = {
+    reasonTransformer.lift.apply(reason)
   }
 
   def addErrorTransformer(transformer: ErrorTransformer): Unit = {
@@ -79,13 +79,6 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
 
   def addReasonTransformer(transformer: ReasonTransformer): Unit = {
     reasonTransformer = transformer.orElse(reasonTransformer)
-  }
-
-  private def source(node: silver.ast.Node): String = {
-    node match {
-      case Source(sourceNode) => sourceNode.pretty
-      case _ => node.toString()
-    }
   }
 }
 
