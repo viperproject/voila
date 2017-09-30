@@ -1,0 +1,27 @@
+region R(id a, bool v)
+  guards { unique X; unique Y; }
+  interpretation { true }
+  state { true }
+  actions { }
+
+void test01(id a)
+  requires R(a, true) && X@a;
+{
+  //:: ExpectedOutput(use-atomic.error)
+  use_atomic
+    using R(a, true) with Y@a;
+  {
+    skip;
+  }
+}
+
+void test02(id a)
+  requires R(a, true) && X@a;
+{
+  //:: ExpectedOutput(use-atomic.error)
+  use_atomic
+    using R(a, false) with X@a;
+  {
+    skip;
+  }
+}

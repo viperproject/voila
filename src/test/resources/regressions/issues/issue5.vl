@@ -1,0 +1,17 @@
+//:: IgnoreFile(/voila/issue/5/)
+
+region R(id a, bool v)
+  guards { unique X; unique Y; }
+  interpretation { true }
+  state { true }
+  actions { }
+
+void test03(id a, id b)
+  requires R(a, true) && X@b;
+{
+  use_atomic
+    using R(a, true) with X@b;
+  {
+    skip;
+  }
+}

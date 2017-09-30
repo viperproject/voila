@@ -1,0 +1,53 @@
+region Lock(id a, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?v && (v == 0 || v == 1)
+  }
+  state { v }
+  actions {
+    G: 0 ~> Set(0, 1);
+    G: 1 ~> Set(1, 0);
+  }
+
+predicate Inv() /* Invariant of CAP lock (left abstract) */
+
+region CAPLock(id r, id a, int* x)
+  guards {
+    duplicable Z;
+    unique K;
+  }
+  interpretation {
+       Lock(a, x, ?v) && G@a // Included in both L(a, x) and U(a, x)
+    && (v == 0 ==> K@r && Inv())
+    && (v == 1 ==> true)
+  }
+  state { v }
+  actions {
+    Z: 0 ~> Set(0); // [XXX] Wrong set: should be {0, 1}
+    K: 1 ~> Set(1); // [XXX] Wrong set: should be {0, 1}
+  }
+
+
+
+abstract_atomic void lock(id a, int* x)
+  interference ?s in Set(0, 1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures Lock(a, x, 1) && G@a && s == 0;
+
+abstract_atomic void unlock(id a, int* x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures Lock(a, x, 0) && G@a;
+
+
+
+void test03(id r, id a, int* x)
+  requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
+{
+  //:: ExpectedOutput(use-atomic.error)
+  use_atomic
+    using CAPLock(r, a, x) with Z@r;
+  {
+    lock(a, x);
+  }
+}
