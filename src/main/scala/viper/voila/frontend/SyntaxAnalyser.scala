@@ -254,7 +254,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val exp40: PackratParser[PExpression] = /* Right-associative */
     "+" ~> exp40 |
-    "-" ~> exp40 ^^ (e => PSub(PIntLit(0), e)) |
+    "-" ~> exp40 ^^ (e => PSub(PIntLit(0).at(e), e)) |
     "!" ~> exp40 ^^ PNot |
     exp0
 
