@@ -7,7 +7,9 @@
 package viper.voila.translator
 
 import viper.voila.frontend._
+import viper.voila.reporting.UseAtomicError
 import viper.silver.{ast => vpr}
+import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   private var lastPreUpdateRegionLabel: vpr.Label = _
@@ -257,8 +259,18 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val checkGuard =
       vpr.Assert(guardAccessIfNotDuplicable(useAtomic.guard))()
 
+    errorBacktranslator.addErrorTransformer {
+      case vprerr.AssertFailed(`checkGuard`, _: vprrea.InsufficientPermission, _) =>
+        UseAtomicError(useAtomic, s"Guard ${useAtomic.guard} might not be available")
+    }
+
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
+
+    errorBacktranslator.addErrorTransformer {
+      case vprerr.UnfoldFailed(`unfoldRegionPredicate`, _: vprrea.InsufficientPermission, _) =>
+        UseAtomicError(useAtomic, s"Region predicate ${useAtomic.regionPredicate} might not be available")
+    }
 
     val ruleBody = translate(useAtomic.body)
 
@@ -287,6 +299,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         )()
       )()
+
+    errorBacktranslator.addErrorTransformer {
+      case vprerr.ExhaleFailed(`stateChangePermitted`, _: vprrea.AssertionFalse, _) =>
+        UseAtomicError(useAtomic, s"Performed state change not permitted")
+    }
 
     val havocs =
       vpr.Seqn(

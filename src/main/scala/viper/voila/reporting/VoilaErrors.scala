@@ -82,3 +82,10 @@ case class AssertionError(offendingNode: PAstNode, reason: String)
   def id: String = "assertion.error"
   val message: String = s"Assertion might not hold: $reason"
 }
+
+case class UseAtomicError(offendingNode: PAstNode, reason: String)
+    extends AbstractVerificationError {
+
+  def id: String = "use-atomic.error"
+  val message: String = s"Use atomic error: $reason"
+}
