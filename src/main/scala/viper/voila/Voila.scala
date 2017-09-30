@@ -154,15 +154,23 @@ class Voila extends StrictLogging {
             methods = preambleProgram.methods ++ translatedProgram.methods
           )(translatedProgram.pos, translatedProgram.info, translatedProgram.errT)
 
-//        programToVerify.checkTransitively match {
-//          case Seq() => /* No errors, all good */
-//          case errors =>
-//            logger.error(s"Generated Viper program has ${errors.length} error(s):")
-//            errors foreach (e => logger.error(s"  ${e.readableMessage}"))
-//
-//            /* TODO: Return Voila errors instead */
-//            return Some(Failure(Vector.empty))
-//        }
+        programToVerify.checkTransitively match {
+          case Seq() => /* No errors, all good */
+          case _errors =>
+            /* TODO: Generated program yields unexpected consistency errors about
+             *       undeclared labels. Find out, why. Could be a Viper error.
+             */
+            val errors =
+              _errors.filterNot(_.readableMessage.contains("found of type Label."))
+
+            if (errors.nonEmpty) {
+              logger.error(s"Generated Viper program has ${errors.length} error(s):")
+              errors foreach (e => logger.error(s"  ${e.readableMessage}"))
+
+              /* TODO: Return Voila errors instead */
+              return Some(Failure(Vector.empty))
+            }
+        }
 
         /* Pretty-print the generated Viper program to a file, if requested */
         config.outputFile.map(new File(_)).foreach(outputFile => {
