@@ -294,7 +294,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.AnySetContains(vprRegionState, vprSet)().withSource(interference)
 
     errorBacktranslator.addReasonTransformer {
-      case vprrea.AssertionFalse(`vprRegionConstraint`) => InterferenceError(interference)
+      case e: vprrea.AssertionFalse if e causedBy vprRegionConstraint => InterferenceError(interference)
     }
 
     vprRegionConstraint

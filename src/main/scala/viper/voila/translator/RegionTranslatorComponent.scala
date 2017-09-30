@@ -259,9 +259,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       )().withSource(regionPredicate)
 
     errorBacktranslator.addReasonTransformer {
-      case vprrea.InsufficientPermission(`vprRegionPredicate`) =>
+      case e: vprrea.InsufficientPermission if e causedBy vprRegionPredicate =>
         InsufficientRegionPermissionError(regionPredicate)
-      case vprrea.AssertionFalse(`vprStateConstraint`) =>
+      case e: vprrea.AssertionFalse if e causedBy vprStateConstraint =>
         RegionStateError(regionPredicate)
     }
 

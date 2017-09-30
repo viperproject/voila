@@ -69,7 +69,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Exhale(guardAccessIfNotDuplicable(makeAtomic.guard))()
 
     errorBacktranslator.addErrorTransformer {
-      case vprerr.ExhaleFailed(`exhaleGuard`, _: vprrea.InsufficientPermission, _) =>
+      case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
         MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
     }
 
@@ -180,22 +180,22 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val label = freshPreUpdateRegionLabel()
 
     val unfoldRegionPredicate =
-      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
+      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))().withSource(updateRegion.regionPredicate)
 
     errorBacktranslator.addErrorTransformer {
-      case vprerr.UnfoldFailed(`unfoldRegionPredicate`, _: vprrea.InsufficientPermission, _) =>
+      case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
         UpdateRegionError(updateRegion, InsufficientRegionPermissionError(updateRegion.regionPredicate))
     }
 
     val ruleBody = translate(updateRegion.body)
 
     val foldRegionPredicate =
-      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))().withSource(updateRegion.regionPredicate)
 
     val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
     errorBacktranslator.addErrorTransformer {
-      case vprerr.FoldFailed(`foldRegionPredicate`, reason, _) =>
-        UpdateRegionError(updateRegion, ebt.translate(reason))
+      case e: vprerr.FoldFailed if e causedBy foldRegionPredicate =>
+        UpdateRegionError(updateRegion, ebt.translate(e.reason))
     }
 
     val currentState =
@@ -276,7 +276,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Assert(guardAccessIfNotDuplicable(useAtomic.guard))()
 
     errorBacktranslator.addErrorTransformer {
-      case vprerr.AssertFailed(`checkGuard`, _: vprrea.InsufficientPermission, _) =>
+      case e: vprerr.AssertFailed if e causedBy checkGuard =>
         UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
     }
 
@@ -284,7 +284,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
 
     errorBacktranslator.addErrorTransformer {
-      case vprerr.UnfoldFailed(`unfoldRegionPredicate`, _: vprrea.InsufficientPermission, _) =>
+      case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
         UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
     }
 
@@ -294,7 +294,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
 
     errorBacktranslator.addErrorTransformer {
-      case vprerr.FoldFailed(`unfoldRegionPredicate`, _: vprrea.InsufficientPermission, _) =>
+      case e: vprerr.FoldFailed if e causedBy unfoldRegionPredicate =>
         UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
     }
 
@@ -322,7 +322,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       )()
 
     errorBacktranslator.addErrorTransformer {
-      case vprerr.ExhaleFailed(`stateChangePermitted`, _: vprrea.AssertionFalse, _) =>
+      case e: vprerr.ExhaleFailed if e causedBy stateChangePermitted =>
         UseAtomicError(useAtomic, RegionStateChangeError(useAtomic.body))
     }
 

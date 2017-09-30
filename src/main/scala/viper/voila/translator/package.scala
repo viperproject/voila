@@ -34,4 +34,9 @@ package object translator {
   }
 
   implicit val prettyPrinter: PrettyPrinter = new DefaultPrettyPrinter
+
+  implicit class RichErrorMessage(error: silver.verifier.ErrorMessage) {
+    def causedBy(node: vpr.Node with vpr.Positioned): Boolean =
+      node == error.offendingNode && node.pos == error.offendingNode.pos
+  }
 }
