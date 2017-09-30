@@ -90,7 +90,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
             stepFromLocation(vprRegionIdArg, regionType),
             vprAtomicityContextX
           )()
-        )()
+        )().withSource(makeAtomic)
 
       val checkTo =
         vpr.Assert(
@@ -101,7 +101,12 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
               Vector(vprRegionIdArg, stepFromLocation(vprRegionIdArg, regionType))
             )()
           )()
-        )()
+        )().withSource(makeAtomic)
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy checkTo =>
+          MakeAtomicError(makeAtomic, RegionStateChangeError(makeAtomic.guard))
+      }
 
       vpr.Seqn(
         Vector(

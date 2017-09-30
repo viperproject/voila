@@ -1,0 +1,62 @@
+region Lock(id a, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?v && 0 <= v // [XXX] Changed constraint: was "v == 0 || v == 1"
+  }
+  state { v }
+  actions {
+    G: 0 ~> Set(0, 1);
+    G: 1 ~> Set(1, 0);
+  }
+
+predicate Inv()
+
+region CAPLock(id r, id a, int* x)
+  guards {
+    duplicable Z;
+    unique K;
+  }
+  interpretation {
+       Lock(a, x, ?v) && G@a
+    && (v == 0 ==> K@r && Inv())
+    && (v == 1 ==> true)
+  }
+  state { v }
+  actions {
+    Z: 0 ~> Set(0, 1);
+    K: 1 ~> Set(1, 0);
+  }
+
+
+
+abstract_atomic void unlock01(id a, int* x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+{
+  make_atomic
+    using Lock(a, x) with G@a;
+  {
+    //:: ExpectedOutput(update-region_error:assertion_error)
+    update_region
+      using Lock(a, x);
+    {
+      *x := -1;
+    }
+  }
+}
+
+abstract_atomic void unlock02(id a, int* x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+{
+  //:: ExpectedOutput(make-atomic_error:region_state_change_error)
+  make_atomic
+    using Lock(a, x) with G@a;
+  {
+    update_region
+      using Lock(a, x);
+    {
+      *x := 2;
+    }
+  }
+}
