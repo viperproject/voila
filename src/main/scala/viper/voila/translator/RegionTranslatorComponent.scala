@@ -110,13 +110,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     guardTransitiveClosureFunctionCache.getOrElseUpdate(
       (guard, region),
       {
-        val fromTyp = translateNonVoid(semanticAnalyser.typ(region.actions.head.from))
-        val toTyp = translateNonVoid(semanticAnalyser.typ(region.actions.head.to))
+        val regionType = translateNonVoid(semanticAnalyser.typ(region.state))
 
         val formalArgs =
           Vector(
             vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))(),
-            vpr.LocalVarDecl("$from", fromTyp)())
+            vpr.LocalVarDecl("$from", regionType)())
 
         val body = {
           val from = formalArgs(1).localVar
@@ -158,7 +157,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.Function(
           name = guardTransitiveClosureFunctionName(guard, region),
           formalArgs = formalArgs,
-          typ = toTyp,
+          typ = vpr.SetType(regionType),
           pres = Vector.empty,
           posts = Vector.empty,
           decs = None,

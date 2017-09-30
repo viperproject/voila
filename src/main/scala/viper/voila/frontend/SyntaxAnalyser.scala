@@ -50,7 +50,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     ("guards" ~> "{" ~> guard.+ <~ "}") ~
     ("interpretation" ~> "{" ~> expression <~ "}") ~
     ("state" ~> "{" ~> expression <~ "}") ~
-    ("actions" ~> "{" ~> action.+ <~ "}") ^^ {
+    ("actions" ~> "{" ~> action.* <~ "}") ^^ {
       case id ~ regionId ~ optArgs ~ guards ~ interpretation ~ abstraction ~ actions =>
         PRegion(
           id,
