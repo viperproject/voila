@@ -349,21 +349,21 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def havocSingleRegionInstance(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
     val regionId = regionArguments.head.asInstanceOf[PIdnExp].id
-    val atomicityContextX = atomicityContextVariable(regionId).localVar
+    val vprRegionArguments = regionArguments map translate
 
-    havocRegionInstances(region, Some((regionArguments map translate, atomicityContextX)))
+    havocRegionInstances(region, Some(vprRegionArguments))
   }
 
   def havocAllRegionsInstances(region: PRegion): vpr.Seqn =
     havocRegionInstances(region, None)
 
   private def havocRegionInstances(region: PRegion,
-                                   specificInstance: Option[(Vector[vpr.Exp], vpr.Exp)])
+                                   specificInstance: Option[Vector[vpr.Exp]])
                                   : vpr.Seqn = {
 
     val (regionId, regionArguments) =
       specificInstance match {
-        case Some((args, _)) =>
+        case Some(args) =>
           (args.head, args)
         case None =>
           val idArg = vpr.LocalVar(s"$$${region.regionId.id.name}")(typ = translateNonVoid(region.regionId.typ))
@@ -507,9 +507,16 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         )()
 
+      val atomicityContextX =
+        vpr.DomainFuncApp(
+          atomicityContextFunction(region),
+          regionArguments,
+          Map.empty[vpr.TypeVar, vpr.Type]
+        )()
+
       val stateConstraint =
-        specificInstance match {
-          case Some((_, atomicityContextX)) =>
+        potentiallyQuantify(
+          body =
             vpr.Implies(
               vpr.And(
                 regionPredicateHeld,
@@ -519,10 +526,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                 state,
                 atomicityContextX
               )()
-            )()
-          case None =>
-            vpr.TrueLit()()
-        }
+            )(),
+          trigger = Some(state))
 
       vpr.Inhale(stateConstraint)()
     }
