@@ -44,7 +44,7 @@ abstract_atomic void unlock(id a, int* x)
 void test01(id r, id a, int* x)
   requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
 {
-  //:: ExpectedOutput(use-atomic_error:region_state_change_error)
+  //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
   use_atomic
     using CAPLock(r, a, x) with Z@r;
   {

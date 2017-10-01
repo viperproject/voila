@@ -27,18 +27,18 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
         AssignmentError(sourceNode, translate(reason))
       case vprerr.AssignmentFailed(Source(sourceNode: PAssign), reason, _) =>
         AssignmentError(sourceNode, translate(reason))
-      case vprerr.PostconditionViolated(Source(sourceNode), _, reason) =>
+      case vprerr.PostconditionViolated(Source(sourceNode: PExpression), _, reason) =>
         PostconditionError(sourceNode, translate(reason))
-      case vprerr.PreconditionInCallFalse(Source(sourceNode), reason, _) =>
+      case vprerr.PreconditionInCallFalse(Source(sourceNode: PProcedureCall), reason, _) =>
         PreconditionError(sourceNode, translate(reason))
-      case vprerr.AssertFailed(Source(sourceNode), reason, _) =>
+      case vprerr.AssertFailed(Source(sourceNode: PExpression), reason, _) =>
         AssertionError(sourceNode, translate(reason))
     }
 
   protected val defaultReasonTransformer: ReasonTransformer = {
-    case vprrea.InsufficientPermission(Source(sourceNode)) =>
+    case vprrea.InsufficientPermission(Source(sourceNode: PExpression)) =>
       InsufficientPermissionError(sourceNode)
-    case vprrea.AssertionFalse(Source(sourceNode)) =>
+    case vprrea.AssertionFalse(Source(sourceNode: PExpression)) =>
       AssertionError(sourceNode)
 //      case vprrea.DummyReason =>
 //      case vprrea.InternalReason(offendingNode, explanation) =>

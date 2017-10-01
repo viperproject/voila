@@ -49,7 +49,7 @@ abstract_atomic void unlock02(id a, int* x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a;
 {
-  //:: ExpectedOutput(make-atomic_error:region_state_change_error)
+  //:: ExpectedOutput(make-atomic_error:illegal_state_change_error)
   make_atomic
     using Lock(a, x) with G@a;
   {

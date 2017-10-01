@@ -7,7 +7,7 @@
 package viper.voila.translator
 
 import viper.voila.frontend._
-import viper.voila.reporting.{InsufficientGuardPermissionError, InsufficientRegionPermissionError, MakeAtomicError, RegionStateChangeError, UpdateRegionError, UseAtomicError, liftVerificationErrorToOption}
+import viper.voila.reporting._
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 
@@ -83,35 +83,50 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprAtomicityContextX = atomicityContextVariable(regionId).localVar
 
+    val vprStepFrom =
+      stepFromLocation(vprRegionIdArg, regionType).withSource(regionId)
+
+    val vprStepTo =
+      stepToLocation(vprRegionIdArg, regionType).withSource(regionId)
+
     val checkUpdatePermitted = {
-      val checkFrom =
+      val vprCheckFrom =
         vpr.Assert(
           vpr.AnySetContains(
-            stepFromLocation(vprRegionIdArg, regionType),
+            vprStepFrom,
             vprAtomicityContextX
           )()
         )().withSource(makeAtomic)
 
-      val checkTo =
+      errorBacktranslator.addErrorTransformer {
+        case e @ vprerr.AssertFailed(_, reason: vprrea.InsufficientPermission, _)
+             if (e causedBy vprCheckFrom) && (reason causedBy vprStepFrom) =>
+
+          MakeAtomicError(makeAtomic)
+            .dueTo(MissingRegionStateChangeError(makeAtomic.regionPredicate))
+            .dueTo(MiscellaneousError("This could be related to issue #8", regionId))
+      }
+
+      val vprCheckTo =
         vpr.Assert(
           vpr.AnySetContains(
-            stepToLocation(vprRegionIdArg, regionType),
+            vprStepTo,
             vpr.FuncApp(
               guardTransitiveClosureFunction(guard, region),
-              Vector(vprRegionIdArg, stepFromLocation(vprRegionIdArg, regionType))
+              Vector(vprRegionIdArg, vprStepFrom)
             )()
           )()
         )().withSource(makeAtomic)
 
       errorBacktranslator.addErrorTransformer {
-        case e: vprerr.AssertFailed if e causedBy checkTo =>
-          MakeAtomicError(makeAtomic, RegionStateChangeError(makeAtomic.guard))
+        case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
+          MakeAtomicError(makeAtomic, IllegalRegionStateChangeError(makeAtomic.guard))
       }
 
       vpr.Seqn(
         Vector(
-          checkFrom,
-          checkTo),
+          vprCheckFrom,
+          vprCheckTo),
         Vector.empty
       )()
     }
@@ -328,7 +343,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy stateChangePermitted =>
-        UseAtomicError(useAtomic, RegionStateChangeError(useAtomic.body))
+        UseAtomicError(useAtomic, IllegalRegionStateChangeError(useAtomic.body))
     }
 
     val havocs =

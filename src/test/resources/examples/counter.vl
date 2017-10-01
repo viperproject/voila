@@ -47,8 +47,7 @@ abstract_atomic int read(id c, int* x)
   ensures Counter(c, x, n) && G@c;
   ensures ret == n;
 {
-  // TODO: this method cannot be verified without angelic choice
-
+  //:: UnexpectedOutput(make-atomic_error:missing_state_change_error, /voila/issue/8/)
   make_atomic
     using Counter(c, x) with G@c;
   {
