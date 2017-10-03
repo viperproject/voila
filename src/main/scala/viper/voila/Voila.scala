@@ -115,7 +115,7 @@ class Voila extends StrictLogging {
             case Some(x) =>
             case None =>
               stop = true
-              println(s"### NO POSITION FOR ${n.getClass.getSimpleName}:\n  $n")
+              logger.error(s"### NO POSITION FOR ${n.getClass.getSimpleName}:\n  $n")
           }
         })
         if (stop) exitWithError("Position problems!", 10)
