@@ -155,6 +155,17 @@ case class UpdateRegionError(offendingNode: PUpdateRegion, detail: Option[Verifi
     copy(offendingNode, detail)
 }
 
+case class OpenRegionError(offendingNode: POpenRegion, detail: Option[VerificationError] = None)
+    extends AbstractVerificationError {
+
+  type OffendingNode = POpenRegion
+  def localId: String = "open-region_error"
+  val localMessage: String = "Rule open-region might fail"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class InsufficientPermissionError(offendingNode: PExpression, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 

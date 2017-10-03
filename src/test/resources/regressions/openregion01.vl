@@ -1,0 +1,44 @@
+region Counter(id c, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?n
+  }
+  state { n }
+  actions {
+    G: ?m ~> Int;
+  }
+
+abstract_atomic int test01(id c, int* x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && G@c;
+{
+  //:: ExpectedOutput(open-region_error:illegal_state_change_error)
+  open_region
+    using Counter(c, x);
+  {
+    *x := n + 1;
+  }
+}
+
+abstract_atomic int test02(id c, int* x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && G@c;
+{
+  open_region
+    using Counter(c, x);
+  {
+    *x := n;
+  }
+}
+
+abstract_atomic int test03(id c, int* x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && G@c;
+{
+  open_region
+    using Counter(c, x);
+  {
+    *x := n;
+    *x := n;
+  }
+}

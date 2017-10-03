@@ -328,25 +328,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  // TODO: Unify fresh label code
-
-  private var lastPreHavocLabel: vpr.Label = _
-  private var preHavocCounter = 0
-
-  def freshPreHavocLabel(): vpr.Label = {
-    preHavocCounter += 1
-
-    val label =
-      vpr.Label(
-        s"pre_havoc_$preHavocCounter",
-        Vector.empty
-      )()
-
-    lastPreHavocLabel = label
-
-    label
-  }
-
   def havocSingleRegionInstance(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
     val regionId = regionArguments.head.asInstanceOf[PIdnExp].id
     val vprRegionArguments = regionArguments map translate
@@ -394,7 +375,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           else
             s"Havocking all held instances of region ${region.id.name}"))
 
-    val preHavocLabel = freshPreHavocLabel()
+    val preHavocLabel = freshLabel("pre_havoc")
 
     /* region_state(args) */
     val state =

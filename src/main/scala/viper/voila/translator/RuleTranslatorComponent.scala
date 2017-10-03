@@ -12,42 +12,6 @@ import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
-  private var lastPreUpdateRegionLabel: vpr.Label = _
-  private var preUpdateRegionCounter = 0
-
-  def freshPreUpdateRegionLabel(): vpr.Label = {
-    preUpdateRegionCounter += 1
-
-    val label =
-      vpr.Label(
-        s"pre_region_update_$preUpdateRegionCounter",
-        Vector.empty
-      )()
-
-    lastPreUpdateRegionLabel = label
-
-    label
-  }
-
-  // TODO: Unify fresh label code
-
-  private var lastPreUseAtomicLabel: vpr.Label = _
-  private var preUseAtomicCounter = 0
-
-  def freshPreUseAtomicLabel(): vpr.Label = {
-    preUseAtomicCounter += 1
-
-    val label =
-      vpr.Label(
-        s"pre_use_atomic_$preUseAtomicCounter",
-        Vector.empty
-      )()
-
-    lastPreUseAtomicLabel = label
-
-    label
-  }
-
   def translate(makeAtomic: PMakeAtomic): vpr.Stmt = {
     val regionArgs = makeAtomic.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
@@ -202,7 +166,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val exhaleDiamond =
       vpr.Exhale(diamondAccess(vprRegionIdArg))()
 
-    val label = freshPreUpdateRegionLabel()
+    val label = freshLabel("pre_region_update")
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))().withSource(updateRegion.regionPredicate)
@@ -232,7 +196,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val oldState =
       vpr.LabelledOld(
         currentState,
-        lastPreUpdateRegionLabel.name
+        label.name
       )()
 
     val stateChanged = vpr.NeCmp(currentState, oldState)()
@@ -295,7 +259,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       semanticAnalyser.entity(useAtomic.guard.guard).asInstanceOf[GuardEntity]
                       .declaration
 
-    val label = freshPreUseAtomicLabel()
+    val label = freshLabel("pre_use_atomic")
 
     val checkGuard =
       vpr.Assert(guardAccessIfNotDuplicable(useAtomic.guard))()
@@ -332,7 +296,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val oldState =
       vpr.LabelledOld(
         currentState,
-        lastPreUseAtomicLabel.name
+        label.name
       )()
 
     val stateChangePermitted =
@@ -382,6 +346,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val (region, vprRegionArgs, None) =
       getAndTranslateRegionPredicateDetails(openRegion.regionPredicate)
 
+    val label = freshLabel("pre_open_region")
+
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
 
@@ -390,12 +356,39 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
 
+    val currentState =
+      vpr.FuncApp(
+        regionStateFunction(region),
+        vprRegionArgs
+      )()
+
+    val oldState =
+      vpr.LabelledOld(
+        currentState,
+        label.name
+      )()
+
+    val stateUnchanged =
+      vpr.Assert(
+        vpr.EqCmp(
+          currentState,
+          oldState
+        )()
+      )()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy stateUnchanged =>
+        OpenRegionError(openRegion, IllegalRegionStateChangeError(openRegion.body))
+    }
+
     val result =
       vpr.Seqn(
         Vector(
+          label,
           unfoldRegionPredicate,
           ruleBody,
-          foldRegionPredicate),
+          foldRegionPredicate,
+          stateUnchanged),
         Vector.empty
       )()
 
