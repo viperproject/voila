@@ -40,8 +40,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
     // TODO: Actually use computed interference
 
-    val havoc1 = havocSingleRegionInstance(region, regionArgs)
-    val havoc2 = havocSingleRegionInstance(region, regionArgs)
+    val (_, havoc1) = havocSingleRegionInstance(region, regionArgs)
+    val (_, havoc2) = havocSingleRegionInstance(region, regionArgs)
 
     val ruleBody = translate(makeAtomic.body)
 
@@ -317,7 +317,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val havocs =
       vpr.Seqn(
-        tree.root.regions.map(region => havocAllRegionsInstances(region)),
+        tree.root.regions.map(region => havocAllRegionsInstances(region)._2),
         Vector.empty
       )()
 

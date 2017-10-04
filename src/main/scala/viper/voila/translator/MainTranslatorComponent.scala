@@ -8,9 +8,9 @@ package viper.voila.translator
 
 import scala.collection.breakOut
 import viper.silver.{ast => vpr}
-import viper.silver.verifier.{reasons => vprrea}
+import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
-import viper.voila.reporting.InterferenceError
+import viper.voila.reporting.{InterferenceError, PreconditionError}
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   val returnVarName = "ret"
@@ -81,32 +81,42 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
   }
 
-  def tmpVars(tree: VoilaTree): Vector[vpr.LocalVarDecl] =
-    tree.root.regions.map(region => temporaryVariable(semanticAnalyser.typ(region.state))).distinct
+  def tmpVars(tree: VoilaTree): Vector[vpr.LocalVarDecl] = {
+    val variables =
+      temporaryVariable(PBoolType()) +:
+      tree.root.regions.map(region => temporaryVariable(semanticAnalyser.typ(region.state)))
+
+    variables.distinct
+  }
 
   def usedHavocs(tree: VoilaTree): Vector[vpr.Method] = {
-    tree.nodes.collect {
-      case PHavoc(variable) =>
-        val vprTyp = translateNonVoid(semanticAnalyser.typ(PIdnExp(variable)))
+    val voilaTypes =
+      PBoolType() +:
+      tree.nodes.collect { case PHavoc(variable) => semanticAnalyser.typ(PIdnExp(variable)) }
 
-        vpr.Method(
-          name = s"havoc_$vprTyp",
-          formalArgs = Vector.empty,
-          formalReturns = Vector(vpr.LocalVarDecl("$r", vprTyp)()),
-          pres = Vector.empty,
-          posts = Vector.empty,
-          body = vpr.Seqn(Vector.empty, Vector.empty)()
-        )()
-    }.distinct
+    val vprTypes = voilaTypes.map(translateNonVoid).distinct
+
+    vprTypes map (typ =>
+      vpr.Method(
+        name = s"havoc_$typ",
+        formalArgs = Vector.empty,
+        formalReturns = Vector(vpr.LocalVarDecl("$r", typ)()),
+        pres = Vector.empty,
+        posts = Vector.empty,
+        body = vpr.Seqn(Vector.empty, Vector.empty)()
+      )()
+    )
   }
 
   def havoc(variable: PIdnUse): vpr.Stmt = {
-    val vprTyp = translateNonVoid(semanticAnalyser.typ(PIdnExp(variable)))
+    havoc(translateUseOf(variable).asInstanceOf[vpr.LocalVar])
+  }
 
+  def havoc(variable: vpr.LocalVar): vpr.Stmt = {
     vpr.MethodCall(
-      s"havoc_$vprTyp",
+      s"havoc_${variable.typ}",
       Vector.empty,
-      Vector(translateUseOf(variable).asInstanceOf[vpr.LocalVar])
+      Vector(variable)
     )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
   }
 
@@ -144,7 +154,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
          )()
     )
 
-    val tmpVarDecls = tmpVars(tree) // TODO: Temp. vars. still needed?
+    val tmpVarDecls = tmpVars(tree)
 
     val fields = members collect { case f: vpr.Field => f }
     val predicates = members collect { case p: vpr.Predicate => p }
@@ -463,12 +473,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           surroundWithSectionComments(statement.statementName, vprHavoc)
 
-        case PProcedureCall(procedureId, arguments, optRhs) =>
+        case call @ PProcedureCall(procedureId, arguments, optRhs) =>
           val procedure =
             semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
-
-          if (procedure.atomicity == PNotAtomic())
-            sys.error("Calling non-atomic procedures is not yet supported.")
 
           val vprArguments = arguments map translate
 
@@ -481,6 +488,75 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 Vector.empty
             }
 
+          val vprInterferenceChecks: vpr.Stmt =
+            procedure.atomicity match {
+              case PNotAtomic() =>
+                sys.error("Calling non-atomic procedures is not yet supported.")
+              case PPrimitiveAtomic() =>
+                vpr.Assert(vpr.TrueLit()())()
+              case PAbstractAtomic() =>
+                val vprChecksPerInterferenceClause =
+                  procedure.inters.map (inter => {
+                    val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
+                    val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
+                    val vprRegionArguments = regionArguments map translate
+
+                    val (vprPreHavocLabel, vprHavoc) =
+                      havocSingleRegionInstance(region, regionArguments)
+
+                    val vprCurrentState =
+                      vpr.FuncApp(
+                        regionStateFunction(region),
+                        vprRegionArguments
+                      )()
+
+                    val vprCheckStateUnchanged =
+                      vpr.Assert(
+                        vpr.AnySetContains(
+                          vprCurrentState,
+                          vpr.LabelledOld(
+                            translate(inter.set),
+                            vprPreHavocLabel.name
+                          )()
+                        )()
+                      )()
+
+                    errorBacktranslator.addErrorTransformer {
+                      case e @ vprerr.AssertFailed(_, reason, _)
+                           if (e causedBy vprCheckStateUnchanged) &&
+                              (reason causedBy vprCheckStateUnchanged.exp) =>
+
+                        PreconditionError(call, InterferenceError(inter))
+                    }
+
+                    vpr.Seqn(
+                      Vector(
+                        vprHavoc,
+                        vprCheckStateUnchanged),
+                      Vector.empty
+                    )()
+                  })
+
+                val vprNonDetChoiceVariable = temporaryVariable(PBoolType()).localVar
+
+                val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
+
+                val vprNonDetCheckBranch =
+                  vpr.If(
+                    vprNonDetChoiceVariable,
+                    vpr.Seqn(
+                      vprChecksPerInterferenceClause :+ vpr.Inhale(vpr.FalseLit()())(),
+                      Vector.empty
+                    )(),
+                    vpr.Seqn(Vector.empty, Vector.empty)()
+                  )()
+
+                vpr.Seqn(
+                  Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
+                  Vector.empty
+                )()
+            }
+
           val vprCall =
             vpr.MethodCall(
               procedure.id.name,
@@ -488,7 +564,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               vprFormalReturns map (_.localVar)
             )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos).withSource(statement)
 
-          surroundWithSectionComments(statement.statementName, vprCall)
+          val result =
+            vpr.Seqn(
+              Vector(vprInterferenceChecks, vprCall),
+              Vector.empty
+            )()
+
+          surroundWithSectionComments(statement.statementName, result)
 
         case stmt: PMakeAtomic => translate(stmt)
         case stmt: PUpdateRegion => translate(stmt)
@@ -537,7 +619,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 //    vpr.Seqn(Vector(havoc), Vector.empty)(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
 
     vpr.Seqn(
-      tree.root.regions.map(region => havocAllRegionsInstances(region)),
+      tree.root.regions.map(region => havocAllRegionsInstances(region)._2),
       Vector.empty
     )()
   }

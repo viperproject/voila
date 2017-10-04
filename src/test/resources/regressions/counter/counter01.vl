@@ -8,15 +8,47 @@ region Counter(id c, int* x)
     G: ?m ~> Int;
   }
 
-abstract_atomic int read(id c, int* x)
+abstract_atomic int read01(id c, int* x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
+  //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures ret == n;
 {
   open_region
     using Counter(c, x);
   {
-    *x := n + 1;
+    skip;
   }
+}
+
+abstract_atomic int read02(id c, int* x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && G@c;
+  ensures ret == n;
+  //:: ExpectedOutput(postcondition_error:region_state_error)
+  ensures Counter(c, x, n) && G@c;
+{
+  open_region
+    using Counter(c, x);
+  {
+    ret := *x;
+  }
+
+  skip;
+}
+
+abstract_atomic int read03(id c, int* x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && G@c;
+  ensures ret == n;
+  ensures Counter(c, x) && G@c;
+{
+  open_region
+    using Counter(c, x);
+  {
+    ret := *x;
+  }
+
+  skip;
 }

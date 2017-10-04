@@ -328,19 +328,19 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def havocSingleRegionInstance(region: PRegion, regionArguments: Vector[PExpression]): vpr.Seqn = {
-    val regionId = regionArguments.head.asInstanceOf[PIdnExp].id
-    val vprRegionArguments = regionArguments map translate
+  def havocSingleRegionInstance(region: PRegion, regionArguments: Vector[PExpression])
+                               : (vpr.Label, vpr.Seqn) = {
 
-    havocRegionInstances(region, Some(vprRegionArguments))
+    havocRegionInstances(region, Some(regionArguments map translate))
   }
 
-  def havocAllRegionsInstances(region: PRegion): vpr.Seqn =
+  def havocAllRegionsInstances(region: PRegion): (vpr.Label, vpr.Seqn) = {
     havocRegionInstances(region, None)
+  }
 
   private def havocRegionInstances(region: PRegion,
                                    specificInstance: Option[Vector[vpr.Exp]])
-                                  : vpr.Seqn = {
+                                  : (vpr.Label, vpr.Seqn) = {
 
     val (regionId, regionArguments) =
       specificInstance match {
@@ -513,13 +513,16 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Inhale(stateConstraint)()
     }
 
-    vpr.Seqn(
-      Vector(
-        preHavocLabel,
-        havocRegion,
-        constrainStateViaGuards,
-        constrainStateViaAtomicityContext),
-      Vector.empty
-    )(info = comment)
+    val havoc =
+      vpr.Seqn(
+        Vector(
+          preHavocLabel,
+          havocRegion,
+          constrainStateViaGuards,
+          constrainStateViaAtomicityContext),
+        Vector.empty
+      )(info = comment)
+
+    (preHavocLabel, havoc)
   }
 }

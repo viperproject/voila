@@ -1,0 +1,89 @@
+region Counter(id c, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?n
+  }
+  state { n }
+  actions {
+    G: ?m ~> Int;
+  }
+
+
+
+abstract_atomic int read01(id c, int* x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && G@c;
+  ensures Counter(c, x, n) && G@c;
+  ensures ret == n;
+{
+  open_region
+    using Counter(c, x);
+  {
+    ret := *x;
+  }
+}
+
+abstract_atomic int read02(id c, int* x)
+  interference ?n in Set[int](n) on c;
+  requires Counter(c, x, n) && G@c;
+  ensures Counter(c, x, n) && G@c;
+  ensures ret == n;
+{
+  open_region
+    using Counter(c, x);
+  {
+    ret := *x;
+  }
+}
+
+
+
+int read01_client01(id c, int* x)
+  requires Counter(c, x, ?n) && G@c;
+  ensures Counter(c, x, n) && G@c;
+  ensures ret == n;
+{
+  ret := read01(c, x);
+}
+
+int read01_client02(id c, int* x)
+  requires Counter(c, x, ?n) && G@c;
+  //:: ExpectedOutput(postcondition_error:assertion_error)
+  ensures ret == n;
+  ensures Counter(c, x, n) && G@c;
+{
+  skip;
+  ret := read01(c, x);
+}
+
+int read01_client03(id c, int* x)
+  requires Counter(c, x, ?n) && G@c;
+  ensures ret == n;
+  //:: ExpectedOutput(postcondition_error:region_state_error)
+  ensures Counter(c, x, n) && G@c;
+{
+  int v;
+  v := read01(c, x);
+  ret := v;
+}
+
+
+
+int read02_client01(id c, int* x)
+  requires Counter(c, x, ?n) && G@c;
+  ensures ret == n;
+  ensures Counter(c, x, n) && G@c;
+{
+  //:: ExpectedOutput(precondition_error:interference_error)
+  ret := read02(c, x);
+}
+
+int read02_client02(id c, int* x)
+  // interference ?n in Set[int](n) on c; // TODO: See Voila issue #14
+  requires Counter(c, x, ?n) && G@c;
+  ensures ret == n;
+  ensures Counter(c, x, n) && G@c;
+{
+  //:: UnexpectedOutput(precondition_error:interference_error, /voila/issue/14/)
+  ret := read02(c, x);
+}

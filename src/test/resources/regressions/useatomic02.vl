@@ -1,0 +1,30 @@
+region Counter(id c, int* x)
+  guards { duplicable G; }
+  interpretation {
+    x |-> ?n
+  }
+  state { n }
+  actions {
+    G: ?m ~> Int;
+  }
+
+abstract_atomic int read(id c, int* x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && G@c;
+  ensures Counter(c, x, n) && G@c;
+  ensures ret == n;
+{
+  open_region
+    using Counter(c, x);
+  {
+    ret := *x;
+  }
+}
+
+void test01(id c, int* x)
+  requires Counter(c, x, ?n) && G@c;
+{
+  int v;
+  v := read(c, x);
+  assert v == n;
+}
