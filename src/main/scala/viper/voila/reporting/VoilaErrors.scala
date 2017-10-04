@@ -193,7 +193,7 @@ case class InterferenceError(offendingNode: PInterferenceClause, detail: Option[
 
   type OffendingNode = PInterferenceClause
   def localId: String = "interference_error"
-  val localMessage: String = s"Interference '$offendingNode' might not hold"
+  val localMessage: String = s"Interference clause '$offendingNode' might not hold"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)
@@ -263,7 +263,6 @@ case class MissingRegionStateChangeError(offendingNode: PPredicateExp, detail: O
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)
 }
-
 
 case class MiscellaneousError(localMessage: String,
                               offendingNode: PAstNode,
