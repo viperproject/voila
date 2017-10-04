@@ -27,7 +27,7 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
         AssignmentError(sourceNode, translate(reason))
       case vprerr.AssignmentFailed(Source(sourceNode: PAssign), reason, _) =>
         AssignmentError(sourceNode, translate(reason))
-      case vprerr.PostconditionViolated(Source(sourceNode: PExpression), _, reason) =>
+      case vprerr.PostconditionViolated(Source(sourceNode: PExpression), _, reason, _) =>
         PostconditionError(sourceNode, translate(reason))
       case vprerr.PreconditionInCallFalse(Source(sourceNode: PProcedureCall), reason, _) =>
         PreconditionError(sourceNode, translate(reason))
