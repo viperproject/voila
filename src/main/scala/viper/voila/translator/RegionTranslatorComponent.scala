@@ -386,8 +386,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           else
             s"Havocking all held instances of region ${region.id.name}"))
 
-//    val preHavocLabel = freshLabel("pre_havoc")
-
     /* region_state(args) */
     val state =
       vpr.FuncApp(
@@ -528,15 +526,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
       vpr.Inhale(stateConstraint)()
     }
-
-//    val havoc =
-//      vpr.Seqn(
-//        Vector(
-//          havocRegion,
-//          constrainStateViaGuards,
-//          constrainStateViaAtomicityContext),
-//        Vector.empty
-//      )(info = comment)
 
     RegionHavocCode(
       comment,

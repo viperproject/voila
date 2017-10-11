@@ -40,9 +40,6 @@ void non_atomic_unlock01(id r, id a, int* x)
 {
   skip;
 
-  // Havoc CAPLock region. Since K is incorrectly marked as duplicable,
-  // holding K does not guarantee that the region's state won't change.
-
   use_atomic
     using CAPLock(r, a, x) with K@r;
   {
@@ -54,12 +51,11 @@ void non_atomic_unlock01(id r, id a, int* x)
 void non_atomic_unlock02(id r, id a, int* x)
   requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
   requires Inv();
-  //:: ExpectedOutput(postcondition_error:region_state_error)
-  ensures CAPLock(r, a, x, 0);
 {
   use_atomic
     using CAPLock(r, a, x) with K@r;
   {
+    //:: ExpectedOutput(precondition_error:interference_error)
     unlock(a, x);
   }
 
@@ -69,12 +65,11 @@ void non_atomic_unlock02(id r, id a, int* x)
 void non_atomic_unlock03(id r, id a, int* x)
   requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
   requires Inv();
-  //:: ExpectedOutput(postcondition_error:region_state_error)
-  ensures CAPLock(r, a, x, 0);
 {
   use_atomic
     using CAPLock(r, a, x) with K@r;
   {
+    //:: ExpectedOutput(precondition_error:interference_error)
     unlock(a, x);
   }
 }

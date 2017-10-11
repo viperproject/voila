@@ -12,7 +12,7 @@ import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
-  protected var currentlyOpenRegions: List[(PRegion, Vector[vpr.Exp])] = List.empty
+  protected var currentlyOpenRegions: List[(PRegion, Vector[PExpression], vpr.Label)] = List.empty
     /* Important: use as a stack! */
 
   def translate(makeAtomic: PMakeAtomic): vpr.Stmt = {
@@ -256,9 +256,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(useAtomic: PUseAtomic): vpr.Stmt = {
-    val (region, vprRegionArgs, None) =
-      getAndTranslateRegionPredicateDetails(useAtomic.regionPredicate)
-
+    val (region, regionArgs, None) =
+      getRegionPredicateDetails(useAtomic.regionPredicate)
+    val vprRegionArgs = regionArgs map translate
     val vprRegionIdArg = vprRegionArgs.head
 
     val guard =
@@ -283,9 +283,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
     }
 
-    currentlyOpenRegions = (region, vprRegionArgs) :: currentlyOpenRegions
+    currentlyOpenRegions = (region, regionArgs, preUseAtomicLabel) :: currentlyOpenRegions
     val ruleBody = translate(useAtomic.body)
-    assert(currentlyOpenRegions.head == (region, vprRegionArgs))
+    assert(currentlyOpenRegions.head == (region, regionArgs, preUseAtomicLabel))
     currentlyOpenRegions = currentlyOpenRegions.tail
 
     val foldRegionPredicate =
@@ -355,17 +355,17 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(openRegion: POpenRegion): vpr.Stmt = {
-    val (region, vprRegionArgs, None) =
-      getAndTranslateRegionPredicateDetails(openRegion.regionPredicate)
-
-    val label = freshLabel("pre_open_region")
+    val (region, regionArgs, None) =
+      getRegionPredicateDetails(openRegion.regionPredicate)
+    val vprRegionArgs = regionArgs map translate
+    val preOpenLabel = freshLabel("pre_open_region")
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
 
-    currentlyOpenRegions = (region, vprRegionArgs) :: currentlyOpenRegions
+    currentlyOpenRegions = (region, regionArgs, preOpenLabel) :: currentlyOpenRegions
     val ruleBody = translate(openRegion.body)
-    assert(currentlyOpenRegions.head == (region, vprRegionArgs))
+    assert(currentlyOpenRegions.head == (region, regionArgs, preOpenLabel))
     currentlyOpenRegions = currentlyOpenRegions.tail
 
     val foldRegionPredicate =
@@ -380,7 +380,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val oldState =
       vpr.LabelledOld(
         currentState,
-        label.name
+        preOpenLabel.name
       )()
 
     val stateUnchanged =
@@ -399,7 +399,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val result =
       vpr.Seqn(
         Vector(
-          label,
+          preOpenLabel,
           unfoldRegionPredicate,
           ruleBody,
           foldRegionPredicate,
