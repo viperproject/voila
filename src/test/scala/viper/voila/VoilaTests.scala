@@ -7,11 +7,13 @@
 package viper.voila
 
 import java.nio.file.Path
+
 import org.scalatest.BeforeAndAfterAll
 import viper.silver
 import viper.voila.frontend.Config
 import viper.voila.reporting.{Failure, Success, VoilaError}
 import viper.silver.testing._
+import viper.silver.utility.TimingUtils
 
 class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
   val testDirectories: Seq[String] = Vector("regressions", "examples")

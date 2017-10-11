@@ -328,19 +328,30 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def havocSingleRegionInstance(region: PRegion, regionArguments: Vector[PExpression])
-                               : (vpr.Label, vpr.Seqn) = {
+  def havocSingleRegionInstance(region: PRegion,
+                                regionArguments: Vector[PExpression],
+                                preLabel: vpr.Label,
+                                oldStateSnapshots: Option[(vpr.LocalVar, vpr.LocalVar)])
+                               : RegionHavocCode = {
 
-    havocRegionInstances(region, Some(regionArguments map translate))
+    havocRegionInstances(region, Some(regionArguments map translate), preLabel, oldStateSnapshots)
   }
 
-  def havocAllRegionsInstances(region: PRegion): (vpr.Label, vpr.Seqn) = {
-    havocRegionInstances(region, None)
+  def havocAllRegionsInstances(region: PRegion, preLabel: vpr.Label): RegionHavocCode = {
+    havocRegionInstances(region, None, preLabel, None)
   }
 
-  private def havocRegionInstances(region: PRegion,
-                                   specificInstance: Option[Vector[vpr.Exp]])
-                                  : (vpr.Label, vpr.Seqn) = {
+  /* TODO: Refactor */
+  def havocRegionInstances(region: PRegion,
+                           specificInstance: Option[Vector[vpr.Exp]],
+                           preLabel: vpr.Label,
+                           oldStateSnapshots: Option[(vpr.LocalVar, vpr.LocalVar)])
+                          : RegionHavocCode = {
+
+    require(oldStateSnapshots.isEmpty || specificInstance.nonEmpty,
+            s"It is currently not possible to havoc all instances of a particular region " +
+            s"(argument 'specificInstance' is 'None') while using an old state snapshots " +
+            s"(argument 'oldStateSnapshots' is '$oldStateSnapshots')")
 
     val (regionId, regionArguments) =
       specificInstance match {
@@ -375,7 +386,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           else
             s"Havocking all held instances of region ${region.id.name}"))
 
-    val preHavocLabel = freshLabel("pre_havoc")
+//    val preHavocLabel = freshLabel("pre_havoc")
 
     /* region_state(args) */
     val state =
@@ -383,9 +394,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         regionStateFunction(region),
         regionArguments)()
 
-    /* old[pre_havoc](region_state(args)) */
     val preHavocState =
-      vpr.LabelledOld(state, preHavocLabel.name)()
+      oldStateSnapshots match {
+        case None => vpr.LabelledOld(state, preLabel.name)()
+        case Some((variable, _)) => variable
+      }
 
     /* region(args) */
     val regionPredicateInstance =
@@ -397,9 +410,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     /* perm(region(args)) */
     val currentPermissions = vpr.CurrentPerm(regionPredicateInstance)()
 
-    /* old[pre_havoc](perm(region(args))) */
     val preHavocPermissions =
-      vpr.LabelledOld(currentPermissions, preHavocLabel.name)()
+      oldStateSnapshots match {
+        case None => vpr.LabelledOld(currentPermissions, preLabel.name)()
+        case Some((_, variable)) => variable
+      }
 
     /* acc(region(args), p) */
     def regionPredicateAccess(p: vpr.Exp) =
@@ -418,13 +433,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         )()
 
     /* exhale region(args);  inhale region(args) */
-    val havocRegion =
-      vpr.Seqn(
-        Vector(
-          vpr.Exhale(potentiallyQuantify(regionPredicateAccess(currentPermissions), None))(),
-          vpr.Inhale(potentiallyQuantify(regionPredicateAccess(preHavocPermissions), None))()),
-        Vector.empty
-      )()
+    val vprExhaleRegion =
+      vpr.Exhale(potentiallyQuantify(regionPredicateAccess(currentPermissions), None))()
+
+    val vprInhaleRegion =
+      vpr.Inhale(potentiallyQuantify(regionPredicateAccess(preHavocPermissions), None))()
 
     def potentialStateValuesPerGuard(guard: PGuardDecl): vpr.Exp = {
       val potentiallyHeld =
@@ -432,11 +445,14 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             guardPotentiallyHeldFunction(guard, region),
             Vector(
               regionId,
-              vpr.CurrentPerm(
-                vpr.PredicateAccess(
-                  Vector(regionId),
-                  guardPredicate(guard, region).name
-                )()
+              vpr.LabelledOld(
+                vpr.CurrentPerm(
+                  vpr.PredicateAccess(
+                    Vector(regionId),
+                    guardPredicate(guard, region).name
+                  )()
+                )(),
+                preLabel.name
               )())
           )()
 
@@ -513,16 +529,37 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Inhale(stateConstraint)()
     }
 
-    val havoc =
-      vpr.Seqn(
-        Vector(
-          preHavocLabel,
-          havocRegion,
-          constrainStateViaGuards,
-          constrainStateViaAtomicityContext),
-        Vector.empty
-      )(info = comment)
+//    val havoc =
+//      vpr.Seqn(
+//        Vector(
+//          havocRegion,
+//          constrainStateViaGuards,
+//          constrainStateViaAtomicityContext),
+//        Vector.empty
+//      )(info = comment)
 
-    (preHavocLabel, havoc)
+    RegionHavocCode(
+      comment,
+      vprExhaleRegion,
+      vprInhaleRegion,
+      constrainStateViaGuards,
+      constrainStateViaAtomicityContext)
   }
+}
+
+case class RegionHavocCode(leadingComment: vpr.SimpleInfo,
+                           exhale: vpr.Exhale,
+                           inhale: vpr.Inhale,
+                           constrainStateViaGuards: vpr.Inhale,
+                           constrainStateViaAtomicityContext: vpr.Inhale) {
+
+  val asSeqn: vpr.Seqn =
+    vpr.Seqn(
+      Vector(
+        exhale,
+        inhale,
+        constrainStateViaGuards,
+        constrainStateViaAtomicityContext),
+      Vector.empty
+    )(info = leadingComment)
 }

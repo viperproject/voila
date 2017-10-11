@@ -12,6 +12,9 @@ import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
+  protected var currentlyOpenRegions: List[(PRegion, Vector[vpr.Exp])] = List.empty
+    /* Important: use as a stack! */
+
   def translate(makeAtomic: PMakeAtomic): vpr.Stmt = {
     val regionArgs = makeAtomic.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
@@ -37,11 +40,12 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
     }
 
-    val interference = semanticAnalyser.interferenceSpecifications(makeAtomic).head
-    // TODO: Actually use computed interference
 
-    val (_, havoc1) = havocSingleRegionInstance(region, regionArgs)
-    val (_, havoc2) = havocSingleRegionInstance(region, regionArgs)
+    val preHavocLabel1 = freshLabel("pre_havoc")
+    val havoc1 = havocSingleRegionInstance(region, regionArgs, preHavocLabel1, None).asSeqn
+
+    val preHavocLabel2 = freshLabel("pre_havoc")
+    val havoc2 = havocSingleRegionInstance(region, regionArgs, preHavocLabel2, None).asSeqn
 
     val ruleBody = translate(makeAtomic.body)
 
@@ -141,9 +145,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           inhaleDiamond,
           exhaleGuard,
+          preHavocLabel1,
           havoc1,
           ruleBody,
           checkUpdatePermitted,
+          preHavocLabel2,
           havoc2,
           BLANK_LINE,
           assumeCurrentStateIsStepTo,
@@ -259,7 +265,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       semanticAnalyser.entity(useAtomic.guard.guard).asInstanceOf[GuardEntity]
                       .declaration
 
-    val label = freshLabel("pre_use_atomic")
+    val preUseAtomicLabel = freshLabel("pre_use_atomic")
 
     val checkGuard =
       vpr.Assert(guardAccessIfNotDuplicable(useAtomic.guard))()
@@ -277,7 +283,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
     }
 
+    currentlyOpenRegions = (region, vprRegionArgs) :: currentlyOpenRegions
     val ruleBody = translate(useAtomic.body)
+    assert(currentlyOpenRegions.head == (region, vprRegionArgs))
+    currentlyOpenRegions = currentlyOpenRegions.tail
 
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
@@ -296,7 +305,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val oldState =
       vpr.LabelledOld(
         currentState,
-        label.name
+        preUseAtomicLabel.name
       )()
 
     val stateChangePermitted =
@@ -315,21 +324,24 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UseAtomicError(useAtomic, IllegalRegionStateChangeError(useAtomic.body))
     }
 
+    val preHavocLabel = freshLabel("pre_havoc")
+
     val havocs =
       vpr.Seqn(
-        tree.root.regions.map(region => havocAllRegionsInstances(region)._2),
+        tree.root.regions.map(region => havocAllRegionsInstances(region, preHavocLabel).asSeqn),
         Vector.empty
       )()
 
     val result =
       vpr.Seqn(
         Vector(
-          label,
+          preUseAtomicLabel,
           checkGuard,
           unfoldRegionPredicate,
           ruleBody,
           foldRegionPredicate,
           stateChangePermitted,
+          preHavocLabel,
           havocs),
               /* TODO: Havocking after use-atomic is in general too eager.
                *       Instead, we want to havoc if an atomic-triple-rule is used
@@ -351,7 +363,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
 
+    currentlyOpenRegions = (region, vprRegionArgs) :: currentlyOpenRegions
     val ruleBody = translate(openRegion.body)
+    assert(currentlyOpenRegions.head == (region, vprRegionArgs))
+    currentlyOpenRegions = currentlyOpenRegions.tail
 
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()

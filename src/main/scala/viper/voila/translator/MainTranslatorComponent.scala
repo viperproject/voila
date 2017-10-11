@@ -57,9 +57,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       Vector.empty
     )(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
 
-  def temporaryVariable(typ: PType): vpr.LocalVarDecl =
-    vpr.LocalVarDecl(s"$$tmp_$typ", translateNonVoid(typ))()
-
   val atomicityContextsDomainName: String = "$AtomicityContexts"
 
   def atomicityContextFunctionName(regionName: String): String =
@@ -81,12 +78,17 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
   }
 
-  def tmpVars(tree: VoilaTree): Vector[vpr.LocalVarDecl] = {
-    val variables =
-      temporaryVariable(PBoolType()) +:
-      tree.root.regions.map(region => temporaryVariable(semanticAnalyser.typ(region.state)))
+  protected var collectedVariableDeclarations: Vector[vpr.LocalVarDecl] = Vector.empty
 
-    variables.distinct
+  def declareFreshVariable(typ: PType, basename: String): vpr.LocalVarDecl =
+    declareFreshVariable(translateNonVoid(typ), basename)
+
+  def declareFreshVariable(typ: vpr.Type, basename: String): vpr.LocalVarDecl = {
+    val decl = vpr.LocalVarDecl(s"$$$basename${collectedVariableDeclarations.length}", typ)()
+
+    collectedVariableDeclarations = collectedVariableDeclarations :+ decl
+
+    decl
   }
 
   def usedHavocs(tree: VoilaTree): Vector[vpr.Method] = {
@@ -154,22 +156,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
          )()
     )
 
-    val tmpVarDecls = tmpVars(tree)
-
     val fields = members collect { case f: vpr.Field => f }
     val predicates = members collect { case p: vpr.Predicate => p }
     val functions = members collect { case f: vpr.Function => f }
     val domains = members collect { case d: vpr.Domain => d }
-
-    val methods =
-      members collect { case m: vpr.Method =>
-        val bodyWithAdditionalLocalVariables =
-          m.body.copy(
-            scopedDecls = tmpVarDecls ++ m.body.scopedDecls
-          )(m.body.pos, m.body.info, m.body.errT)
-
-        m.copy(body = bodyWithAdditionalLocalVariables)(m.pos, m.info, m.errT)
-      }
+    val methods = members collect { case m: vpr.Method => m }
 
     val vprProgram =
       vpr.Program(
@@ -204,17 +195,31 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(procedure: PProcedure): vpr.Method = {
-    procedure.atomicity match {
-      case PAbstractAtomic() =>
-        logger.debug(s"\nTranslating abstract-atomic procedure ${procedure.id.name}")
-        translateAbstractlyAtomicProcedure(procedure)
-      case PNotAtomic() =>
-        logger.debug(s"\nTranslating non-atomic procedure ${procedure.id.name}")
-        translateStandardProcedure(procedure)
-      case PPrimitiveAtomic() =>
-        logger.debug(s"\nTranslating primitive-atomic procedure ${procedure.id.name}")
-        translateStandardProcedure(procedure)
+    assert(collectedVariableDeclarations.isEmpty)
+
+    val vprMethod =
+      procedure.atomicity match {
+        case PAbstractAtomic() =>
+          logger.debug(s"\nTranslating abstract-atomic procedure ${procedure.id.name}")
+          translateAbstractlyAtomicProcedure(procedure)
+        case PNotAtomic() =>
+          logger.debug(s"\nTranslating non-atomic procedure ${procedure.id.name}")
+          translateStandardProcedure(procedure)
+        case PPrimitiveAtomic() =>
+          logger.debug(s"\nTranslating primitive-atomic procedure ${procedure.id.name}")
+          translateStandardProcedure(procedure)
     }
+
+    val bodyWithCollectedVariableDeclarations =
+      vprMethod.body.copy(
+        scopedDecls = vprMethod.body.scopedDecls ++ collectedVariableDeclarations
+      )(vprMethod.body.pos, vprMethod.body.info, vprMethod.body.errT)
+
+    collectedVariableDeclarations = Vector.empty
+
+    vprMethod.copy(
+      body = bodyWithCollectedVariableDeclarations
+    )(vprMethod.pos, vprMethod.info, vprMethod.errT)
   }
 
   def translateAbstractlyAtomicProcedure(procedure: PProcedure): vpr.Method = {
@@ -474,7 +479,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           surroundWithSectionComments(statement.statementName, vprHavoc)
 
         case call @ PProcedureCall(procedureId, arguments, optRhs) =>
-          val procedure =
+          val callee =
             semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
 
           val vprArguments = arguments map translate
@@ -489,20 +494,119 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             }
 
           val vprInterferenceChecks: vpr.Stmt =
-            procedure.atomicity match {
+            callee.atomicity match {
               case PNotAtomic() =>
                 sys.error("Calling non-atomic procedures is not yet supported.")
               case PPrimitiveAtomic() =>
                 vpr.Assert(vpr.TrueLit()())()
               case PAbstractAtomic() =>
-                val vprChecksPerInterferenceClause =
-                  procedure.inters.map (inter => {
+                /* Save abstract state of currently open regions by temporarily folding the open
+                 * region predicates back up.
+                 *
+                 * TODO: This approach is probably incomplete, e.g. the folding might fail, and
+                 *       could result in hard-to-understand verification failures, but it should
+                 *       be sound and also complete enough for the examples from the TaDA paper.
+                 */
+
+                def generateOpenRegionStateSavingCode(from: List[(PRegion, Vector[vpr.Exp])])
+                                                     : (Vector[vpr.Stmt],
+                                                        Map[(PRegion, Vector[vpr.Exp]), vpr.LocalVar]) = {
+
+                  from match {
+                    case Nil =>
+                      (Vector.empty, Map.empty)
+                    case (region, vprRegionArguments) :: tail =>
+                      val vprRegionAccess = regionPredicateAccess(region, vprRegionArguments)
+
+                      val vprCurrentState =
+                        vpr.FuncApp(
+                          regionStateFunction(region),
+                          vprRegionArguments
+                        )()
+
+                      val vprTmpVarDecl =
+                        declareFreshVariable(vprCurrentState.typ, vprCurrentState.funcname)
+
+                      val vprCodePre =
+                        Vector(
+                          vpr.Fold(vprRegionAccess)(),
+                          vpr.LocalVarAssign(
+                            vprTmpVarDecl.localVar,
+                            vprCurrentState
+                          )())
+
+                      val vprCodePost = Vector(vpr.Unfold(vprRegionAccess)())
+
+                      val (vprCodeTail, localVarsTail) = generateOpenRegionStateSavingCode(tail)
+
+                      val vprCode = vprCodePre ++ vprCodeTail ++ vprCodePost
+
+                      val localVars =
+                        localVarsTail + ((region, vprRegionArguments) -> vprTmpVarDecl.localVar)
+
+                      (vprCode, localVars)
+                  }
+                }
+
+                val vprPreHavocLabel = freshLabel("pre_havoc")
+
+                val (vprSaveOpenRegionStates, openRegionStateSnapshots) =
+                  generateOpenRegionStateSavingCode(currentlyOpenRegions)
+
+                val havocRegionsCode =
+                  callee.inters.map (inter => {
+                    val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
+                    val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
+
+                    havocSingleRegionInstance(region, regionArguments, vprPreHavocLabel, None)
+                  })
+
+                def generateOpenRegionStateConstrainingCode(from: List[(PRegion, Vector[vpr.Exp])])
+                                                           : Vector[vpr.Stmt] = {
+
+                  from match {
+                    case Nil =>
+                      Vector.empty
+                    case (region, vprRegionArguments) :: tail =>
+                      val vprRegionAccess = regionPredicateAccess(region, vprRegionArguments)
+
+                      val vprCurrentState =
+                        vpr.FuncApp(
+                          regionStateFunction(region),
+                          vprRegionArguments
+                        )()
+
+                      val vprTmpVarDecl =
+                        declareFreshVariable(vprCurrentState.typ, vprCurrentState.funcname)
+
+                      val havocRegionCode =
+                        havocRegionInstances(
+                          region,
+                          Some(vprRegionArguments),
+                          vprPreHavocLabel,
+                          Some((openRegionStateSnapshots(region, vprRegionArguments), null)))
+                                /* TODO: Don't pass null */
+
+                      val vprCodePre =
+                        Vector(
+                          vpr.Fold(vprRegionAccess)(),
+                          havocRegionCode.constrainStateViaGuards,
+                          havocRegionCode.constrainStateViaAtomicityContext)
+
+                      val vprCodePost = Vector(vpr.Unfold(vprRegionAccess)())
+
+                      vprCodePre ++ generateOpenRegionStateConstrainingCode(tail) ++ vprCodePost
+                  }
+                }
+
+                val vprConstraintOpenRegionStates =
+                  generateOpenRegionStateConstrainingCode(currentlyOpenRegions)
+
+                val vprCheckInterferences =
+                  callee.inters.map (inter => {
                     val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
                     val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
                     val vprRegionArguments = regionArguments map translate
-
-                    val (vprPreHavocLabel, vprHavoc) =
-                      havocSingleRegionInstance(region, regionArguments)
 
                     val vprCurrentState =
                       vpr.FuncApp(
@@ -529,23 +633,27 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                         PreconditionError(call, InterferenceError(inter))
                     }
 
-                    vpr.Seqn(
-                      Vector(
-                        vprHavoc,
-                        vprCheckStateUnchanged),
-                      Vector.empty
-                    )()
+                    vprCheckStateUnchanged
                   })
 
-                val vprNonDetChoiceVariable = temporaryVariable(PBoolType()).localVar
+                val vprNonDetChoiceVariable = declareFreshVariable(PBoolType(), "nondet").localVar
 
                 val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
 
+                // TODO: Inject code comments
                 val vprNonDetCheckBranch =
                   vpr.If(
                     vprNonDetChoiceVariable,
                     vpr.Seqn(
-                      vprChecksPerInterferenceClause :+ vpr.Inhale(vpr.FalseLit()())(),
+                      Vector(vprPreHavocLabel) ++
+                      vprSaveOpenRegionStates ++
+                      havocRegionsCode.flatMap(c => Vector(c.exhale, c.inhale)) ++
+                      havocRegionsCode.flatMap(c => Vector(c.constrainStateViaGuards, c.constrainStateViaAtomicityContext)) ++
+                      vprConstraintOpenRegionStates ++
+                      vprCheckInterferences :+
+//                      vprSaveOpenRegionStates ++
+//                      vprChecksPerInterferenceClause :+
+                      vpr.Inhale(vpr.FalseLit()())(),
                       Vector.empty
                     )(),
                     vpr.Seqn(Vector.empty, Vector.empty)()
@@ -555,11 +663,90 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
                   Vector.empty
                 )()
+
+
+//                val vprChecksPerInterferenceClause =
+//                  callee.inters.map (inter => {
+//                    val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
+//                    val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
+//                    val vprRegionArguments = regionArguments map translate
+//
+//                    val vprCurrentState =
+//                      vpr.FuncApp(
+//                        regionStateFunction(region),
+//                        vprRegionArguments
+//                      )()
+//
+////                    val vprCheck =
+////                      vpr.Assert(
+////                        vpr.AnySetContains(
+////                          vprCurrentState,
+////                          translate(inter.set)
+////                        )()
+////                      )()
+//
+////                    /* return */ vprCheck
+//
+//                    val (vprPreHavocLabel, vprHavoc) =
+//                      havocSingleRegionInstance(region, regionArguments)
+//
+//                    val vprCheckStateUnchanged =
+//                      vpr.Assert(
+//                        vpr.AnySetContains(
+//                          vprCurrentState,
+//                          vpr.LabelledOld(
+//                            translate(inter.set),
+//                            vprPreHavocLabel.name
+//                          )()
+//                        )()
+//                      )()
+//
+//                    errorBacktranslator.addErrorTransformer {
+//                      case e @ vprerr.AssertFailed(_, reason, _)
+//                           if (e causedBy vprCheckStateUnchanged) &&
+//                              (reason causedBy vprCheckStateUnchanged.exp) =>
+//
+//                        PreconditionError(call, InterferenceError(inter))
+//                    }
+//
+//                    vpr.Seqn(
+//                      Vector(
+//                        vprHavoc,
+//                        vprCheckStateUnchanged),
+//                      Vector.empty
+//                    )()
+//                  })
+//
+////                /* return */ vpr.Seqn(
+////                  vprChecksPerInterferenceClause,
+////                  Vector.empty
+////                )()
+//
+//                val vprNonDetChoiceVariable = declareFreshVariable(PBoolType(), "nondet").localVar
+//
+//                val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
+//
+//                val vprNonDetCheckBranch =
+//                  vpr.If(
+//                    vprNonDetChoiceVariable,
+//                    vpr.Seqn(
+//                      vprSaveOpenRegionStates ++
+//                      vprChecksPerInterferenceClause :+
+//                      vpr.Inhale(vpr.FalseLit()())(),
+//                      Vector.empty
+//                    )(),
+//                    vpr.Seqn(Vector.empty, Vector.empty)()
+//                  )()
+//
+//                vpr.Seqn(
+//                  Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
+//                  Vector.empty
+//                )()
             }
 
           val vprCall =
             vpr.MethodCall(
-              procedure.id.name,
+              callee.id.name,
               vprArguments,
               vprFormalReturns map (_.localVar)
             )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos).withSource(statement)
@@ -618,8 +805,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 //
 //    vpr.Seqn(Vector(havoc), Vector.empty)(info = vpr.SimpleInfo(Vector("TODO: Stabilise all regions")))
 
+    val preHavocLabel = freshLabel("pre_havoc")
+
     vpr.Seqn(
-      tree.root.regions.map(region => havocAllRegionsInstances(region)._2),
+      preHavocLabel +:
+      tree.root.regions.map(region =>
+        havocAllRegionsInstances(region, preHavocLabel).asSeqn),
       Vector.empty
     )()
   }

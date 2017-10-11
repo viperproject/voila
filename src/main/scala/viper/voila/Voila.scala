@@ -154,6 +154,16 @@ class Voila extends StrictLogging {
             methods = preambleProgram.methods ++ translatedProgram.methods
           )(translatedProgram.pos, translatedProgram.info, translatedProgram.errT)
 
+        /* Pretty-print the generated Viper program to a file, if requested */
+        config.outputFile.map(new File(_)).foreach(outputFile => {
+          logger.debug(s"Writing generated program to file ${config.outputFile()}")
+
+          FileUtils.writeStringToFile(
+            outputFile,
+            silver.ast.pretty.FastPrettyPrinter.pretty(programToVerify),
+            UTF_8)
+        })
+
         programToVerify.checkTransitively match {
           case Seq() => /* No errors, all good */
           case _errors =>
@@ -171,17 +181,6 @@ class Voila extends StrictLogging {
               return Some(Failure(Vector.empty))
             }
         }
-
-        /* Pretty-print the generated Viper program to a file, if requested */
-        config.outputFile.map(new File(_)).foreach(outputFile => {
-          logger.debug(s"Writing generated program to file ${config.outputFile()}")
-
-          FileUtils.writeStringToFile(
-            outputFile,
-            silver.ast.pretty.FastPrettyPrinter.pretty(programToVerify),
-            UTF_8)
-        })
-
 
         var siliconOptions: Vector[String] = Vector.empty
         siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")

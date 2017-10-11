@@ -70,9 +70,7 @@ int read01_client03(id c, int* x)
 
 
 int read02_client01(id c, int* x)
-  requires Counter(c, x, ?n) && G@c;
-  ensures ret == n;
-  ensures Counter(c, x, n) && G@c;
+  requires Counter(c, x, ?n) && G@c; // TODO: Unstable, see Voila issue #15
 {
   //:: ExpectedOutput(precondition_error:interference_error)
   ret := read02(c, x);
@@ -80,10 +78,100 @@ int read02_client01(id c, int* x)
 
 int read02_client02(id c, int* x)
   // interference ?n in Set[int](n) on c; // TODO: See Voila issue #14
-  requires Counter(c, x, ?n) && G@c;
+  requires Counter(c, x, ?n) && G@c;      // TODO: Unstable, see Voila issue #15
   ensures ret == n;
   ensures Counter(c, x, n) && G@c;
 {
-  //:: UnexpectedOutput(precondition_error:interference_error, /voila/issue/14/)
+  //:: ExpectedOutput(precondition_error:interference_error)
   ret := read02(c, x);
+}
+
+int read02_client03(id c, int* x)
+  requires Counter(c, x, ?n) && G@c; // TODO: Unstable, see Voila issue #15
+{
+  skip;
+  //:: ExpectedOutput(precondition_error:interference_error)
+  ret := read02(c, x);
+}
+
+
+region SeqCounter(id k, id c, int* x)
+  guards {
+    unique S;
+  }
+  interpretation {
+    Counter(c, x, ?n) && G@c
+  }
+  state { n }
+  actions {
+    S: ?m ~> Int;
+  }
+
+region ParCounter(id k, id c, int* x)
+  guards {
+    duplicable P;
+  }
+  interpretation {
+    Counter(c, x, ?n) && G@c
+  }
+  state { n }
+  actions {
+    P: ?m ~> Int;
+  }
+
+int read01_seqclient01(id k, id c, int* x)
+  requires SeqCounter(k, c, x) && S@k;
+  ensures  SeqCounter(k, c, x) && S@k;
+{
+  skip;
+  skip;
+
+  use_atomic
+    using SeqCounter(k, c, x) with S@k;
+  {
+    ret := read01(c, x); // CALL OK
+  }
+}
+
+int read01_parclient01(id k, id c, int* x)
+  requires ParCounter(k, c, x) && P@k;
+  ensures  ParCounter(k, c, x) && P@k;
+{
+  skip;
+  skip;
+
+  use_atomic
+    using ParCounter(k, c, x) with P@k;
+  {
+    ret := read01(c, x); // CALL OK
+  }
+}
+
+int read02_seqclient01(id k, id c, int* x)
+  requires SeqCounter(k, c, x) && S@k;
+  ensures  SeqCounter(k, c, x) && S@k;
+{
+  skip;
+  skip;
+
+  use_atomic
+    using SeqCounter(k, c, x) with S@k;
+  {
+    ret := read02(c, x); // CALL OK
+  }
+}
+
+int read02_parclient01(id k, id c, int* x)
+  requires ParCounter(k, c, x) && P@k;
+  ensures  ParCounter(k, c, x) && P@k;
+{
+  skip;
+  skip;
+
+  use_atomic
+    using ParCounter(k, c, x) with P@k;
+  {
+    //:: ExpectedOutput(precondition_error:interference_error)
+    ret := read02(c, x);
+  }
 }

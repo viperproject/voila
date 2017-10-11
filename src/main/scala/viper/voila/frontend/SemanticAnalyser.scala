@@ -272,15 +272,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => enclosingMemberAttr(of)(p)
     }}
 
-  def interferenceSpecifications(of: PAstNode): Vector[PInterferenceClause] =
-    interferenceSpecificationsAttr(of)(of)
-
-  private lazy val interferenceSpecificationsAttr: PAstNode => PAstNode => Vector[PInterferenceClause] =
-    paramAttr { of => {
-      case procedure: PProcedure => procedure.inters
-      case tree.parent(p) => interferenceSpecificationsAttr(of)(p)
-    }}
-
   def enclosingMakeAtomic(of: PAstNode): PMakeAtomic =
     enclosingMakeAtomicAttr(of)(of)
 
