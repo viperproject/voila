@@ -402,8 +402,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         case PAssign(lhs, rhs) =>
           var vprAssign =
-            /* TODO: Use correct type */
-            vpr.LocalVarAssign(vpr.LocalVar(lhs.name)(typ = vpr.Int), translate(rhs))()
+            vpr.LocalVarAssign(
+              vpr.LocalVar(lhs.name)(typ = translateNonVoid(semanticAnalyser.typeOfIdn(lhs))),
+              translate(rhs)
+            )()
 
           vprAssign = vprAssign.withSource(statement)
 
