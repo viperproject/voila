@@ -1,0 +1,20 @@
+// Corresponds to:
+//   https://github.com/caper-tool/caper/blob/master/examples/iterative/SpinLock.t
+//
+
+region SLock(id r, int* x)
+  guards {
+    duplicable LOCK;
+    unique UNLOCK;
+  }
+  interpretation {
+    x |-> ?v &&
+    (v == 0 ? UNLOCK@r :
+     v == 1 ? true :
+     false)
+  }
+  state { v }
+  actions {
+    LOCK:   0 ~> Set(0, 1);
+    UNLOCK: 1 ~> Set(1, 0);
+  }
