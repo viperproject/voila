@@ -18,3 +18,70 @@ region SLock(id r, int* x)
     LOCK:   0 ~> Set(0, 1);
     UNLOCK: 1 ~> Set(1, 0);
   }
+
+int* makeLock(id r)
+  ensures SLock(r, ret, 0) && LOCK@r;
+{
+  // ret := alloc(1); // See Voila issue #17
+  int* x;
+  havoc x;
+  inhale (x |-> ?v);
+  *x := 0;
+
+  inhale UNLOCK@r; // See Voila issues #18 ...
+  inhale LOCK@r;   // ... and #19
+  fold SLock(r, x, 0);
+
+  ret := x;
+}
+
+abstract_atomic void acquire(id r, int* x)
+  interference ?v in Set(0, 1) on r;
+  requires SLock(r, x) && LOCK@r;
+  ensures  SLock(r, x, 1);
+  ensures  UNLOCK@r;
+  ensures  LOCK@r;
+{
+  bool b;
+
+  make_atomic
+    using SLock(r, x) with LOCK@r;
+  {
+    do
+      invariant SLock(r, x);
+      invariant !b ==> r |=> <D>; // TODO: Why isn't it necessary to specify LOCK@r here?
+      invariant  b ==> r |=> (0, 1) && UNLOCK@r;
+    {
+      update_region
+        using SLock(r, x);
+      {
+        b := CAS(x, 0, 1);
+      }
+    } while (!b);
+  }
+}
+
+abstract_atomic void release(id r, int* x)
+  interference ?s in Set(1) on r;
+  requires SLock(r, x, 1) && UNLOCK@r;
+  ensures  SLock(r, x, 0) && LOCK@r;
+{
+  make_atomic
+    using SLock(r, x) with UNLOCK@r;
+  {
+    update_region
+      using SLock(r, x);
+    {
+      *x := 0;
+    }
+  }
+}
+
+
+
+
+primitive_atomic bool CAS(int* x, int now, int thn)
+  requires x |-> ?v;
+  ensures  v == now
+              ? ret && x |-> thn
+              : !ret && x |-> v;
