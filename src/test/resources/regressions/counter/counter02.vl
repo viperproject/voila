@@ -40,7 +40,7 @@ abstract_atomic int read02(id c, int* x)
 
 int read01_client01(id c, int* x)
   requires Counter(c, x, ?n) && G@c;
-  ensures Counter(c, x, n) && G@c;
+  ensures Counter(c, x, ?m) && G@c;
   ensures ret == n;
 {
   ret := read01(c, x);
@@ -48,9 +48,9 @@ int read01_client01(id c, int* x)
 
 int read01_client02(id c, int* x)
   requires Counter(c, x, ?n) && G@c;
+  ensures Counter(c, x, ?m) && G@c;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures ret == n;
-  ensures Counter(c, x, n) && G@c;
 {
   skip;
   ret := read01(c, x);

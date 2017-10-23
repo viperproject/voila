@@ -28,14 +28,15 @@ abstract_atomic void unlock(id a, int* x)
 
   // unfold L(a, x);
 
+  havoc nonDetNeg;
+  inhale nonDetNeg < 0;
+
   make_atomic
     using Lock(a, x) with G@a;
   {
     update_region
       using Lock(a, x);
     {
-      havoc nonDetNeg;
-      inhale nonDetNeg < 0;
       *x := nonDetNeg;
     }
   }
@@ -50,11 +51,14 @@ abstract_atomic void lock(id a, int* x)
   // ensures L(a, x) && s == 0;
   ensures Lock(a, x, 1) && G@a && s == 0;
 {
-  int nonDetPos;
   bool b;
+  int nonDetPos;
 
   // if (s == 0) { unfold U(a, x); }
   // else { unfold L(a, x); }
+
+  havoc nonDetPos;
+  inhale 0 < nonDetPos;
 
   make_atomic
     using Lock(a, x) with G@a;
@@ -67,8 +71,6 @@ abstract_atomic void lock(id a, int* x)
       update_region
         using Lock(a, x);
       {
-        havoc nonDetPos;
-        inhale 0 < nonDetPos;
         b := CASifNeg(x, nonDetPos);
       }
     } while (!b);

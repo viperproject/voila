@@ -13,6 +13,24 @@ import viper.voila.frontend._
 import viper.voila.reporting.{InterferenceError, PreconditionError}
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
+
+  /*
+   * Mutable state
+   */
+
+  private var translationIndentation = 0
+  private def indent(depth: Int = translationIndentation): String = " " * 2 * depth
+
+  private var _tree: VoilaTree = _
+  protected def tree: VoilaTree = _tree
+
+  private var _errorBacktranslator: ErrorBacktranslator = _
+  protected def errorBacktranslator: ErrorBacktranslator = _errorBacktranslator
+
+  /*
+   * Immutable state and utility methods
+   */
+
   val returnVarName = "ret"
 
   def returnVar(typ: PType): vpr.LocalVar =
@@ -122,15 +140,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
   }
 
-  private var translationIndentation = 0
-
-  private def indent(depth: Int = translationIndentation): String = " " * 2 * depth
-
-  private var _tree: VoilaTree = _
-  protected def tree: VoilaTree = _tree
-
-  private var _errorBacktranslator: ErrorBacktranslator = _
-  protected def errorBacktranslator: ErrorBacktranslator = _errorBacktranslator
+  /*
+   * Main functionality
+   */
 
   def translate(tree: VoilaTree): (vpr.Program, ErrorBacktranslator) = {
     _tree = tree
@@ -349,335 +361,331 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case _ =>
     }
 
-    val vprStatement =
-      statement match {
-        case seqComp: PSeqComp =>
-          val (firstStabilisation, secondStabilisation) = stabiliseAtSeqComp(seqComp)
+    if (semanticAnalyser.atomicity(statement) == AtomicityKind.Nonatomic &&
+        semanticAnalyser.expectedAtomicity(statement) == AtomicityKind.Atomic) {
 
-          val vprFirstStmt = translate(seqComp.first)
+      /* TODO See issue #22 */
+      sys.error(  s"Direct use of a nonatomic statement (position: ${statement.position}, "
+                + s"class: ${statement.getClass.getSimpleName}) in an atomic context is "
+                + s"prohibited. See also issue #22.")
+    }
 
-          if (firstStabilisation.isDefined)
-            logger.debug(s"${indent()}// Stabilise (havoc regions)")
+    val vprStatement = directlyTranslate(statement)
 
-          val vprSecondStmt = translate(seqComp.second)
 
-          if (secondStabilisation.isDefined)
-            logger.debug(s"${indent()}// Stabilise (havoc regions)")
+    val optVprHavoc =
+      if (semanticAnalyser.atomicity(statement) == AtomicityKind.Nonatomic ||
+            (semanticAnalyser.atomicity(statement) == AtomicityKind.Atomic &&
+             semanticAnalyser.expectedAtomicity(statement) == AtomicityKind.Nonatomic)) {
 
-          vpr.Seqn(
-               Vector(vprFirstStmt)
-            ++ firstStabilisation
-            ++ Vector(vprSecondStmt)
-            ++ secondStabilisation,
-            Vector.empty
-          )()
+        logger.debug(s"${indent()} // Stabilising postcondition (havocking regions)")
 
-        case PSkip() =>
-          vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("skip;")))
-
-        case PIf(cond, thn, els) =>
-          var vprIf =
-            vpr.If(
-              translate(cond),
-              vpr.Seqn(Vector(translate(thn)), Vector.empty)(),
-              vpr.Seqn(els.toSeq.map(translate), Vector.empty)()
-            )()
-
-          vprIf = vprIf.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, vprIf)
-
-        case PWhile(cond, invs, body) =>
-          // TODO: Add region state havocking
-
-          var vprWhile =
-            vpr.While(
-              cond = translate(cond),
-              invs = invs map (inv => translate(inv.assertion)),
-              body = vpr.Seqn(Seq(translate(body)), Vector.empty)()
-            )()
-
-          vprWhile = vprWhile.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, vprWhile)
-
-        case PAssign(lhs, rhs) =>
-          var vprAssign =
-            vpr.LocalVarAssign(
-              vpr.LocalVar(lhs.name)(typ = translateNonVoid(semanticAnalyser.typeOfIdn(lhs))),
-              translate(rhs)
-            )()
-
-          vprAssign = vprAssign.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, vprAssign)
-
-        case read: PHeapRead =>
-          val vprRead = translate(read)
-
-          surroundWithSectionComments(statement.statementName, vprRead)
-
-        case write: PHeapWrite =>
-          val vprWrite = translate(write)
-
-          surroundWithSectionComments(statement.statementName, vprWrite)
-
-        case stmt @ PPredicateAccess(predicate, arguments) =>
-          val vprArguments =
-            semanticAnalyser.entity(predicate) match {
-              case _: PredicateEntity => arguments map translate
-              case _: RegionEntity => arguments.init map translate
-            }
-
-          val loc =
-            vpr.PredicateAccess(
-              args = vprArguments,
-              predicateName = predicate.name
-            )()
-
-          val acc =
-            vpr.PredicateAccessPredicate(
-              loc = loc,
-              perm = vpr.FullPerm()()
-            )()
-
-          stmt match {
-            case _: PFold => vpr.Fold(acc)()
-            case _: PUnfold => vpr.Unfold(acc)()
-          }
-
-        case PInhale(assertion) =>
-          var inhale = vpr.Inhale(translate(assertion))()
-
-          inhale = inhale.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, inhale)
-
-        case PExhale(assertion) =>
-          var exhale = vpr.Exhale(translate(assertion))()
-
-          exhale = exhale.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, exhale)
-
-        case PAssume(assertion) =>
-          var assume = vpr.Inhale(translate(assertion))()
-
-          assume = assume.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, assume)
-
-        case PAssert(assertion) =>
-          var assert = vpr.Assert(translate(assertion))()
-
-          assert = assert.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, assert)
-
-        case PHavoc(variable) =>
-          var vprHavoc = havoc(variable)
-
-          vprHavoc = vprHavoc.withSource(statement)
-
-          surroundWithSectionComments(statement.statementName, vprHavoc)
-
-        case call @ PProcedureCall(procedureId, arguments, optRhs) =>
-          val callee =
-            semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
-
-          val vprArguments = arguments map translate
-
-          val vprFormalReturns =
-            optRhs match {
-              case Some(rhs) =>
-                val typ = translateNonVoid(semanticAnalyser.typ(PIdnExp(rhs)))
-                Vector(vpr.LocalVarDecl(rhs.name, typ)())
-              case None =>
-                Vector.empty
-            }
-
-          val vprInterferenceChecks: vpr.Stmt =
-            callee.atomicity match {
-              case PNotAtomic() =>
-                sys.error("Calling non-atomic procedures is not yet supported.")
-
-              case PPrimitiveAtomic() =>
-                vpr.Assert(vpr.TrueLit()())()
-
-              case PAbstractAtomic() =>
-                val vprPreHavocLabel = freshLabel("pre_havoc")
-
-                // TODO: Inject code comments at various places
-
-                def generateParentRegionHavockingCode(childRegion: vpr.PredicateAccess): (vpr.Exp, vpr.Seqn) = {
-                  currentlyOpenRegions match {
-                    case Nil =>
-                      (vpr.FalseLit()(), vpr.Seqn(Vector.empty, Vector.empty)())
-
-                    case (region, regionArguments, vprPreOpenLabel) :: Nil =>
-                      val vprRegionArguments = regionArguments map translate
-                      val vprRegionAccess = regionPredicateAccess(region, vprRegionArguments)
-
-                      val vprFold = vpr.Fold(vprRegionAccess)()
-                      val vprUnfold = vpr.Unfold(vprRegionAccess)()
-
-                      val vprPreHavocLabel = freshLabel("pre_havoc")
-
-                      val havocParentRegion =
-                        havocSingleRegionInstance(region, regionArguments, vprPreHavocLabel, None)
-
-                      val vprCalleeRegionPerms = vpr.CurrentPerm(childRegion)()
-
-                      val vprHavocParentRegionCondition =
-                        vpr.PermLtCmp(
-                          vpr.LabelledOld(
-                            vprCalleeRegionPerms,
-                            vprPreOpenLabel.name
-                          )(),
-                          vprCalleeRegionPerms
-                        )()
-
-                      val vprResult =
-                        vpr.Seqn(
-                          Vector(
-                            vprFold,
-                            vprPreHavocLabel,
-                            havocParentRegion.asSeqn,
-                            vprUnfold),
-                          Vector.empty
-                        )()
-
-                      (vprHavocParentRegionCondition, vprResult)
-
-                    case _ =>
-                      sys.error("Multiple nested open regions are not yet supported")
-                  }
-                }
-
-                val vprCheckInterferences =
-                  callee.inters.map (inter => {
-                    val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
-                    val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
-                    val vprRegionArguments = regionArguments map translate
-
-                    val havocCalleeRegion =
-                      havocSingleRegionInstance(region, regionArguments, vprPreHavocLabel, None)
-
-                    val (vprHavocParentRegionCondition, vprHavocParentRegion) =
-                      generateParentRegionHavockingCode(regionPredicateAccess(region, vprRegionArguments).loc)
-
-                    val vprHavocRegion =
-                      vpr.If(
-                        vprHavocParentRegionCondition,
-                        vprHavocParentRegion,
-                        vpr.Seqn(
-                          Vector(havocCalleeRegion.exhale, havocCalleeRegion.inhale),
-                          Vector.empty
-                        )()
-                      )()
-
-                    val vprCurrentState =
-                      vpr.FuncApp(
-                        regionStateFunction(region),
-                        vprRegionArguments
-                      )()
-
-                    val vprCheckStateUnchanged =
-                      vpr.Assert(
-                        vpr.AnySetContains(
-                          vprCurrentState,
-                          vpr.LabelledOld(
-                            translate(inter.set),
-                            vprPreHavocLabel.name
-                          )()
-                        )()
-                      )()
-
-                    errorBacktranslator.addErrorTransformer {
-                      case e @ vprerr.AssertFailed(_, reason, _)
-                           if (e causedBy vprCheckStateUnchanged) &&
-                              (reason causedBy vprCheckStateUnchanged.exp) =>
-
-                        PreconditionError(call, InterferenceError(inter))
-                    }
-
-                    vpr.Seqn(
-                      Vector(
-                        vprHavocRegion,
-                        havocCalleeRegion.constrainStateViaGuards,
-                        havocCalleeRegion.constrainStateViaAtomicityContext,
-                        vprCheckStateUnchanged),
-                      Vector.empty
-                    )()
-                  })
-
-                val vprNonDetChoiceVariable = declareFreshVariable(PBoolType(), "nondet").localVar
-
-                val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
-
-                val vprNonDetCheckBranch =
-                  vpr.If(
-                    vprNonDetChoiceVariable,
-                    vpr.Seqn(
-                      vprPreHavocLabel +:
-                      vprCheckInterferences :+
-                      vpr.Inhale(vpr.FalseLit()())(),
-                      Vector.empty
-                    )(),
-                    vpr.Seqn(Vector.empty, Vector.empty)()
-                  )()
-
-                vpr.Seqn(
-                  Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
-                  Vector.empty
-                )()
-            }
-
-          val vprCall =
-            vpr.MethodCall(
-              callee.id.name,
-              vprArguments,
-              vprFormalReturns map (_.localVar)
-            )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos).withSource(statement)
-
-          val result =
-            vpr.Seqn(
-              Vector(vprInterferenceChecks, vprCall),
-              Vector.empty
-            )()
-
-          surroundWithSectionComments(statement.statementName, result)
-
-        case stmt: PMakeAtomic => translate(stmt)
-        case stmt: PUpdateRegion => translate(stmt)
-        case stmt: PUseAtomic => translate(stmt)
-        case stmt: POpenRegion => translate(stmt)
-      }
+        Some(stabiliseAfter(statement))
+      } else
+        None
 
     statement match {
       case _: PCompoundStatement => translationIndentation -= 1
       case _ =>
     }
 
-    vprStatement
+    vpr.Seqn(
+      vprStatement +: optVprHavoc.toVector,
+      Vector.empty
+    )()
   }
 
-  def stabiliseAtSeqComp(stmt: PSeqComp): (Option[vpr.Stmt], Option[vpr.Stmt]) = {
-    val areBothConcrete = (   !semanticAnalyser.isGhost(stmt.first)
-                           && !semanticAnalyser.isGhost(stmt.second))
+  protected def directlyTranslate(statement: PStatement): vpr.Stmt = {
+    statement match {
+      case seqComp: PSeqComp =>
+        val vprFirstStmt = translate(seqComp.first)
+        val vprSecondStmt = translate(seqComp.second)
 
-    val isFirstSeqComp = stmt.first.isInstanceOf[PSeqComp]
-    val isSecondSeqComp = stmt.second.isInstanceOf[PSeqComp]
+        vpr.Seqn(
+             Vector(vprFirstStmt)
+          ++ Vector(vprSecondStmt),
+          Vector.empty
+        )()
 
-    val stabiliseAfterFirst =
-      if (areBothConcrete && !isFirstSeqComp) Some(stabiliseAfter(stmt.first))
-      else None
+      case PSkip() =>
+        vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("skip;")))
 
-    val stabiliseAfterSecond =
-      if (areBothConcrete && !isSecondSeqComp) Some(stabiliseAfter(stmt.second))
-      else None
+      case PIf(cond, thn, els) =>
+        var vprIf =
+          vpr.If(
+            translate(cond),
+            vpr.Seqn(Vector(translate(thn)), Vector.empty)(),
+            vpr.Seqn(els.toSeq.map(translate), Vector.empty)()
+          )()
 
-    (stabiliseAfterFirst, stabiliseAfterSecond)
+        vprIf = vprIf.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, vprIf)
+
+      case PWhile(cond, invs, body) =>
+        var vprWhile =
+          vpr.While(
+            cond = translate(cond),
+            invs = invs map (inv => translate(inv.assertion)),
+            body = vpr.Seqn(Seq(translate(body)), Vector.empty)()
+          )()
+
+        vprWhile = vprWhile.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, vprWhile)
+
+      case PAssign(lhs, rhs) =>
+        var vprAssign =
+          vpr.LocalVarAssign(
+            vpr.LocalVar(lhs.name)(typ = translateNonVoid(semanticAnalyser.typeOfIdn(lhs))),
+            translate(rhs)
+          )()
+
+        vprAssign = vprAssign.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, vprAssign)
+
+      case read: PHeapRead =>
+        val vprRead = translate(read)
+
+        surroundWithSectionComments(statement.statementName, vprRead)
+
+      case write: PHeapWrite =>
+        val vprWrite = translate(write)
+
+        surroundWithSectionComments(statement.statementName, vprWrite)
+
+      case stmt @ PPredicateAccess(predicate, arguments) =>
+        val vprArguments =
+          semanticAnalyser.entity(predicate) match {
+            case _: PredicateEntity => arguments map translate
+            case _: RegionEntity => arguments.init map translate
+          }
+
+        val loc =
+          vpr.PredicateAccess(
+            args = vprArguments,
+            predicateName = predicate.name
+          )()
+
+        val acc =
+          vpr.PredicateAccessPredicate(
+            loc = loc,
+            perm = vpr.FullPerm()()
+          )()
+
+        stmt match {
+          case _: PFold => vpr.Fold(acc)()
+          case _: PUnfold => vpr.Unfold(acc)()
+        }
+
+      case PInhale(assertion) =>
+        var inhale = vpr.Inhale(translate(assertion))()
+
+        inhale = inhale.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, inhale)
+
+      case PExhale(assertion) =>
+        var exhale = vpr.Exhale(translate(assertion))()
+
+        exhale = exhale.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, exhale)
+
+      case PAssume(assertion) =>
+        var assume = vpr.Inhale(translate(assertion))()
+
+        assume = assume.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, assume)
+
+      case PAssert(assertion) =>
+        var assert = vpr.Assert(translate(assertion))()
+
+        assert = assert.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, assert)
+
+      case PHavoc(variable) =>
+        var vprHavoc = havoc(variable)
+
+        vprHavoc = vprHavoc.withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, vprHavoc)
+
+      case call @ PProcedureCall(procedureId, arguments, optRhs) =>
+        val callee =
+          semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
+
+        val vprArguments = arguments map translate
+
+        val vprFormalReturns =
+          optRhs match {
+            case Some(rhs) =>
+              val typ = translateNonVoid(semanticAnalyser.typ(PIdnExp(rhs)))
+              Vector(vpr.LocalVarDecl(rhs.name, typ)())
+            case None =>
+              Vector.empty
+          }
+
+        val vprInterferenceChecks: vpr.Stmt =
+          callee.atomicity match {
+            case PNotAtomic() =>
+              sys.error("Calling non-atomic procedures is not yet supported.")
+
+            case PPrimitiveAtomic() =>
+              vpr.Assert(vpr.TrueLit()())()
+
+            case PAbstractAtomic() =>
+              val vprPreHavocLabel = freshLabel("pre_havoc")
+
+              // TODO: Inject code comments at various places
+
+              def generateParentRegionHavockingCode(childRegion: vpr.PredicateAccess): (vpr.Exp, vpr.Seqn) = {
+                currentlyOpenRegions match {
+                  case Nil =>
+                    (vpr.FalseLit()(), vpr.Seqn(Vector.empty, Vector.empty)())
+
+                  case (region, regionArguments, vprPreOpenLabel) :: Nil =>
+                    val vprRegionArguments = regionArguments map translate
+                    val vprRegionAccess = regionPredicateAccess(region, vprRegionArguments)
+
+                    val vprFold = vpr.Fold(vprRegionAccess)()
+                    val vprUnfold = vpr.Unfold(vprRegionAccess)()
+
+                    val vprPreHavocLabel = freshLabel("pre_havoc")
+
+                    val havocParentRegion =
+                      havocSingleRegionInstance(region, regionArguments, vprPreHavocLabel, None)
+
+                    val vprCalleeRegionPerms = vpr.CurrentPerm(childRegion)()
+
+                    val vprHavocParentRegionCondition =
+                      vpr.PermLtCmp(
+                        vpr.LabelledOld(
+                          vprCalleeRegionPerms,
+                          vprPreOpenLabel.name
+                        )(),
+                        vprCalleeRegionPerms
+                      )()
+
+                    val vprResult =
+                      vpr.Seqn(
+                        Vector(
+                          vprFold,
+                          vprPreHavocLabel,
+                          havocParentRegion.asSeqn,
+                          vprUnfold),
+                        Vector.empty
+                      )()
+
+                    (vprHavocParentRegionCondition, vprResult)
+
+                  case _ =>
+                    sys.error("Multiple nested open regions are not yet supported")
+                }
+              }
+
+              val vprCheckInterferences =
+                callee.inters.map (inter => {
+                  val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
+                  val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
+                  val vprRegionArguments = regionArguments map translate
+
+                  val havocCalleeRegion =
+                    havocSingleRegionInstance(region, regionArguments, vprPreHavocLabel, None)
+
+                  val (vprHavocParentRegionCondition, vprHavocParentRegion) =
+                    generateParentRegionHavockingCode(regionPredicateAccess(region, vprRegionArguments).loc)
+
+                  val vprHavocRegion =
+                    vpr.If(
+                      vprHavocParentRegionCondition,
+                      vprHavocParentRegion,
+                      vpr.Seqn(
+                        Vector(havocCalleeRegion.exhale, havocCalleeRegion.inhale),
+                        Vector.empty
+                      )()
+                    )()
+
+                  val vprCurrentState =
+                    vpr.FuncApp(
+                      regionStateFunction(region),
+                      vprRegionArguments
+                    )()
+
+                  val vprCheckStateUnchanged =
+                    vpr.Assert(
+                      vpr.AnySetContains(
+                        vprCurrentState,
+                        vpr.LabelledOld(
+                          translate(inter.set),
+                          vprPreHavocLabel.name
+                        )()
+                      )()
+                    )()
+
+                  errorBacktranslator.addErrorTransformer {
+                    case e @ vprerr.AssertFailed(_, reason, _)
+                         if (e causedBy vprCheckStateUnchanged) &&
+                            (reason causedBy vprCheckStateUnchanged.exp) =>
+
+                      PreconditionError(call, InterferenceError(inter))
+                  }
+
+                  vpr.Seqn(
+                    Vector(
+                      vprHavocRegion,
+                      havocCalleeRegion.constrainStateViaGuards,
+                      havocCalleeRegion.constrainStateViaAtomicityContext,
+                      vprCheckStateUnchanged),
+                    Vector.empty
+                  )()
+                })
+
+              val vprNonDetChoiceVariable = declareFreshVariable(PBoolType(), "nondet").localVar
+
+              val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
+
+              val vprNonDetCheckBranch =
+                vpr.If(
+                  vprNonDetChoiceVariable,
+                  vpr.Seqn(
+                    vprPreHavocLabel +:
+                    vprCheckInterferences :+
+                    vpr.Inhale(vpr.FalseLit()())(),
+                    Vector.empty
+                  )(),
+                  vpr.Seqn(Vector.empty, Vector.empty)()
+                )()
+
+              vpr.Seqn(
+                Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
+                Vector.empty
+              )()
+          }
+
+        val vprCall =
+          vpr.MethodCall(
+            callee.id.name,
+            vprArguments,
+            vprFormalReturns map (_.localVar)
+          )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos).withSource(statement)
+
+        val result =
+          vpr.Seqn(
+            Vector(vprInterferenceChecks, vprCall),
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, result)
+
+      case stmt: PMakeAtomic => translate(stmt)
+      case stmt: PUpdateRegion => translate(stmt)
+      case stmt: PUseAtomic => translate(stmt)
+      case stmt: POpenRegion => translate(stmt)
+    }
   }
 
   def stabiliseAfter(statement: PStatement): vpr.Stmt = {

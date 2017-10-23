@@ -428,9 +428,77 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         /* Returning unknown expresses that no particular type is expected */
         PUnknownType()
     }
+
+  lazy val atomicity: PStatement => AtomicityKind =
+    attr {
+      case _: PAssign => AtomicityKind.Nonatomic
+      case _: PIf => AtomicityKind.Nonatomic
+      case _: PWhile => AtomicityKind.Nonatomic
+
+      case PSeqComp(first, second) =>
+        if (isGhost(first)) atomicity(second)
+        else if (isGhost(second)) atomicity(first)
+        else AtomicityKind.Nonatomic
+
+      case _: PSkip => AtomicityKind.Atomic
+      case _: PHeapWrite => AtomicityKind.Atomic
+      case _: PHeapRead => AtomicityKind.Atomic
+
+      /* TODO: Not sure if it makes sense to attribute an atomicity kind to ghost operations.
+       *       See also `isGhost` and its uses.
+       */
+      case _: PFold => AtomicityKind.Atomic
+      case _: PUnfold => AtomicityKind.Atomic
+      case _: PInhale => AtomicityKind.Atomic
+      case _: PExhale => AtomicityKind.Atomic
+      case _: PAssume => AtomicityKind.Atomic
+      case _: PAssert => AtomicityKind.Atomic
+      case _: PHavoc => AtomicityKind.Atomic
+
+      case _: PMakeAtomic => AtomicityKind.Atomic
+      case _: PUpdateRegion => AtomicityKind.Atomic
+      case _: PUseAtomic => AtomicityKind.Atomic
+      case _: POpenRegion => AtomicityKind.Atomic
+
+      case call: PProcedureCall =>
+        val callee = entity(call.procedure).asInstanceOf[ProcedureEntity].declaration
+
+        callee.atomicity match {
+          case PNotAtomic() => AtomicityKind.Nonatomic
+          case PPrimitiveAtomic() | PAbstractAtomic() => AtomicityKind.Atomic
+        }
+    }
+
+  lazy val expectedAtomicity: PStatement => AtomicityKind =
+    attr {
+      case tree.parent(_: PIf | _: PWhile) => AtomicityKind.Nonatomic
+
+      case tree.parent(PSeqComp(first, second)) =>
+        if (isGhost(first)) atomicity(second)
+        else if (isGhost(second)) atomicity(first)
+        else AtomicityKind.Nonatomic
+
+      case tree.parent(_: PMakeAtomic) => AtomicityKind.Nonatomic
+      case tree.parent(_: PUpdateRegion) => AtomicityKind.Atomic
+      case tree.parent(_: PUseAtomic) => AtomicityKind.Atomic
+      case tree.parent(_: POpenRegion) => AtomicityKind.Atomic
+
+      case tree.parent(procedure: PProcedure) =>
+        /* TODO: Unify with code above */
+        procedure.atomicity match {
+          case PNotAtomic() => AtomicityKind.Nonatomic
+          case PPrimitiveAtomic() | PAbstractAtomic() => AtomicityKind.Atomic
+        }
+
+      case of @ tree.parent(parent) =>
+        sys.error(  s"Unsupported: determining the expected atomicity of '$of' "
+                  + s"(class: ${of.getClass.getSimpleName}) in the context of '$parent' "
+                  + s"(class: ${parent.getClass.getSimpleName})")
+    }
 }
 
 sealed trait LogicalVariableContext
+
 object LogicalVariableContext {
   case object Interference extends LogicalVariableContext
   case object Precondition extends LogicalVariableContext
@@ -438,4 +506,11 @@ object LogicalVariableContext {
   case object Procedure extends LogicalVariableContext
   case object Region extends LogicalVariableContext
   case object Predicate extends LogicalVariableContext
+}
+
+sealed trait AtomicityKind
+
+object AtomicityKind {
+  case object Nonatomic extends AtomicityKind
+  case object Atomic extends AtomicityKind
 }

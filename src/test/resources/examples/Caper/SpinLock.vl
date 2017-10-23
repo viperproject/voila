@@ -19,20 +19,21 @@ region SLock(id r, int* x)
     UNLOCK: 1 ~> Set(1, 0);
   }
 
+// TODO: Too many issues
 int* makeLock(id r)
-  ensures SLock(r, ret, 0) && LOCK@r;
+//  // ensures SLock(r, ret, 0) && LOCK@r; // TODO: See issue #23
 {
-  // ret := alloc(1); // See Voila issue #17
-  int* x;
-  havoc x;
-  inhale (x |-> ?v);
-  *x := 0;
-
-  inhale UNLOCK@r; // See Voila issues #18 ...
-  inhale LOCK@r;   // ... and #19
-  fold SLock(r, x, 0);
-
-  ret := x;
+//  // ret := alloc(1); // See Voila issue #17
+//  int* x;
+//  havoc x;
+//  inhale (x |-> ?v);
+//  *x := 0;
+//
+//  inhale UNLOCK@r; // See Voila issues #18 ...
+//  inhale LOCK@r;   // ... and #19
+//  fold SLock(r, x, 0);
+//
+//  ret := x;
 }
 
 abstract_atomic void acquire(id r, int* x)
@@ -61,14 +62,20 @@ abstract_atomic void acquire(id r, int* x)
   }
 }
 
-abstract_atomic void release(id r, int* x)
+abstract_atomic void release1(id r, int* x)
   interference ?s in Set(1) on r;
   requires SLock(r, x, 1) && UNLOCK@r;
   ensures  SLock(r, x, 0) && LOCK@r;
 {
+  /* PROBLEM: Rule make-atomic temporarily consumes the used guard, which thus
+   *          isn't available in the body. There, folding SLock(r, x, 0) fails.
+   *
+   *          This seems to be a limitation of/design decision made by TaDA.
+   */
   make_atomic
     using SLock(r, x) with UNLOCK@r;
   {
+    //:: ExpectedOutput(update-region_error:guard_permission_error)
     update_region
       using SLock(r, x);
     {
@@ -77,7 +84,19 @@ abstract_atomic void release(id r, int* x)
   }
 }
 
-
+abstract_atomic void release2(id r, int* x)
+  interference ?s in Set(1) on r;
+  requires SLock(r, x, 1) && UNLOCK@r;
+  ensures  SLock(r, x, 0);
+  //:: UnexpectedOutput(postcondition_error:guard_permission_error, /voila/issue/19/)
+  ensures  LOCK@r;
+{
+  use_atomic
+    using SLock(r, x) with UNLOCK@r;
+  {
+    *x := 0;
+  }
+}
 
 
 primitive_atomic bool CAS(int* x, int now, int thn)

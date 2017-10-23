@@ -4,7 +4,7 @@ region Cell(id c, int* x)
   state { n }
   actions { G: ?m ~> Int; }
 
-void test02(id c, int* x)
+abstract_atomic void test02(id c, int* x)
   requires Cell(c, x, ?v);
   ensures Cell(c, x, ?w);
   ensures v == w; // OK
@@ -18,7 +18,6 @@ void test03(id c, int* x)
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures v == w;
 {
-  skip;
   skip;
 }
 

@@ -324,14 +324,6 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UseAtomicError(useAtomic, IllegalRegionStateChangeError(useAtomic.body))
     }
 
-    val preHavocLabel = freshLabel("pre_havoc")
-
-    val havocs =
-      vpr.Seqn(
-        tree.root.regions.map(region => havocAllRegionsInstances(region, preHavocLabel).asSeqn),
-        Vector.empty
-      )()
-
     val result =
       vpr.Seqn(
         Vector(
@@ -340,14 +332,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           unfoldRegionPredicate,
           ruleBody,
           foldRegionPredicate,
-          stateChangePermitted,
-          preHavocLabel,
-          havocs),
-              /* TODO: Havocking after use-atomic is in general too eager.
-               *       Instead, we want to havoc if an atomic-triple-rule is used
-               *       in the proof of a non-atomic triple.
-               *       See also the comments in the manual encoding outline_translation-capslock.vpr.
-               */
+          stateChangePermitted),
         Vector.empty
       )()
 
@@ -410,6 +395,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     surroundWithSectionComments(openRegion.statementName, result)
   }
 
+  /* TODO: See also issue #19 */
   protected def guardAccessIfNotDuplicable(guardExp: PGuardExp): vpr.Exp = {
     val guardDecl = semanticAnalyser.entity(guardExp.guard).asInstanceOf[GuardEntity]
                                     .declaration
