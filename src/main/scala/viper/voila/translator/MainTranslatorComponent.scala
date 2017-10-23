@@ -105,7 +105,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         formalReturns = Vector(vpr.LocalVarDecl("$r", typ)()),
         pres = Vector.empty,
         posts = Vector.empty,
-        body = vpr.Seqn(Vector.empty, Vector.empty)()
+        body = Some(vpr.Seqn(Vector.empty, Vector.empty)())
       )()
     )
   }
@@ -211,9 +211,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val bodyWithCollectedVariableDeclarations =
-      vprMethod.body.copy(
-        scopedDecls = vprMethod.body.scopedDecls ++ collectedVariableDeclarations
-      )(vprMethod.body.pos, vprMethod.body.info, vprMethod.body.errT)
+      vprMethod.body.map(actualBody =>
+        actualBody.copy(
+          scopedDecls = actualBody.scopedDecls ++ collectedVariableDeclarations
+        )(actualBody.pos, actualBody.info, actualBody.errT))
 
     collectedVariableDeclarations = Vector.empty
 
@@ -285,7 +286,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       formalReturns = formalReturns,
       pres = vprPres,
       posts = vprPosts,
-      body = vprBody
+      body = Some(vprBody)
     )().withSource(procedure)
   }
 
@@ -319,7 +320,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       formalReturns = formalReturns,
       pres = pres,
       posts = procedure.posts map (post => translate(post.assertion)),
-      body = body
+      body = Some(body)
     )().withSource(procedure)
   }
 
