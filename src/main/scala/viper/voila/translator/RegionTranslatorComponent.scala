@@ -8,7 +8,7 @@ package viper.voila.translator
 
 import scala.collection.mutable
 import viper.voila.frontend._
-import viper.voila.reporting.{InsufficientRegionPermissionError, RegionStateError}
+import viper.voila.reporting.{InsufficientGuardPermissionError, InsufficientRegionPermissionError, RegionStateError}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
 
@@ -320,9 +320,14 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             vpr.PredicateAccess(
               Vector(translateUseOf(guardExp.regionId)),
               vprGuardPredicate.name
-            )(),
+            )().withSource(guardExp),
             vpr.FullPerm()()
-          )()
+          )().withSource(guardExp)
+
+        errorBacktranslator.addReasonTransformer {
+          case e: vprrea.InsufficientPermission if e causedBy guardPredicateAccess.loc =>
+            InsufficientGuardPermissionError(guardExp)
+        }
 
         guardPredicateAccess
     }
