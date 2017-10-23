@@ -19,8 +19,8 @@ package object translator {
     def withSource(source: PAstNode): N = {
       val (pos, info, errT) = node.getPrettyMetadata
 
-      require(info == vpr.NoInfo)
-      require(pos == vpr.NoPosition)
+      require(info == vpr.NoInfo, "Node to annotate already has field 'info' set")
+      require(pos == vpr.NoPosition, "Note to annotate already has field 'pos' set")
 
       val newInfo = SourceInfo(source)
       val newPos = vpr.TranslatedPosition(source.position)
