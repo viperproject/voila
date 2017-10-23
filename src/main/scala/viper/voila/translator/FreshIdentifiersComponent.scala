@@ -6,12 +6,10 @@
 
 package viper.voila.translator
 
+import scala.collection.mutable
 import viper.silver.{ast => vpr}
 
-import scala.collection.mutable
-
 trait FreshIdentifiersComponent { this: PProgramToViperTranslator =>
-  protected var lastIdentifiers: mutable.Map[String, String] = mutable.Map.empty
   protected var identifierCounters: mutable.Map[String, Int] = mutable.Map.empty.withDefaultValue(0)
 
   def freshIdentifier(baseId: String): String = {
