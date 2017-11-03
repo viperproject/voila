@@ -149,14 +149,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     _errorBacktranslator = new DefaultErrorBacktranslator
 
     val members: Vector[vpr.Member] = (
-         heapLocations(tree)
-      ++ Vector(diamondField)
+         Vector(diamondField)
       ++ usedHavocs(tree)
       ++ tree.root.regions.flatMap(region => {
            val typ = semanticAnalyser.typ(region.state)
 
            Vector(stepFromField(typ), stepToField(typ))
          }).distinct
+      ++ (tree.root.structs flatMap translate)
       ++ (tree.root.regions flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
@@ -193,10 +193,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translate(member: PMember): vpr.Member =
     member match {
+      case s: PStruct => translate(s)
       case r: PRegion => translate(r)
       case p: PPredicate => translate(p)
       case p: PProcedure => translate(p)
     }
+
+  def translate(struct: PStruct): Vector[vpr.Field] = {
+    struct.fields.map(field => toField(struct, field.id))
+  }
 
   def translate(predicate: PPredicate): vpr.Predicate = {
     vpr.Predicate(

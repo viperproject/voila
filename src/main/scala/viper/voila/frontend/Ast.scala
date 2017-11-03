@@ -29,7 +29,8 @@ sealed abstract class PAstNode extends Product {
   }
 }
 
-case class PProgram(regions: Vector[PRegion],
+case class PProgram(structs: Vector[PStruct],
+                    regions: Vector[PRegion],
                     predicates: Vector[PPredicate],
                     procedures: Vector[PProcedure])
     extends PAstNode
@@ -75,6 +76,7 @@ case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
 
 case class PLogicalVariableBinder(id: PIdnDef) extends PDeclaration with PExpression
+
 sealed trait PBindingContext extends PAstNode
 
 /*
@@ -95,6 +97,8 @@ case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
  */
 
 sealed trait PMember extends PDeclaration
+
+case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMember
 
 case class PRegion(id: PIdnDef,
                    regionId: PFormalArgumentDecl,
@@ -165,14 +169,14 @@ case class PAssign(lhs: PIdnUse, rhs: PExpression) extends PStatement {
 }
 
 sealed trait PHeapAccess extends PStatement {
-  def location: PIdnUse
+  def location: PLocation
 }
 
-case class PHeapWrite(location: PIdnUse, rhs: PExpression) extends PHeapAccess {
+case class PHeapWrite(location: PLocation, rhs: PExpression) extends PHeapAccess {
   val statementName = "heap-write"
 }
 
-case class PHeapRead(lhs: PIdnUse, location: PIdnUse) extends PHeapAccess {
+case class PHeapRead(lhs: PIdnUse, location: PLocation) extends PHeapAccess {
   val statementName = "heap-read"
 }
 
@@ -288,7 +292,7 @@ case class PSetContains(element: PExpression, set: PExpression) extends PSetExp 
   val right: PExpression = set
 }
 
-case class PPointsTo(id: PIdnUse, value: PExpression)
+case class PPointsTo(location: PLocation, value: PExpression)
     extends PExpression with PBindingContext
 
 case class PGuardExp(guard: PIdnUse, regionId: PIdnUse) extends PExpression
@@ -313,7 +317,7 @@ sealed trait PType extends PAstNode
 case class PIntType() extends PType
 case class PBoolType() extends PType
 case class PSetType(elementType: PType) extends PType
-case class PRefType(referencedType: PType) extends PType
+case class PRefType(id: PIdnUse) extends PType
 case class PRegionIdType() extends PType
 case class PVoidType() extends PType
 case class PUnknownType() extends PType
@@ -331,3 +335,5 @@ object PPredicateAccess {
   def unapply(acc: PPredicateAccess): Option[(PIdnUse, Vector[PExpression])] =
     Some((acc.predicate, acc.arguments))
 }
+
+case class PLocation(receiver: PIdnUse, field: PIdnUse) extends PAstNode

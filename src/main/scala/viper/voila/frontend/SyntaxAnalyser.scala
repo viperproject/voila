@@ -26,7 +26,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "true", "false",
     "void", "int", "bool", "id", "Set",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
-    "predicate",
+    "predicate", "struct",
     "interference", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
@@ -36,13 +36,18 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   lazy val program: Parser[PProgram] =
-    (region | predicate | procedure).* ^^ (members => {
-      val region = members collect { case p: PRegion => p }
+    (struct | region | predicate | procedure).* ^^ (members => {
+      val structs = members collect { case p: PStruct => p }
+      val regions = members collect { case p: PRegion => p }
       val predicates = members collect { case p: PPredicate => p }
       val procedures = members collect { case p: PProcedure => p }
 
-      PProgram(region, predicates, procedures)
+      PProgram(structs, regions, predicates, procedures)
     })
+
+  lazy val struct: Parser[PStruct] =
+    ("struct" ~> idndef) ~
+    ("{" ~> (formalArg <~ ";").* <~ "}") ^^ PStruct
 
   lazy val region: Parser[PRegion] =
     ("region" ~> idndef) ~
@@ -144,7 +149,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "assume" ~> expression <~ ";" ^^ PAssume |
     "assert" ~> expression <~ ";" ^^ PAssert |
     "havoc" ~> idnuse <~ ";" ^^ PHavoc |
-    ("*" ~> idnuse) ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     makeAtomic |
     updateRegion |
     useAtomic |
@@ -153,8 +157,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     (idnuse <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
       case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs)
     } |
-    idnuse ~ (":=" ~> "*" ~> idnuse) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
+    idnuse ~ (":=" ~> location) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
+    location ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
+
+  lazy val location: Parser[PLocation] =
+    idnuse ~ ("." ~> idnuse) ^^ PLocation
 
   /* Parses and unrolls a do-while loop.
    * Several hack-ish steps are performed to avoid node sharing while ensuring correct
@@ -266,7 +274,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     predicateExp |
-    (idnuse <~ "|->") ~ binderOrExpression ^^ PPointsTo |
+    (location <~ "|->") ~ binderOrExpression ^^ PPointsTo |
     (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
     idnuse <~ "|=>" <~ "<D>" ^^ PDiamond |
     guardExp |
@@ -306,10 +314,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     typ
 
   lazy val typ: PackratParser[PType] =
-    typ <~ "*" ^^ PRefType |
     "int" ^^^ PIntType() |
     "bool" ^^^ PBoolType() |
-    "id" ^^^ PRegionIdType()
+    "id" ^^^ PRegionIdType() |
+    idnuse ^^ PRefType
 
   lazy val idndef: Parser[PIdnDef] =
     identifier ^^ PIdnDef

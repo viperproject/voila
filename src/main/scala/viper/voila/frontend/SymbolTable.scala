@@ -21,6 +21,7 @@ object RegularEntity {
   def unapply(entity: RegularEntity): Option[PDeclaration] = Some(entity.declaration)
 }
 
+case class StructEntity(declaration: PStruct) extends RegularEntity
 case class ProcedureEntity(declaration: PProcedure) extends RegularEntity
 case class PredicateEntity(declaration: PPredicate) extends RegularEntity
 case class RegionEntity(declaration: PRegion) extends RegularEntity

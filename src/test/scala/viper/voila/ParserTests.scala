@@ -22,6 +22,7 @@ class ParserTests extends FunSuite with Matchers {
   private val `true` = PTrueLit()
   private val `false` = PFalseLit()
   private val `x` = PIdnUse("x")
+  private val `y.f` = PLocation(PIdnUse("y"), PIdnUse("f"))
   private val `bxp` = PIdnExp(PIdnUse("b"))
   private val Emp = Vector.empty
 
@@ -29,7 +30,7 @@ class ParserTests extends FunSuite with Matchers {
     val src = ""
 
     frontend.parse(src) should matchPattern {
-      case Right(PProgram(Emp, Emp, Emp)) =>
+      case Right(PProgram(Emp, Emp, Emp, Emp)) =>
     }
   }
 
@@ -48,7 +49,7 @@ class ParserTests extends FunSuite with Matchers {
                  PNotAtomic())
 
     frontend.parse(src) should matchPattern {
-      case Right(PProgram(Emp, Emp, Vector(`proc`))) =>
+      case Right(PProgram(Emp, Emp, Emp, Vector(`proc`))) =>
     }
   }
 
@@ -95,12 +96,12 @@ class ParserTests extends FunSuite with Matchers {
       case PAssign(`x`, `0`) =>
     }
 
-    frontend.parseStmt("*x := 0;") should matchPattern {
-      case PHeapWrite(`x`, `0`) =>
+    frontend.parseStmt("y.f := 0;") should matchPattern {
+      case PHeapWrite(`y.f`, `0`) =>
     }
 
-    frontend.parseStmt("v := *x;") should matchPattern {
-      case PHeapRead(PIdnUse("v"), `x`) =>
+    frontend.parseStmt("x := y.f;") should matchPattern {
+      case PHeapRead(`x`, `y.f`) =>
     }
   }
 }

@@ -24,8 +24,28 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case decl: PIdnDef if entity(decl) == MultipleEntity() =>
         message(decl, s"${decl.name} is declared more than once")
 
-      case use: PIdnUse if entity(use) == UnknownEntity() =>
-        message(use, s"${use.name} is not declared")
+      case use: PIdnUse =>
+        use match {
+          case tree.parent(PLocation(receiver, field)) if use eq field =>
+            check(typeOfIdn(receiver)) {
+              case PRefType(referencedTyp) =>
+                check(entity(referencedTyp)) {
+                  case StructEntity(struct) =>
+                    message(
+                      receiver,
+                      s"Receiver $receiver does not have a field $field",
+                      !struct.fields.exists(_.id.name == field.name))
+
+                   case _ =>
+                     message(receiver, s"Receiver $receiver is not of struct type")
+                }
+              case _ =>
+                message(receiver, s"Receiver $receiver is not of reference type")
+            }
+
+          case _ =>
+            message(use, s"${use.name} is not declared", entity(use) == UnknownEntity())
+        }
 
       case exp: PExpression if typ(exp) == PUnknownType() =>
         message(exp, s"$exp could not be typed")
@@ -41,30 +61,28 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PAssign(lhs, _) if !entity(lhs).isInstanceOf[LocalVariableEntity] =>
         message(lhs, s"Cannot assign to ${lhs.name}")
 
-      case PHeapRead(lhs, rhs) =>
-        check(entity(lhs)) {
-          case LocalVariableEntity(lhsDecl) =>
-            val rhsTyp = typeOfIdn(rhs)
+      case PHeapRead(localVariable, location) =>
+        check(entity(localVariable)) {
+          case LocalVariableEntity(localVariableDecl) =>
+            val locationType = typeOfLocation(location)
 
             message(
-              rhs,
-              s"Type error: expected ${lhsDecl.typ}* but got $rhsTyp",
-              !isCompatible(referencedType(rhsTyp), lhsDecl.typ))
+              location,
+              s"Type error: expected ${localVariableDecl.typ} but got $locationType",
+              !isCompatible(locationType, localVariableDecl.typ))
 
           case other =>
-            message(lhs, s"Type error: expected a local variable, but found $other")
+            message(localVariable, s"Type error: expected a local variable, but found $other")
         }
 
-      case PHeapWrite(lhs, _) =>
-        typeOfIdn(lhs) match {
-          case _: PRefType =>
-            message(lhs, "????????????????", false)
-            /* TODO: Check compatibility of LHS and RHS? */
-          case otherType =>
-            message(
-              lhs,
-              s"Type error: expected a reference type, but found $otherType")
-        }
+      case PHeapWrite(location, rhs) =>
+        val locationType = typeOfLocation(location)
+        val rhsType = typ(rhs)
+
+        message(
+          location,
+          s"Type error: expected $locationType but got $rhsType",
+          !isCompatible(rhsType, locationType))
 
       case exp: PExpression => (
            message(
@@ -134,6 +152,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     attr {
       case tree.parent(p) =>
         p match {
+          case decl: PStruct=> StructEntity(decl)
           case decl: PProcedure => ProcedureEntity(decl)
           case decl: PPredicate => PredicateEntity(decl)
           case decl: PRegion => RegionEntity(decl)
@@ -180,6 +199,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     case program: PProgram =>
       val topLevelBindings = (
            program.regions.map(r => r.id.name -> RegionEntity(r))
+        ++ program.structs.map(p => p.id.name -> StructEntity(p))
         ++ program.predicates.map(p => p.id.name -> PredicateEntity(p))
         ++ program.procedures.map(p => p.id.name -> ProcedureEntity(p)))
 
@@ -305,10 +325,20 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ => false
     }
 
-  def referencedType(typ: PType): PType =
-    typ match {
-      case PRefType(t) => t
-      case _ => PUnknownType()
+  lazy val typeOfLocation: PLocation => PType =
+    attr { case PLocation(receiver, field) =>
+      typeOfIdn(receiver) match {
+        case receiverType: PRefType =>
+          entity(receiverType.id) match {
+            case structEntity: StructEntity =>
+              structEntity.declaration.fields.find(_.id.name == field.name) match {
+                case Some(fieldDecl) => fieldDecl.typ
+                case None => PUnknownType()
+              }
+            case _ => PUnknownType()
+          }
+        case _ => PUnknownType()
+      }
     }
 
   lazy val typeOfIdn: PIdnNode => PType =
@@ -322,8 +352,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val typeOfLogicalVariable: PLogicalVariableBinder => PType =
     attr(binder => boundBy(binder) match {
-      case PPointsTo(id, _) =>
-        referencedType(typeOfIdn(id))
+      case PPointsTo(location, _) =>
+        typeOfLocation(location)
 
       case PPredicateExp(id, _) =>
         val region = entity(id).asInstanceOf[RegionEntity].declaration
@@ -409,9 +439,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case _ => PUnknownType()
         }
 
-      case tree.parent(PHeapRead(id, _)) => referencedType(typeOfIdn(id))
+      case tree.parent(PHeapRead(id, _)) => typeOfIdn(id)
 
-      case tree.parent(PHeapWrite(id, _)) => referencedType(typeOfIdn(id))
+      case tree.parent(PHeapWrite(location, _)) => typeOfLocation(location)
 
       case e @ tree.parent(PEquals(lhs, rhs)) if e eq rhs =>
         /* The expected type of the RHS of an equality is the type of the LHS */

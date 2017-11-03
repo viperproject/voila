@@ -31,6 +31,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case id: PIdnNode => toDoc(id)
       case clause: PSpecificationClause => toDoc(clause)
       case PAction(guard, from, to) => ???
+      case location: PLocation => toDoc(location)
     }
 
   def toDoc(clause: PSpecificationClause): Doc = {
@@ -79,11 +80,16 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
     }
   }
 
+  def toDoc(location: PLocation): Doc = {
+    toDoc(location.receiver) <> "." <> toDoc(location.field)
+  }
 
   def toDoc(program: PProgram): Doc = {
-    val PProgram(regions, predicates, procedures) = program
+    val PProgram(structs, regions, predicates, procedures) = program
 
-    (    ssep(regions map toDoc, line)
+    (    ssep(structs map toDoc, line)
+      <> line
+      <> ssep(regions map toDoc, line)
       <> line
       <> ssep(predicates map toDoc, line)
       <> line
@@ -103,6 +109,10 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
   def toDoc(member: PMember): Doc = {
     member match {
+      case PStruct(id, fields) =>
+        "struct" <+> toDoc(id) <>
+        nest(braces(ssep(fields map toDoc, semi <> line)))
+
       case PRegion(id, regionId, formalArgs, guards, interpretation, state, actions) =>
         (   "region" <+> toDoc(id) <> asFormalArguments(formalArgs)
          <> nest("guards" <+> braces(ssep(guards map toDoc, semi <> line)))
@@ -154,8 +164,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PSeqComp(first, second) => toDoc(first) <> semi <> line <> toDoc(second)
       case PSkip() => "skip" <> semi
       case PAssign(lhs, rhs) => toDoc(lhs) <+> ":=" <+> toDoc(rhs)
-      case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> "*" <> toDoc(location)
-      case PHeapWrite(location, rhs) => "*" <> toDoc(location) <+> ":=" <+> toDoc(rhs)
+      case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location)
+      case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs)
 
       case PIf(cond, thn, els) => ???
 

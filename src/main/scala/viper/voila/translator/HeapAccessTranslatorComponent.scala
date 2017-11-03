@@ -10,58 +10,58 @@ import viper.voila.frontend._
 import viper.silver.{ast => vpr}
 
 trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
-  private def heapLocationAsField(typ: PType): vpr.Field =
-    vpr.Field(s"$$h_$typ", translateNonVoid(typ))()
+  def toField(declaredBy: PStruct, id: PIdnNode): vpr.Field = {
+    val fieldType = declaredBy.fields.find(_.id.name == id.name).get.typ
 
-  private def referencedType(id: PIdnNode): PType =
-    semanticAnalyser.referencedType(semanticAnalyser.typeOfIdn(id))
+    vpr.Field(s"$$${declaredBy.id.name}_$$${id.name}", translateNonVoid(fieldType))()
+  }
 
-  def heapLocations(tree: VoilaTree): Vector[vpr.Field] = {
-    tree.nodes.collect {
-      case access: PHeapAccess => heapLocationAsField(referencedType(access.location))
-      case pointsTo: PPointsTo => heapLocationAsField(referencedType(pointsTo.id))
-    }.distinct
+  def translate(location: PLocation): vpr.FieldAccess = {
+    val recevierType =
+      semanticAnalyser.typeOfIdn(location.receiver).asInstanceOf[PRefType]
+
+    val receiverStruct =
+      semanticAnalyser.entity(recevierType.id).asInstanceOf[StructEntity].declaration
+
+    vpr.FieldAccess(
+      translateUseOf(location.receiver),
+      toField(receiverStruct, location.field)
+    )()
   }
 
   def translate(read: PHeapRead): vpr.Stmt = {
-    val voilaType = referencedType(read.location)
-    val viperType = translateNonVoid(voilaType)
+    val vprLocalVarType = translateNonVoid(semanticAnalyser.typeOfIdn(read.lhs))
+    val vprLocalVar = vpr.LocalVar(read.lhs.name)(typ = vprLocalVarType).withSource(read.lhs)
+    val vprFieldAccess = translate(read.location)
 
-    val rcvr = vpr.LocalVar(read.location.name)(typ = vpr.Ref)
-    val fld = heapLocationAsField(voilaType)
-    val fldacc = vpr.FieldAccess(rcvr, fld)().withSource(read.location)
-    val lv = vpr.LocalVar(read.lhs.name)(typ = viperType).withSource(read.lhs)
-
-    vpr.LocalVarAssign(lv, fldacc)().withSource(read)
+    vpr.LocalVarAssign(
+      vprLocalVar,
+      vprFieldAccess
+    )().withSource(read)
   }
 
   def translate(write: PHeapWrite): vpr.Stmt = {
-    val voilaType = referencedType(write.location)
-
-    val rcvr = vpr.LocalVar(write.location.name)(typ = vpr.Ref)
-    val fld = heapLocationAsField(voilaType)
-
-    val result =
-      vpr.FieldAssign(vpr.FieldAccess(rcvr, fld)(), translate(write.rhs))()
-
-    result.withSource(write)
+    vpr.FieldAssign(
+      translate(write.location),
+      translate(write.rhs)
+    )().withSource(write)
   }
 
   def translate(pointsTo: PPointsTo): vpr.Exp = {
-    val voilaType = referencedType(pointsTo.id)
+    val vprFieldAccess = translate(pointsTo.location)
 
-    val rcvr = vpr.LocalVar(pointsTo.id.name)(typ = vpr.Ref)
-    val fld = heapLocationAsField(voilaType)
-    val deref = vpr.FieldAccess(rcvr, fld)()
-
-    val fldvalcnstr = pointsTo.value match {
-      case _: PLogicalVariableBinder => vpr.TrueLit()()
-      case exp => vpr.EqCmp(deref, translate(exp))()
-    }
+    val vprFieldValueConstraint =
+      pointsTo.value match {
+        case _: PLogicalVariableBinder => vpr.TrueLit()()
+        case exp => vpr.EqCmp(vprFieldAccess, translate(exp))()
+      }
 
     vpr.And(
-      vpr.FieldAccessPredicate(deref, vpr.FullPerm()())(),
-      fldvalcnstr
+      vpr.FieldAccessPredicate(
+        vprFieldAccess,
+        vpr.FullPerm()()
+      )().withSource(pointsTo.location),
+      vprFieldValueConstraint
     )()
   }
 
@@ -72,11 +72,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     val vprHeapRead: vpr.Exp =
       semanticAnalyser.boundBy(declaration) match {
         case PPointsTo(location, _) =>
-          val voilaType = semanticAnalyser.typeOfIdn(declaration.id)
-          val vprReceiver = vpr.LocalVar(location.name)(typ = vpr.Ref)
-          val vprField = heapLocationAsField(voilaType)
-
-          vpr.FieldAccess(vprReceiver, vprField)()
+          translate(location)
 
         case predicateExp: PPredicateExp =>
           regionState(predicateExp)
