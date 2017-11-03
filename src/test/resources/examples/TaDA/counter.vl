@@ -3,7 +3,7 @@ struct memcell {
 }
 
 region Counter(id c, memcell x)
-  guards { duplicable G; }
+  guards { unique G; }
   interpretation {
     x.f |-> ?n // TODO: n is a Nat (not an Int) in the paper. Here are three ideas:
              //         - Encode a Nat type in Viper (domain, axioms, (un)boxing)

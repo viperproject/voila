@@ -3,7 +3,7 @@ struct memcell {
 }
 
 region Lock(id a, memcell x)
-  guards { duplicable G; }
+  guards { unique G; }
   interpretation {
     x.f |-> ?v && (v == 0 || v == 1)
   }
