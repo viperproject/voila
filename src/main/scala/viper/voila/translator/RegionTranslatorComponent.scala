@@ -435,10 +435,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           currentPermissions
         )()
 
-    /* exhale region(args);  inhale region(args) */
+    /* exhale region(args) */
     val vprExhaleRegion =
       vpr.Exhale(potentiallyQuantify(regionPredicateAccess(currentPermissions), None))()
 
+    /* inhale region(args) */
     val vprInhaleRegion =
       vpr.Inhale(potentiallyQuantify(regionPredicateAccess(preHavocPermissions), None))()
 
