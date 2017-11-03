@@ -1,0 +1,41 @@
+struct memcell {
+  int f;
+}
+
+region Counter(id c, memcell x)
+  guards { unique INC; }
+  interpretation { x.f |-> ?n }
+  state { n }
+  actions { INC: ?m ~> Int; }
+
+abstract_atomic int read(id c, memcell x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && INC@c;
+  ensures Counter(c, x, n) && INC@c;
+  ensures ret == n;
+
+abstract_atomic void incr(id c, memcell x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && INC@c;
+  ensures Counter(c, x, n + 1) && INC@c;
+
+
+/*
+ * Corresponds to Fig. 7.2 from Pedro's thesis
+ */
+void seq_client(id c, memcell x, int n)
+  requires 0 < n;
+  requires Counter(c, x, 0) && INC@c;
+  ensures  Counter(c, x, n) && INC@c;
+{
+  int m;
+  m := n;
+
+  while (0 < m)
+    invariant 0 <= m;
+    invariant Counter(c, x, n - m) && INC@c;
+  {
+    incr(c, x);
+    m := m - 1;
+  }
+}
