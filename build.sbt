@@ -11,16 +11,24 @@ lazy val voila = {
       homepage := Some(url("https://bitbucket.org/mschwerhoff/voila")),
       licenses := Seq("MPL-2.0 License" -> url("https://opensource.org/licenses/MPL-2.0")),
 
-      scalaVersion := "2.11.8",
+      scalaVersion := "2.11.11",
       scalacOptions in Compile ++= Seq(
         "-deprecation",
         "-unchecked",
-        "-feature"
+        "-feature",
+        // "-Ypatmat-exhaust-depth", "off", // "40"
+        "-Xno-patmat-analysis"
+        // "-Xstrict-patmat-analysis"
         /*"-Xfatal-warnings"*/),
+
+      /* See also:
+       *   https://www.threatstack.com/blog/useful-scalac-options-for-better-scala-development-part-1/
+       *   https://tpolecat.github.io/2017/04/25/scalac-flags.html
+       */
 
       libraryDependencies ++= externalDependencies,
 
-      /* Make sure Silicon doesn't overfow the stack */
+      /* Make sure Silicon doesn't overflow the stack */
       javaOptions in run ++= Seq("-Xss64M"),
       javaOptions in Test += "-Xss64M",
 
