@@ -10,7 +10,7 @@ import scala.collection.breakOut
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
-import viper.voila.reporting.{InterferenceError, PreconditionError}
+import viper.voila.reporting.{InsufficientRegionPermissionError, InterferenceError, PreconditionError}
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -632,6 +632,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     )()
 
                   errorBacktranslator.addErrorTransformer {
+                    case e @ vprerr.PreconditionInAppFalse(_, reason: vprrea.InsufficientPermission, _)
+                         if e causedBy vprCurrentState =>
+
+                      PreconditionError(call, InsufficientRegionPermissionError(regionPredicate))
+
                     case e @ vprerr.AssertFailed(_, reason, _)
                          if (e causedBy vprCheckStateUnchanged) &&
                             (reason causedBy vprCheckStateUnchanged.exp) =>
