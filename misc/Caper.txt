@@ -2,14 +2,16 @@
   --- Done ---
     SpinLock.t
       TODO: makeLock()
-      
-  --- To do ---  
+    CASCounter.t 	Updated all recursive examples. 	2 years ago
+      TODO: makeCounter()
+
+  --- To do ---
     BagStack.t 	Nothing. 	a year ago
     Barrier.t 	Minor tweaks. 	a year ago
     BarrierClient.t 	Minor tweaks. 	a year ago
     BoundedCounter.t 	Added queue. 	a year ago
     BoundedReadWriteLock.t 	Minor tweaks. 	a year ago
-    CASCounter.t 	Updated all recursive examples. 	2 years ago
+
     CounterClient.t 	Added iterative version of the parallel increment. 	6 months ago
     ForkJoin.t 	Examples 	a year ago
     ForkJoinClient.t 	Examples 	a year ago

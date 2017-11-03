@@ -1,0 +1,65 @@
+// Corresponds to:
+//   https://github.com/caper-tool/caper/blob/master/examples/iterative/CASCounter.t
+//
+
+struct memcell {
+  int f;
+}
+
+region Counter(id r, memcell x)
+  guards { duplicable INCREMENT; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions {
+    INCREMENT: ?m ~> Int;
+    /* TODO: In Caper:   n < m | INCREMENT[_] : n ~> m; */
+  }
+
+// TODO: makeCounter()
+
+int incr(id r, memcell x)
+  requires Counter(r, x, ?v0) && INCREMENT@r;
+  ensures  Counter(r, x, ?v1) && INCREMENT@r;
+  //:: UnexpectedOutput(postcondition_error:assertion_error, /voila/issue/000000/)
+  // TODO: Region action too permissive
+  ensures  v0 < v1;
+{
+  int v;
+  bool b;
+
+  do
+    invariant Counter(r, x, ?vi);     // TODO: Why isn't INCREMENT@r needed here????????????????????????
+    // invariant b ? v0 < v1 : v0 <= v1; // TODO: Crashes
+  {
+    open_region
+      using Counter(r, x);
+    {
+      v := x.f;
+    }
+    use_atomic
+      using Counter(r, x) with INCREMENT@r;
+    {
+      b := CAS(x, v, v + 1);
+    }
+  } while (!b);
+}
+
+int read(id r, memcell x)
+  requires Counter(r, x, ?v0) && INCREMENT@r;
+  ensures  Counter(r, x, ?v1) && INCREMENT@r;
+  //:: UnexpectedOutput(postcondition_error:assertion_error, /voila/issue/000000/)
+  // TODO: Region action too permissive
+  ensures  ret <= v1;
+{
+  open_region
+    using Counter(r, x);
+  {
+    ret := x.f;
+  }
+}
+
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
