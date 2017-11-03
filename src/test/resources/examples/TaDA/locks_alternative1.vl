@@ -1,7 +1,11 @@
-region Lock(id a, int* x)
+struct memcell {
+  int f;
+}
+
+region Lock(id a, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?v && v != 0
+    x.f |-> ?v && v != 0
   }
   state { v < 0 ? 0 : 1 }
   actions {
@@ -10,16 +14,16 @@ region Lock(id a, int* x)
   }
 
 /*
-predicate U(id a, int* x) {
+predicate U(id a, memcell x) {
   Lock(a, x, 0) && G@a
 }
 
-predicate L(id a, int* x) {
+predicate L(id a, memcell x) {
   Lock(a, x, 1) && G@a
 }
 */
 
-abstract_atomic void unlock(id a, int* x)
+abstract_atomic void unlock(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a; // L(a, x)
   ensures Lock(a, x, 0) && G@a; // U(a, x)
@@ -37,14 +41,14 @@ abstract_atomic void unlock(id a, int* x)
     update_region
       using Lock(a, x);
     {
-      *x := nonDetNeg;
+      x.f := nonDetNeg;
     }
   }
 
   // fold U(a, x);
 }
 
-abstract_atomic void lock(id a, int* x)
+abstract_atomic void lock(id a, memcell x)
   interference ?s in Set(0, 1) on a;
   // requires s == 0 ? U(a, x) : L(a, x);
   requires Lock(a, x, s) && G@a;
@@ -79,8 +83,8 @@ abstract_atomic void lock(id a, int* x)
   // fold L(a, x);
 }
 
-primitive_atomic bool CASifNeg(int* x, int thn)
-  requires x |-> ?v;
+primitive_atomic bool CASifNeg(memcell x, int thn)
+  requires x.f |-> ?v;
   ensures  v < 0
-              ? ret && x |-> thn
-              : !ret && x |-> v;
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;

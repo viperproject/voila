@@ -1,7 +1,11 @@
-region Lock(id a, int* x)
+struct memcell {
+  int f;
+}
+
+region Lock(id a, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?v && (v == 0 || v == 1)
+    x.f |-> ?v && (v == 0 || v == 1)
   }
   state { v }
   actions {
@@ -11,7 +15,7 @@ region Lock(id a, int* x)
 
 predicate Inv()
 
-region CAPLock(id r, id a, int* x)
+region CAPLock(id r, id a, memcell x)
   guards {
     duplicable Z;
     unique K;
@@ -29,19 +33,19 @@ region CAPLock(id r, id a, int* x)
 
 
 
-abstract_atomic void lock(id a, int* x)
+abstract_atomic void lock(id a, memcell x)
   interference ?s in Set(0, 1) on a;
   requires Lock(a, x, s) && G@a;
   ensures Lock(a, x, 1) && G@a && s == 0;
 
-abstract_atomic void unlock(id a, int* x)
+abstract_atomic void unlock(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a;
   ensures Lock(a, x, 0) && G@a;
 
 
 
-void test01(id r, id a, int* x)
+void test01(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)

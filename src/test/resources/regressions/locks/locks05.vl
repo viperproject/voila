@@ -1,7 +1,11 @@
-region Lock(id a, int* x)
+struct memcell {
+  int f;
+}
+
+region Lock(id a, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?v && 0 <= v // [XXX] Changed constraint: was "v == 0 || v == 1"
+    x.f |-> ?v && 0 <= v // [XXX] Changed constraint: was "v == 0 || v == 1"
   }
   state { v }
   actions {
@@ -11,7 +15,7 @@ region Lock(id a, int* x)
 
 predicate Inv()
 
-region CAPLock(id r, id a, int* x)
+region CAPLock(id r, id a, memcell x)
   guards {
     duplicable Z;
     unique K;
@@ -29,7 +33,7 @@ region CAPLock(id r, id a, int* x)
 
 
 
-abstract_atomic void unlock01(id a, int* x)
+abstract_atomic void unlock01(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a;
 {
@@ -40,12 +44,12 @@ abstract_atomic void unlock01(id a, int* x)
     update_region
       using Lock(a, x);
     {
-      *x := -1;
+      x.f := -1;
     }
   }
 }
 
-abstract_atomic void unlock02(id a, int* x)
+abstract_atomic void unlock02(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a;
 {
@@ -56,7 +60,7 @@ abstract_atomic void unlock02(id a, int* x)
     update_region
       using Lock(a, x);
     {
-      *x := 2;
+      x.f := 2;
     }
   }
 }

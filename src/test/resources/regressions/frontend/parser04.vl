@@ -1,0 +1,13 @@
+struct cell {
+  int f;
+}
+
+void increment(cell x)
+  requires x.f |-> ?v;
+  ensures  x.f |-> v + 1;
+{
+  int tmp;
+
+  tmp := x.f;
+  x.f := tmp + 1;
+}

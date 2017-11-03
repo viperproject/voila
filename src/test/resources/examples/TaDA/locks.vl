@@ -1,7 +1,11 @@
-region Lock(id a, int* x)
+struct memcell {
+  int f;
+}
+
+region Lock(id a, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?v && (v == 0 || v == 1)
+    x.f |-> ?v && (v == 0 || v == 1)
   }
   state { v }
   actions {
@@ -9,17 +13,17 @@ region Lock(id a, int* x)
     G: 1 ~> Set(1, 0);
   }
 
-//predicate U(id a, int* x) {
+//predicate U(id a, memcell x) {
 //  Lock(a, x, 0) && G@a
 //}
 //
-//predicate L(id a, int* x) {
+//predicate L(id a, memcell x) {
 //  Lock(a, x, 1) && G@a
 //}
 
 predicate Inv() /* Invariant of CAP lock (left abstract) */
 
-region CAPLock(id r, id a, int* x)
+region CAPLock(id r, id a, memcell x)
   guards {
     duplicable Z;
     unique K;
@@ -35,25 +39,25 @@ region CAPLock(id r, id a, int* x)
     K: 1 ~> Set(1, 0);
   }
 
-predicate isLock(id r, id a, int* x) {
+predicate isLock(id r, id a, memcell x) {
   CAPLock(r, a, x, ?v) && (v == 0 || v == 1) // v in Set(0, 1) // TODO: Support simple set expressions
 }
 
-predicate Locked(id r, id a, int* x) {
+predicate Locked(id r, id a, memcell x) {
   CAPLock(r, a, x, ?v) && v == 1 && K@r
 }
 
 
 
-primitive_atomic bool CAS(int* x, int now, int thn)
-  requires x |-> ?v;
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
   ensures  v == now
-              ? ret && x |-> thn
-              : !ret && x |-> v;
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
 
 
 
-abstract_atomic void unlock(id a, int* x)
+abstract_atomic void unlock(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a; // L(a, x)
   ensures Lock(a, x, 0) && G@a; // U(a, x)
@@ -66,14 +70,14 @@ abstract_atomic void unlock(id a, int* x)
     update_region
       using Lock(a, x);
     {
-      *x := 0;
+      x.f := 0;
     }
   }
 
   // fold U(a, x);
 }
 
-void non_atomic_unlock(id r, id a, int* x)
+void non_atomic_unlock(id r, id a, memcell x)
   requires Locked(r, a, x);
   requires Inv();
 {
@@ -91,7 +95,7 @@ void non_atomic_unlock(id r, id a, int* x)
 
 
 
-abstract_atomic void lock(id a, int* x)
+abstract_atomic void lock(id a, memcell x)
   interference ?s in Set(0, 1) on a;
   // requires s == 0 ? U(a, x) : L(a, x);
   requires Lock(a, x, s) && G@a;
@@ -122,7 +126,7 @@ abstract_atomic void lock(id a, int* x)
   // fold L(a, x);
 }
 
-void non_atomic_lock(id r, id a, int* x)
+void non_atomic_lock(id r, id a, memcell x)
   requires isLock(r, a, x);
   ensures  Locked(r, a, x);
   // ensures  isLock(r, a, x);

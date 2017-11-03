@@ -1,10 +1,14 @@
-region Cell(id c, int* x)
+struct memcell {
+  int f;
+}
+
+region Cell(id c, memcell x)
   guards { duplicable G; }
-  interpretation { x |-> ?n }
+  interpretation { x.f |-> ?n }
   state { n }
   actions { G: ?m ~> Int; }
 
-abstract_atomic void test02(id c, int* x)
+abstract_atomic void test02(id c, memcell x)
   requires Cell(c, x, ?v);
   ensures Cell(c, x, ?w);
   ensures v == w; // OK
@@ -12,7 +16,7 @@ abstract_atomic void test02(id c, int* x)
   skip;
 }
 
-void test03(id c, int* x)
+void test03(id c, memcell x)
   requires Cell(c, x, ?v);
   ensures Cell(c, x, ?w);
   //:: ExpectedOutput(postcondition_error:assertion_error)

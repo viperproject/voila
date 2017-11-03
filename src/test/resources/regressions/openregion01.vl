@@ -1,14 +1,18 @@
-region Counter(id c, int* x)
+struct memcell {
+  int f;
+}
+
+region Counter(id c, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?n
+    x.f |-> ?n
   }
   state { n }
   actions {
     G: ?m ~> Int;
   }
 
-abstract_atomic int test01(id c, int* x)
+abstract_atomic int test01(id c, memcell x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
 {
@@ -16,30 +20,30 @@ abstract_atomic int test01(id c, int* x)
   open_region
     using Counter(c, x);
   {
-    *x := n + 1;
+    x.f := n + 1;
   }
 }
 
-abstract_atomic int test02(id c, int* x)
+abstract_atomic int test02(id c, memcell x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
 {
   open_region
     using Counter(c, x);
   {
-    *x := n;
+    x.f := n;
   }
 }
 
 /* TODO: See issue #22 */
-//abstract_atomic int test03(id c, int* x)
+//abstract_atomic int test03(id c, memcell x)
 //  interference ?n in Int on c;
 //  requires Counter(c, x, n) && G@c;
 //{
 //  open_region
 //    using Counter(c, x);
 //  {
-//    *x := n;
-//    *x := n;
+//    x.f := n;
+//    x.f := n;
 //  }
 //}

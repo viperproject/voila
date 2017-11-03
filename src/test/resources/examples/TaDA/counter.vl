@@ -1,7 +1,11 @@
-region Counter(id c, int* x)
+struct memcell {
+  int f;
+}
+
+region Counter(id c, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?n // TODO: n is a Nat (not an Int) in the paper. Here are three ideas:
+    x.f |-> ?n // TODO: n is a Nat (not an Int) in the paper. Here are three ideas:
              //         - Encode a Nat type in Viper (domain, axioms, (un)boxing)
              //         - Add n >= 0 here; must be taken into account when havocking region
              //           Hm ... why? Havocking a region is implemented by ex- & inhaling the region
@@ -41,7 +45,7 @@ region Counter(id c, int* x)
   }
 
 
-abstract_atomic int read(id c, int* x)
+abstract_atomic int read(id c, memcell x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -54,12 +58,12 @@ abstract_atomic int read(id c, int* x)
     update_region
       using Counter(c, x);
     {
-      ret := *x;
+      ret := x.f;
     }
   }
 }
 
-abstract_atomic int read2(id c, int* x)
+abstract_atomic int read2(id c, memcell x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -68,17 +72,17 @@ abstract_atomic int read2(id c, int* x)
   open_region
     using Counter(c, x);
   {
-    ret := *x;
+    ret := x.f;
   }
 }
 
-primitive_atomic bool CAS(int* x, int now, int thn)
-  requires x |-> ?v;
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
   ensures  v == now
-              ? ret && x |-> thn
-              : !ret && x |-> v;
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
 
-abstract_atomic void incr(id c, int* x)
+abstract_atomic void incr(id c, memcell x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n + 1) && G@c;
@@ -97,7 +101,7 @@ abstract_atomic void incr(id c, int* x)
       open_region
         using Counter(c, x);
       {
-        r := *x;
+        r := x.f;
       }
       update_region
         using Counter(c, x);
@@ -108,7 +112,7 @@ abstract_atomic void incr(id c, int* x)
   }
 }
 
-abstract_atomic void wkincr(id c, int* x)
+abstract_atomic void wkincr(id c, memcell x)
   interference ?n in Set[int](n) on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n + 1) && G@c;
@@ -121,13 +125,13 @@ abstract_atomic void wkincr(id c, int* x)
     open_region
       using Counter(c, x);
     {
-      r := *x;
+      r := x.f;
     }
 
     update_region
       using Counter(c, x);
     {
-      *x := r + 1;
+      x.f := r + 1;
     }
   }
 }

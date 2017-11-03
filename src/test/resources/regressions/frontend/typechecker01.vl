@@ -1,13 +1,17 @@
+struct memcell {
+  int f;
+}
+
 int test02(bool b) {
   //:: ExpectedOutput(typechecker_error)
   ret := b;
 }
 
-void test03(int* x) {
+void test03(memcell x) {
   bool v;
 
   //:: ExpectedOutput(typechecker_error)
-  v := *x;
+  v := x.f;
 }
 
 void test04()

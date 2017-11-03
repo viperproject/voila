@@ -1,7 +1,11 @@
-region Lock(id a, int* x)
+struct memcell {
+  int f;
+}
+
+region Lock(id a, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?v && (v == 0 || v == 1)
+    x.f |-> ?v && (v == 0 || v == 1)
   }
   state { v }
   actions {
@@ -11,7 +15,7 @@ region Lock(id a, int* x)
 
 predicate Inv()
 
-region CAPLock(id r, id a, int* x)
+region CAPLock(id r, id a, memcell x)
   guards {
     duplicable Z;
     duplicable K; // [XXX] Wrong modifier: duplicable instead of unique
@@ -30,12 +34,12 @@ region CAPLock(id r, id a, int* x)
 
 
 
-abstract_atomic void lock(id a, int* x)
+abstract_atomic void lock(id a, memcell x)
   interference ?s in Set(0, 1) on a;
   requires Lock(a, x, s) && G@a;
   ensures Lock(a, x, 1) && G@a && s == 0;
 
-void non_atomic_lock01(id r, id a, int* x)
+void non_atomic_lock01(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  CAPLock(r, a, x, ?w) && w == 1 && K@r;
@@ -47,7 +51,7 @@ void non_atomic_lock01(id r, id a, int* x)
   }
 }
 
-void non_atomic_lock02(id r, id a, int* x)
+void non_atomic_lock02(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v);
 {
   use_atomic

@@ -2,13 +2,17 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/SpinLock.t
 //
 
-region SLock(id r, int* x)
+struct memcell {
+  int f;
+}
+
+region SLock(id r, memcell x)
   guards {
     duplicable LOCK;
     unique UNLOCK;
   }
   interpretation {
-    x |-> ?v &&
+    x.f |-> ?v &&
     (v == 0 ? UNLOCK@r :
      v == 1 ? true :
      false)
@@ -20,14 +24,14 @@ region SLock(id r, int* x)
   }
 
 // TODO: Too many issues
-int* makeLock(id r)
+memcell makeLock(id r)
 //  // ensures SLock(r, ret, 0) && LOCK@r; // TODO: See issue #23
 {
 //  // ret := alloc(1); // See Voila issue #17
-//  int* x;
+//  memcell x;
 //  havoc x;
-//  inhale (x |-> ?v);
-//  *x := 0;
+//  inhale (x.f |-> ?v);
+//  x.f := 0;
 //
 //  inhale UNLOCK@r; // See Voila issues #18 ...
 //  inhale LOCK@r;   // ... and #19
@@ -36,7 +40,7 @@ int* makeLock(id r)
 //  ret := x;
 }
 
-abstract_atomic void acquire(id r, int* x)
+abstract_atomic void acquire(id r, memcell x)
   interference ?v in Set(0, 1) on r;
   requires SLock(r, x) && LOCK@r;
   ensures  SLock(r, x, 1);
@@ -62,7 +66,7 @@ abstract_atomic void acquire(id r, int* x)
   }
 }
 
-abstract_atomic void release1(id r, int* x)
+abstract_atomic void release1(id r, memcell x)
   interference ?s in Set(1) on r;
   requires SLock(r, x, 1) && UNLOCK@r;
   ensures  SLock(r, x, 0) && LOCK@r;
@@ -79,12 +83,12 @@ abstract_atomic void release1(id r, int* x)
     update_region
       using SLock(r, x);
     {
-      *x := 0;
+      x.f := 0;
     }
   }
 }
 
-abstract_atomic void release2(id r, int* x)
+abstract_atomic void release2(id r, memcell x)
   interference ?s in Set(1) on r;
   requires SLock(r, x, 1) && UNLOCK@r;
   ensures  SLock(r, x, 0);
@@ -94,13 +98,13 @@ abstract_atomic void release2(id r, int* x)
   use_atomic
     using SLock(r, x) with UNLOCK@r;
   {
-    *x := 0;
+    x.f := 0;
   }
 }
 
 
-primitive_atomic bool CAS(int* x, int now, int thn)
-  requires x |-> ?v;
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
   ensures  v == now
-              ? ret && x |-> thn
-              : !ret && x |-> v;
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;

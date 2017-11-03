@@ -1,2 +1,7 @@
-void test01(int* x) {}
-void test02(id* x) {}
+struct memcell {
+  int f;
+  id a;
+}
+
+void test01(memcell x) {}
+void test02(id x) {}

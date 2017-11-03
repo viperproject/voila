@@ -1,7 +1,11 @@
-region Counter(id c, int* x)
+struct memcell {
+  int f;
+}
+
+region Counter(id c, memcell x)
   guards { duplicable G; }
   interpretation {
-    x |-> ?n
+    x.f |-> ?n
   }
   state { n }
   actions {
@@ -10,7 +14,7 @@ region Counter(id c, int* x)
 
 
 
-abstract_atomic int read01(id c, int* x)
+abstract_atomic int read01(id c, memcell x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -19,11 +23,11 @@ abstract_atomic int read01(id c, int* x)
   open_region
     using Counter(c, x);
   {
-    ret := *x;
+    ret := x.f;
   }
 }
 
-abstract_atomic int read02(id c, int* x)
+abstract_atomic int read02(id c, memcell x)
   interference ?n in Set[int](n) on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -32,13 +36,13 @@ abstract_atomic int read02(id c, int* x)
   open_region
     using Counter(c, x);
   {
-    ret := *x;
+    ret := x.f;
   }
 }
 
 
 
-int read01_client01(id c, int* x)
+int read01_client01(id c, memcell x)
   requires Counter(c, x, ?n) && G@c;
   ensures Counter(c, x, ?m) && G@c;
   ensures ret == n;
@@ -46,7 +50,7 @@ int read01_client01(id c, int* x)
   ret := read01(c, x);
 }
 
-int read01_client02(id c, int* x)
+int read01_client02(id c, memcell x)
   requires Counter(c, x, ?n) && G@c;
   ensures Counter(c, x, ?m) && G@c;
   //:: ExpectedOutput(postcondition_error:assertion_error)
@@ -56,7 +60,7 @@ int read01_client02(id c, int* x)
   ret := read01(c, x);
 }
 
-int read01_client03(id c, int* x)
+int read01_client03(id c, memcell x)
   requires Counter(c, x, ?n) && G@c;
   ensures ret == n;
   //:: ExpectedOutput(postcondition_error:region_state_error)
@@ -69,14 +73,14 @@ int read01_client03(id c, int* x)
 
 
 
-int read02_client01(id c, int* x)
+int read02_client01(id c, memcell x)
   requires Counter(c, x, ?n) && G@c; // TODO: Unstable, see Voila issue #15
 {
   //:: ExpectedOutput(precondition_error:interference_error)
   ret := read02(c, x);
 }
 
-int read02_client02(id c, int* x)
+int read02_client02(id c, memcell x)
   // interference ?n in Set[int](n) on c; // TODO: See Voila issue #14
   requires Counter(c, x, ?n) && G@c;      // TODO: Unstable, see Voila issue #15
   ensures ret == n;
@@ -86,7 +90,7 @@ int read02_client02(id c, int* x)
   ret := read02(c, x);
 }
 
-int read02_client03(id c, int* x)
+int read02_client03(id c, memcell x)
   requires Counter(c, x, ?n) && G@c; // TODO: Unstable, see Voila issue #15
 {
   skip;
@@ -95,7 +99,7 @@ int read02_client03(id c, int* x)
 }
 
 
-region SeqCounter(id k, id c, int* x)
+region SeqCounter(id k, id c, memcell x)
   guards {
     unique S;
   }
@@ -107,7 +111,7 @@ region SeqCounter(id k, id c, int* x)
     S: ?m ~> Int;
   }
 
-region ParCounter(id k, id c, int* x)
+region ParCounter(id k, id c, memcell x)
   guards {
     duplicable P;
   }
@@ -119,7 +123,7 @@ region ParCounter(id k, id c, int* x)
     P: ?m ~> Int;
   }
 
-int read01_seqclient01(id k, id c, int* x)
+int read01_seqclient01(id k, id c, memcell x)
   requires SeqCounter(k, c, x) && S@k;
   ensures  SeqCounter(k, c, x) && S@k;
 {
@@ -133,7 +137,7 @@ int read01_seqclient01(id k, id c, int* x)
   }
 }
 
-int read01_parclient01(id k, id c, int* x)
+int read01_parclient01(id k, id c, memcell x)
   requires ParCounter(k, c, x) && P@k;
   ensures  ParCounter(k, c, x) && P@k;
 {
@@ -147,7 +151,7 @@ int read01_parclient01(id k, id c, int* x)
   }
 }
 
-int read02_seqclient01(id k, id c, int* x)
+int read02_seqclient01(id k, id c, memcell x)
   requires SeqCounter(k, c, x) && S@k;
   ensures  SeqCounter(k, c, x) && S@k;
 {
@@ -161,7 +165,7 @@ int read02_seqclient01(id k, id c, int* x)
   }
 }
 
-int read02_parclient01(id k, id c, int* x)
+int read02_parclient01(id k, id c, memcell x)
   requires ParCounter(k, c, x) && P@k;
   ensures  ParCounter(k, c, x) && P@k;
 {
