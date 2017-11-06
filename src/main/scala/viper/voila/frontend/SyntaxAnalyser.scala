@@ -76,7 +76,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     success(PUniqueGuard())
 
   lazy val action: Parser[PAction] =
-    (idnuse <~ ":") ~ binderOrExpression ~ ("~>" ~> expression <~ ";") ^^ PAction
+    (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction1 |
+    (idnuse <~ ":") ~ binder ~ ("~>" ~> expression <~ ";") ^^ PAction2 |
+    (idnuse <~ ":") ~ binder ~ ("if" ~> expression) ~ ("~>" ~> setComprehension <~ ";") ^^ PAction3
 
   lazy val predicate: Parser[PPredicate] =
     ("predicate" ~> idndef) ~
@@ -295,6 +297,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     } |
     "Int" ^^^ PIntSet() |
     "Nat" ^^^ PNatSet()
+
+  lazy val setComprehension: Parser[PSetComprehension] =
+    "Set" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> binder) ~ ("|" ~> expression) <~ ")" ^^ {
+      case typeAnnotation ~ qvar ~ filter => PSetComprehension(qvar, filter, typeAnnotation)
+    }
 
   lazy val binder: Parser[PLogicalVariableBinder] =
     "?" ~> idndef ^^ (id => PLogicalVariableBinder(id))

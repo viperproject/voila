@@ -93,6 +93,28 @@ case class PPostconditionClause(assertion: PExpression) extends PSpecificationCl
 case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
 
 /*
+ * Actions
+ */
+
+sealed trait PAction extends PAstNode {
+  def guard: PIdnUse
+}
+
+/* G: 0 ~> Set(0, 1) */
+case class PAction1(guard: PIdnUse, from: PExpression, to: PExpression) extends PAction
+
+/* G: ?n ~> Int */
+case class PAction2(guard: PIdnUse, from: PLogicalVariableBinder, to: PExpression)
+    extends PAction with PBindingContext
+
+/* G: ?n if b(n) ~> Set(?m | c(n, m)) */
+case class PAction3(guard: PIdnUse,
+                    qvar: PLogicalVariableBinder,
+                    constraint: PExpression,
+                    to: PSetComprehension)
+    extends PAction with PBindingContext
+
+/*
  * Members
  */
 
@@ -108,10 +130,6 @@ case class PRegion(id: PIdnDef,
                    state: PExpression,
                    actions: Vector[PAction])
     extends PMember
-
-
-case class PAction(guard: PIdnUse, from: PExpression, to: PExpression)
-    extends PAstNode with PBindingContext
 
 case class PProcedure(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
@@ -283,6 +301,11 @@ sealed trait PSetExp extends PExpression
 
 case class PExplicitSet(args: Vector[PExpression], typeAnnotation: Option[PType])
     extends PSetExp with PLiteral
+
+case class PSetComprehension(qvar: PLogicalVariableBinder,
+                             filter: PExpression,
+                             typeAnnotation: Option[PType])
+    extends PSetExp with PLiteral with PBindingContext
 
 case class PIntSet() extends PSetExp with PLiteral
 case class PNatSet() extends PSetExp with PLiteral

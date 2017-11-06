@@ -11,8 +11,7 @@ region Counter(id r, memcell x)
   interpretation { x.f |-> ?v }
   state { v }
   actions {
-    INCREMENT: ?m ~> Int;
-    /* TODO: In Caper:   n < m | INCREMENT[_] : n ~> m; */
+    INCREMENT: ?v if true ~> Set(?w | v <= w);
   }
 
 // TODO: makeCounter()
