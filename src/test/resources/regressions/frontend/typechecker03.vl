@@ -1,0 +1,8 @@
+region Join(id r)
+  guards { unique SET; }
+  interpretation { true }
+  state { true }
+  actions {
+    //:: ExpectedOutput(typechecker_error)
+    SET: true ~> false;
+  }

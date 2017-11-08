@@ -1,0 +1,63 @@
+struct memcell {
+  int f;
+}
+
+
+
+region R1(id r, memcell x)
+  guards { unique G1; }
+  interpretation { x.f |-> ?v && v == 0 }
+  state { v }
+  actions { G1: 0 ~> Set(0, 1); }
+
+void test01(id r, memcell x)
+  requires R1(r, x, 0) && G1@r;
+{
+  //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
+  use_atomic
+    using R1(r, x) with G1@r;
+  {
+    x.f := 1;
+  }
+}
+
+
+
+region R2(id r, memcell x)
+  guards {
+    unique G2;
+    unique K2;
+  }
+  interpretation { x.f |-> ?v && (v == 0 || v == 1) }
+  state { v }
+  actions { G2: 0 ~> Set(0, 1); }
+
+void test02(id r, memcell x)
+  requires R2(r, x, 0) && K2@r;
+{
+  //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
+  use_atomic
+    using R2(r, x) with K2@r;
+  {
+    x.f := 1;
+  }
+}
+
+
+
+region R3(id r, memcell x)
+  guards { unique G3; }
+  interpretation { x.f |-> ?v && (v == 0 || v == 1) }
+  state { v }
+  actions { G3: 0 ~> Set(0); }
+
+void test03(id r, memcell x)
+  requires R3(r, x, 0) && G3@r;
+{
+  //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
+  use_atomic
+    using R3(r, x) with G3@r;
+  {
+    x.f := 1;
+  }
+}
