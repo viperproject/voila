@@ -92,6 +92,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           s"Type error: expected $locationType but got $rhsType",
           !isCompatible(rhsType, locationType))
 
+      case call: PProcedureCall =>
+        checkUse(entity(call.procedure)) {
+          case ProcedureEntity(decl) => (
+               reportArgumentLengthMismatch(call, decl.id, decl.formalArgs.length, call.arguments.length)
+            ++ call.arguments.zip(decl.formalArgs).flatMap { case (actual, formal) =>
+                 message(
+                   actual,
+                   s"Type error: expected ${formal.typ} but got ${typ(actual)}",
+                   !isCompatible(typ(actual), formal.typ))
+               })
+
+          case other =>
+            message(call.procedure, s"Cannot call ${call.procedure}")
+        }
+
       case exp: PExpression => (
            message(
               exp,
@@ -108,7 +123,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               case PPredicateExp(id, args) =>
                 checkUse(entity(id)) {
                   case PredicateEntity(decl) =>
-                    reportArgumentLengthMismatch(decl.id, decl.formalArgs.length, args.length)
+                    reportArgumentLengthMismatch(exp, decl.id, decl.formalArgs.length, args.length)
 
                   case RegionEntity(decl) =>
                     /* A region predicate has the following argument structure:
@@ -125,18 +140,19 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                       delta != 0 && delta != 1)
 
                   case _ =>
-                    message(id, s"Cannot call ${id.name}")
+                    message(id, s"Cannot call ${id.name} here")
                 }
           })
     }
 
-  private def reportArgumentLengthMismatch(id: PIdnNode,
+  private def reportArgumentLengthMismatch(offendingNode: PAstNode,
+                                           callee: PIdnNode,
                                            formalArgCount: Int,
                                            actualArgCount: Int) = {
 
     message(
-      id,
-        s"Wrong number of arguments for '${id.name}', got $actualArgCount "
+      offendingNode,
+        s"Wrong number of arguments for '${callee.name}', got $actualArgCount "
       + s"but expected $formalArgCount",
       formalArgCount != actualArgCount)
   }
