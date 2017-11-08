@@ -98,6 +98,8 @@ case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
 
 sealed trait PAction extends PAstNode {
   def guard: PIdnUse
+  def from: PExpression
+  def to: PExpression
 }
 
 /* G: 0 ~> Set(0, 1) */
@@ -109,7 +111,7 @@ case class PAction2(guard: PIdnUse, from: PLogicalVariableBinder, to: PExpressio
 
 /* G: ?n if b(n) ~> Set(?m | c(n, m)) */
 case class PAction3(guard: PIdnUse,
-                    qvar: PLogicalVariableBinder,
+                    from: PLogicalVariableBinder,
                     constraint: PExpression,
                     to: PSetComprehension)
     extends PAction with PBindingContext
