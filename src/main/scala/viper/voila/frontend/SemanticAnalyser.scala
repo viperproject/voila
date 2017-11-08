@@ -6,6 +6,8 @@
 
 package viper.voila.frontend
 
+import scala.collection.immutable.ListSet
+import scala.language.{higherKinds, implicitConversions}
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{id => _, _}
@@ -312,6 +314,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PInterferenceClause => LogicalVariableContext.Interference
       case _: PPreconditionClause => LogicalVariableContext.Precondition
       case _: PPostconditionClause => LogicalVariableContext.Postcondition
+      case _: PInvariantClause => LogicalVariableContext.Invariant
       case _: PProcedure => LogicalVariableContext.Procedure
       case _: PRegion => LogicalVariableContext.Region
       case _: PPredicate => LogicalVariableContext.Predicate
@@ -362,8 +365,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PInterferenceClause(`binder`, set, _) =>
         typ(set).asInstanceOf[PSetType].elementType
 
-      case action @ PAction(_, `binder`, _) =>
+      case action @ PAction2(_, `binder`, _) =>
         typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
+
+      case action @ PAction3(_, `binder`, _, _) =>
+        typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
+
+      case comprehension @ PSetComprehension(`binder`, _, _) =>
+        typ(enclosingMember(comprehension).asInstanceOf[Option[PRegion]].get.state)
 
       case other => sys.error(s"Unexpectedly found $other as the binding context of $binder")
     })
@@ -371,7 +380,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val boundBy: PLogicalVariableBinder => PBindingContext =
     attr {
       case tree.parent(interferenceClause: PInterferenceClause) => interferenceClause
-      case tree.parent(action: PAction) => action
+      case tree.parent(action: PAction2) => action
+      case tree.parent(action: PAction3) => action
+      case tree.parent(comprehension: PSetComprehension) => comprehension
       case tree.parent(pointsTo: PPointsTo) => pointsTo
 
       case tree.parent.pair(binder: PLogicalVariableBinder,
@@ -414,6 +425,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case Some(_typ) => PSetType(_typ)
           case None => PSetType(typ(elements.head))
         }
+
+      case PSetComprehension(qvar, filter, typeAnnotation) =>
+        /* TODO: Only works if the set comprehension occurs in an action definition */
+        typeOfLogicalVariable(qvar)
 
       case conditional: PConditional => typ(conditional.thn)
 
@@ -525,6 +540,57 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   + s"(class: ${of.getClass.getSimpleName}) in the context of '$parent' "
                   + s"(class: ${parent.getClass.getSimpleName})")
     }
+
+  lazy val freeVariables: PExpression => ListSet[PIdnUse] =
+    attr {
+      case PIdnExp(id) => ListSet(id)
+
+      case bindingContext: PExpression with PBindingContext =>
+        bindingContext match {
+          case PSetComprehension(qvar, filter, _) =>
+            freeVariables(filter) - PIdnUse(qvar.id.name)
+          case PPredicateExp(_, _) => ???
+//            Set(arguments flatMap freeVariables :_*)
+          case PPointsTo(location, value) =>
+            ListSet(location.receiver) ++ (freeVariables(value) -- boundVariables(value))
+        }
+
+      case _: PTrueLit => ListSet.empty
+      case _: PFalseLit => ListSet.empty
+      case _: PIntLit => ListSet.empty
+      case _: PRet => ListSet.empty
+      case _: PIntSet => ListSet.empty
+      case _: PNatSet => ListSet.empty
+
+      case PExplicitSet(arguments, _) =>
+        ListSet(arguments flatMap freeVariables :_*)
+
+      case PSetComprehension(qvar, filter, _) =>
+        freeVariables(filter) - PIdnUse(qvar.id.name)
+
+      case op: PUnOp => freeVariables(op.operand)
+      case op: PBinOp => freeVariables(op.left) ++ freeVariables(op.right)
+
+      case PConditional(cond, thn, els) =>
+        freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
+
+      case PGuardExp(guard, regionId) => ListSet(regionId)
+      case PDiamond(regionId) => ListSet(regionId)
+
+      case PRegionUpdateWitness(regionId, from, to) =>
+        ListSet(regionId) ++ freeVariables(from) ++ freeVariables(to)
+
+      case _: PIrrelevantValue => ListSet.empty
+    }
+
+  lazy val boundVariables: PExpression => ListSet[PIdnDef] =
+    attr {
+      case PLogicalVariableBinder(id) => ListSet(id)
+      case _ => ListSet.empty
+    }
+
+  private implicit def defs2UsesSets(xs: ListSet[PIdnDef]): ListSet[PIdnUse] =
+    xs.map(idndef => PIdnUse(idndef.name))
 }
 
 sealed trait LogicalVariableContext
@@ -533,6 +599,7 @@ object LogicalVariableContext {
   case object Interference extends LogicalVariableContext
   case object Precondition extends LogicalVariableContext
   case object Postcondition extends LogicalVariableContext
+  case object Invariant extends LogicalVariableContext
   case object Procedure extends LogicalVariableContext
   case object Region extends LogicalVariableContext
   case object Predicate extends LogicalVariableContext

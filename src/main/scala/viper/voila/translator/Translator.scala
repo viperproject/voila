@@ -23,4 +23,5 @@ class PProgramToViperTranslator(val semanticAnalyser: SemanticAnalyser)
        with RuleTranslatorComponent
        with CommentsComponent
        with FreshIdentifiersComponent
+       with SetComprehensionComponent
        with StrictLogging

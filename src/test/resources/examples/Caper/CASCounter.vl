@@ -11,7 +11,7 @@ region Counter(id r, memcell x)
   interpretation { x.f |-> ?v }
   state { v }
   actions {
-    INCREMENT: ?v if true ~> Set(?w | v <= w);
+    INCREMENT: ?n ~> Set(?m | n <= m);
   }
 
 // TODO: makeCounter()
@@ -19,8 +19,6 @@ region Counter(id r, memcell x)
 int incr(id r, memcell x)
   requires Counter(r, x, ?v0) && INCREMENT@r;
   ensures  Counter(r, x, ?v1) && INCREMENT@r;
-  //:: UnexpectedOutput(postcondition_error:assertion_error, /voila/issue/000000/)
-  // TODO: Region action too permissive
   ensures  v0 < v1;
 {
   int v;
@@ -28,7 +26,7 @@ int incr(id r, memcell x)
 
   do
     invariant Counter(r, x, ?vi);     // TODO: Why isn't INCREMENT@r needed here????????????????????????
-    // invariant b ? v0 < v1 : v0 <= v1; // TODO: Crashes
+    invariant b ? v0 < vi : v0 <= vi;
   {
     open_region
       using Counter(r, x);
@@ -46,8 +44,6 @@ int incr(id r, memcell x)
 int read(id r, memcell x)
   requires Counter(r, x, ?v0) && INCREMENT@r;
   ensures  Counter(r, x, ?v1) && INCREMENT@r;
-  //:: UnexpectedOutput(postcondition_error:assertion_error, /voila/issue/000000/)
-  // TODO: Region action too permissive
   ensures  ret <= v1;
 {
   open_region

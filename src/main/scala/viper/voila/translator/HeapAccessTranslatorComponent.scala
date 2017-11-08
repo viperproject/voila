@@ -89,6 +89,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
            (LogicalVariableContext.Interference, LogicalVariableContext.Interference) |
            (LogicalVariableContext.Interference, LogicalVariableContext.Precondition) |
            (LogicalVariableContext.Postcondition, LogicalVariableContext.Postcondition) |
+           (LogicalVariableContext.Invariant, LogicalVariableContext.Invariant) |
            (LogicalVariableContext.Region, LogicalVariableContext.Region) |
            (LogicalVariableContext.Predicate, LogicalVariableContext.Predicate) =>
 
@@ -99,8 +100,14 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
         vpr.Old(vprHeapRead)()
 
-      case other =>
-        sys.error(s"Unexpectedly found $other")
+      case _ =>
+        sys.error(
+          s"""Unexpected situation:
+             |  id = $id
+             |  declaration = $declaration
+             |  generalBindingContext = $generalBindingContext
+             |  generalUsageContext = $generalUsageContext
+           """.stripMargin)
     }
   }
 }

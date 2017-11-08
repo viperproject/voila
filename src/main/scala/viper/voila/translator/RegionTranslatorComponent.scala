@@ -42,6 +42,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def regionStateFunctionName(region: PRegion): String =
     s"${region.id.name}_state"
 
+  def extractRegionNameFromStateFunctionName(stateFunctionName: String): String = {
+    val pattern = "(.*)_state".r
+    val pattern(regionName) = stateFunctionName
+
+    regionName
+  }
+
   def regionStateFunction(region: PRegion): vpr.Function = {
     regionStateFunctionCache.getOrElseUpdate(
       region,
@@ -56,22 +63,88 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             region,
             formalRegionArg.localVar +: formalRegularArgs.map(_.localVar))
 
-        val stateFunctionBody =
+        val formalArgs =
+          formalRegionArg +: formalRegularArgs
+
+        val body =
           vpr.Unfolding(
             acc = predicateAccess,
             body = translate(region.state)
           )()
 
+        val mentionTriggerFunction =
+          vpr.InhaleExhaleExp(
+            /* TODO: It would be much simpler to use the other DomainFuncApp constructor
+             * (object DomainFuncApp, method apply), but that one requires passing a domain
+             * function instance. Getting the latter would currently cause a call chain cycle since
+             * regionStateTriggerFunction(region) calls back into regionStateFunction(region)
+             * (i.e. into this method).
+             */
+            vpr.DomainFuncApp(
+              funcname = regionStateTriggerFunctionName(region),
+              args = formalArgs map (_.localVar),
+              typVarMap = Map.empty
+            )(pos = vpr.NoPosition,
+              info = vpr.NoInfo,
+              typPassed = vpr.Bool,
+              formalArgsPassed = formalArgs,
+              domainName = regionStateTriggerFunctionsDomainName,
+              errT = vpr.NoTrafos),
+            vpr.TrueLit()()
+          )()
+
         vpr.Function(
           name = regionStateFunctionName(region),
-          formalArgs = formalRegionArg +: formalRegularArgs,
+          formalArgs = formalArgs,
           typ = regionStateType,
           pres = Vector(predicateAccess),
-          posts = Vector.empty,
+          posts = Vector(mentionTriggerFunction),
           decs = None,
-          body = Some(stateFunctionBody)
+          body = Some(body)
         )()
       })
+  }
+
+  val regionStateTriggerFunctionsDomainName: String = "trigger_functions"
+
+  val regionStateTriggerFunctionDomain: vpr.Domain = {
+    vpr.Domain(
+      name = regionStateTriggerFunctionsDomainName,
+      functions = Vector.empty,
+      axioms = Vector.empty,
+      typVars = Vector.empty
+    )()
+  }
+
+  def regionStateTriggerFunctionName(region: PRegion): String =
+    s"${regionStateFunctionName(region)}_T"
+
+  def regionStateTriggerFunction(region: PRegion): vpr.DomainFunc = {
+    val regionFunction = regionStateFunction(region)
+
+    vpr.DomainFunc(
+      name = regionStateTriggerFunctionName(region),
+      formalArgs = regionFunction.formalArgs,
+      typ = vpr.Bool
+    )(domainName = regionStateTriggerFunctionsDomainName)
+  }
+
+  def regionStateTriggerFunction(regionName: String): vpr.DomainFunc = {
+    val region = tree.root.regions.find(_.id.name == regionName).get
+
+    regionStateTriggerFunction(region)
+  }
+
+  def regionStateTriggerFunctionApplication(stateFunctionApplication: vpr.FuncApp)
+                                           : vpr.DomainFuncApp = {
+
+    val regionName = extractRegionNameFromStateFunctionName(stateFunctionApplication.funcname)
+
+    vpr.DomainFuncApp(
+      func = regionStateTriggerFunction(regionName),
+      args = stateFunctionApplication.args,
+      typVarMap = Map.empty
+    )()
   }
 
   def guardPotentiallyHeldFunctionName(guard: PGuardDecl, region: PRegion): String =
@@ -119,40 +192,69 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             vpr.LocalVarDecl("$from", regionType)())
 
         val body = {
-          val from = formalArgs(1).localVar
-          val fromSet = vpr.ExplicitSet(Vector(from))()
           val actions = region.actions.filter(_.guard.name == guard.id.name)
 
-          require(
-            actions.count(_.from.isInstanceOf[PLogicalVariableBinder]) <= 1,
-               "Cannot yet handle cases in which more than one action per guard binds a "
-            + s"variable: $actions")
+          val vprFrom = formalArgs(1).localVar
+          val vprFromSet = vpr.ExplicitSet(Vector(vprFrom))()
 
-          /* Note: translation scheme needs to be generalised in order to support a generalised
-           * source syntax, e.g. to the shape `?x if p(x) ~> Set(y | q(x, y))`.
-           */
-          actions
-            .foldLeft(fromSet: vpr.Exp)((acc, action) => {
-              action.from match {
-                case PLogicalVariableBinder(iddef) =>
-                  /* Source: ?x ~> e(x)
-                   * Encode: e(from)
-                   */
-                  translate(action.to).transform {
-                    case vpr.LocalVar(iddef.name) => from /* TODO: Fragile, relies on 'x' being translated to 'x' */
-                  }
-
-                case _ =>
+          /* Note: Needs to be generalised eventually */
+          actions match {
+            case Seq() => vprFromSet
+            case Seq(action) =>
+              action match {
+                case PAction1(_, from, to) =>
                   /* Source: e ~> e'
                    * Encode: from == e ? e' : Set(from)
                    */
                   vpr.CondExp(
-                    cond = vpr.EqCmp(from, translate(action.from))(),
-                    thn = translate(action.to),
-                    els = acc
+                    cond = vpr.EqCmp(vprFrom, translate(from))(),
+                    thn = translate(to),
+                    els = vprFromSet
                   )()
+
+                case PAction2(_, from, to) =>
+                  /* Source: ?x ~> e(x)
+                   * Encode: e(from)
+                   */
+                  translate(to).transform {
+                    case vpr.LocalVar(from.id.name) => vprFrom
+                      /* TODO: Fragile, relies on 'x' being translated to 'x' */
+                  }
+
+                case PAction3(_, qvar, constraint, to) =>
+                  /* Source: ?x if p(x) ~> Set(?y | q(x, y))
+                   * Encode: p(from) ? setcomprehension_i(from) : Set(from)
+                   */
+
+                  val vprQVarType = translateNonVoid(semanticAnalyser.typeOfLogicalVariable(qvar))
+
+                  val vprComprehension = {
+                    val vprFunction = recordedSetComprehensions(to)
+
+                    vpr.FuncApp(
+                      vprFunction,
+                      vprFunction.formalArgs match {
+                        case Seq() => Vector.empty
+                        case Seq(_) => Vector(vpr.LocalVar(qvar.id.name)(typ = vprQVarType))
+                        case other =>
+                          sys.error(s"Unexpectedly found $other")
+                      }
+                    )()
+                  }
+
+                  vpr.CondExp(
+                    cond = translate(constraint),
+                    thn = vprComprehension,
+                    els = vprFromSet
+                  )().transform {
+                    case vpr.LocalVar(qvar.id.name) => vprFrom
+                      /* TODO: Fragile, relies on 'x' being translated to 'x' */
+                  }
               }
-            })
+
+            case _ =>
+              sys.error(s"Multiple actions per guard (here: ${guard.id.name}) are not yet supported")
+          }
         }
 
         vpr.Function(
@@ -181,7 +283,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )
   }
 
-  def translate(region: PRegion): Vector[vpr.Member] = {
+  def translate(region: PRegion): Vector[vpr.Declaration] = {
     val regionPredicateName = region.id.name
 
     val formalRegionArg = translate(region.regionId)
@@ -209,14 +311,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val transitiveClosureFunctions =
       region.guards map (guard => guardTransitiveClosureFunction(guard, region))
 
-    val stateFunction = regionStateFunction(region)
-
     (   guardPredicates
      ++ potentiallyHeldFunctions
      ++ transitiveClosureFunctions
-     ++  Vector(
-            regionPredicate,
-            stateFunction))
+     ++ Vector(
+          regionPredicate,
+          regionStateFunction(region),
+          regionStateTriggerFunction(region)))
   }
 
   def translateUseOf(regionPredicate: PPredicateExp): (vpr.PredicateAccessPredicate, vpr.Exp) = {
@@ -496,7 +597,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         )()
 
-      vpr.Inhale(potentiallyQuantify(stateConstraint, Some(state)))()
+      vpr.Inhale(
+        potentiallyQuantify(
+          body = stateConstraint,
+          trigger = Some(regionStateTriggerFunctionApplication(state)))
+      )()
     }
 
     val constrainStateViaAtomicityContext = {
@@ -528,7 +633,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                 atomicityContextX
               )()
             )(),
-          trigger = Some(state))
+          trigger = Some(regionStateTriggerFunctionApplication(state)))
 
       vpr.Inhale(stateConstraint)()
     }

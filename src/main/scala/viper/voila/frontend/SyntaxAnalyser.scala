@@ -78,7 +78,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val action: Parser[PAction] =
     (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction1 |
     (idnuse <~ ":") ~ binder ~ ("~>" ~> expression <~ ";") ^^ PAction2 |
-    (idnuse <~ ":") ~ binder ~ ("if" ~> expression) ~ ("~>" ~> setComprehension <~ ";") ^^ PAction3
+    (idnuse <~ ":") ~ binder ~ ("if" ~> expression).? ~ ("~>" ~> setComprehension <~ ";") ^^ {
+      case guardId ~ from ~ optConstraint ~ to =>
+        PAction3(guardId, from, optConstraint.getOrElse(PTrueLit().at(from)), to)
+    }
 
   lazy val predicate: Parser[PPredicate] =
     ("predicate" ~> idndef) ~

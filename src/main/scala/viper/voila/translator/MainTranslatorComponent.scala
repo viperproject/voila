@@ -77,6 +77,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   val atomicityContextsDomainName: String = "$AtomicityContexts"
 
+  def atomicityContextsDomain(regions: Vector[PRegion]): vpr.Domain =
+    vpr.Domain(
+      name = atomicityContextsDomainName,
+      functions = regions.map(atomicityContextFunction),
+      axioms = Vector.empty,
+      typVars = Vector.empty
+    )()
+
   def atomicityContextFunctionName(regionName: String): String =
     s"${regionName}X"
 
@@ -148,31 +156,52 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     _tree = tree
     _errorBacktranslator = new DefaultErrorBacktranslator
 
-    val members: Vector[vpr.Member] = (
-         Vector(diamondField)
-      ++ usedHavocs(tree)
-      ++ tree.root.regions.flatMap(region => {
-           val typ = semanticAnalyser.typ(region.state)
+    analyseSetComprehensions(tree)
 
-           Vector(stepFromField(typ), stepToField(typ))
+    val topLevelDeclarations: Vector[vpr.Declaration] = (
+         Vector(
+            diamondField,
+            regionStateTriggerFunctionDomain,
+            atomicityContextsDomain(tree.root.regions))
+      ++ usedHavocs(tree)
+      ++ recordedSetComprehensions.values
+      ++ tree.root.regions.flatMap(region => {
+            val typ = semanticAnalyser.typ(region.state)
+
+            Vector(stepFromField(typ), stepToField(typ))
          }).distinct
       ++ (tree.root.structs flatMap translate)
       ++ (tree.root.regions flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
-      :+ vpr.Domain(
-           name = atomicityContextsDomainName,
-           functions = tree.root.regions.map(atomicityContextFunction),
-           axioms = Vector.empty,
-           typVars = Vector.empty
-         )()
     )
 
-    val fields = members collect { case f: vpr.Field => f }
-    val predicates = members collect { case p: vpr.Predicate => p }
-    val functions = members collect { case f: vpr.Function => f }
-    val domains = members collect { case d: vpr.Domain => d }
-    val methods = members collect { case m: vpr.Method => m }
+    val fields = topLevelDeclarations collect { case f: vpr.Field => f }
+    val predicates = topLevelDeclarations collect { case p: vpr.Predicate => p }
+    val functions = topLevelDeclarations collect { case f: vpr.Function => f }
+    val methods = topLevelDeclarations collect { case m: vpr.Method => m }
+
+    val additionalDomainFunctions: Map[String, Vector[vpr.DomainFunc]] =
+      topLevelDeclarations
+        .collect { case d: vpr.DomainFunc => d }
+        .groupBy(_.domainName)
+        .withDefaultValue(Vector.empty)
+
+    val additionalDomainAxioms: Map[String, Vector[vpr.DomainAxiom]] =
+      topLevelDeclarations
+        .collect { case d: vpr.DomainAxiom => d }
+        .groupBy(_.domainName)
+        .withDefaultValue(Vector.empty)
+
+    val domains =
+      topLevelDeclarations
+        .collect { case d: vpr.Domain => d }
+        .map(domain =>
+          domain.copy(
+            functions = domain.functions ++ additionalDomainFunctions(domain.name),
+            axioms = domain.axioms ++ additionalDomainAxioms(domain.name)
+          )(domain.pos, domain.info, domain.errT)
+        )
 
     val vprProgram =
       vpr.Program(
@@ -778,11 +807,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         )()
       )()
 
+    case comprehension: PSetComprehension =>
+      sys.error("Set comprehensions are not yet supported in this position.")
+
     case PIrrelevantValue() =>
-      sys.error("Wildcard arguments \"_\" are not yet supported in arbitrary positions.")
+      sys.error("Wildcard arguments \"_\" are not yet supported in this position.")
 
     case _: PLogicalVariableBinder =>
-      sys.error("Logical variable binders are not yet supported in arbitrary positions.")
+      sys.error("Logical variable binders are not yet supported in this position.")
   }
 
   def translateUseOf(id: PIdnNode): vpr.Exp = {
@@ -793,15 +825,19 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def translateUseOf(id: PIdnNode, declaration: PLogicalVariableBinder): vpr.Exp = {
-    semanticAnalyser.boundBy(declaration) match {
-      case PAction(_, `declaration`, _) =>
-        val vprType = translateNonVoid(semanticAnalyser.typeOfLogicalVariable(declaration))
+  def translateUseOf(id: PIdnNode, binder: PLogicalVariableBinder): vpr.Exp = {
+    semanticAnalyser.boundBy(binder) match {
+      case   PAction2(_, `binder`, _)
+           | PAction3(_, `binder`, _, _)
+           | PSetComprehension(`binder`, _, _) =>
+
+        val vprType = translateNonVoid(semanticAnalyser.typeOfLogicalVariable(binder))
 
         vpr.LocalVar(id.name)(typ = vprType)
 
-      case _ =>
-        translateAsHeapAccess(id, declaration)
+      case PPointsTo(_, `binder`) => translateAsHeapAccess(id, binder)
+      case PPredicateExp(_, args) if args.exists(_ eq binder) => translateAsHeapAccess(id, binder)
+      case PInterferenceClause(`binder`, _, _) => translateAsHeapAccess(id, binder)
     }
   }
 

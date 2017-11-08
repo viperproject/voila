@@ -30,8 +30,18 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case modifier: PModifier => toDoc(modifier)
       case id: PIdnNode => toDoc(id)
       case clause: PSpecificationClause => toDoc(clause)
-      case PAction(guard, from, to) => ???
+      case action: PAction => toDoc(action)
       case location: PLocation => toDoc(location)
+    }
+
+  def toDoc(action: PAction): Doc =
+    action match {
+      case PAction1(guard, from, to) =>
+        toDoc(guard) <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
+      case PAction2(guard, from, to) =>
+        toDoc(guard) <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
+      case PAction3(guard, qvar, constraint, to) =>
+        toDoc(guard) <> ":" <+> toDoc(qvar) <+> "if" <+> toDoc(constraint) <+> "~>" <+> toDoc(to)
     }
 
   def toDoc(clause: PSpecificationClause): Doc = {
@@ -41,14 +51,10 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PInvariantClause(assertion) => "invariant" <+> toDoc(assertion)
 
       case PInterferenceClause(variable, set, region) =>
-        (  "interference" <+> toDoc(variable: PDeclaration)
+        (  "interference" <+> toDoc(variable)
          <+> "in" <+> toDoc(set)
          <+> "on" <+> toDoc(region))
     }
-  }
-
-  def toDoc(action: PAction): Doc = action match {
-    case PAction(guard, from, to) => toDoc(guard) <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
   }
 
   def toDoc(modifier: PModifier): Doc = {
@@ -106,6 +112,9 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PLogicalVariableBinder(id) =>  "?" <> toDoc(id)
     }
   }
+
+  def toDoc(declaration: PLogicalVariableBinder): Doc =
+    toDoc(declaration: PDeclaration)
 
   def toDoc(member: PMember): Doc = {
     member match {
@@ -230,10 +239,17 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PFalseLit() => "false"
       case PIntLit(value) => value.toString
       case PRet() => "ret"
+
       case PExplicitSet(args, typeAnnotation) =>
         "Set" <>
-          typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
-          "(" <> ssep(args map toDoc, comma <> space) <> ")"
+        typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
+        "(" <> ssep(args map toDoc, comma <> space) <> ")"
+
+      case PSetComprehension(qvar, filter, typeAnnotation) =>
+        "Set" <>
+        typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
+        "(" <> toDoc(qvar) <+> "|" <+> toDoc(filter) <> ")"
+
       case PIntSet() => "Int"
       case PNatSet() => "Nat"
 
