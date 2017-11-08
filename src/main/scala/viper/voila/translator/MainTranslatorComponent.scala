@@ -566,7 +566,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val vprInterferenceChecks: vpr.Stmt =
           callee.atomicity match {
             case PNotAtomic() =>
-              sys.error("Calling non-atomic procedures is not yet supported.")
+              vpr.Assert(vpr.TrueLit()())()
 
             case PPrimitiveAtomic() =>
               vpr.Assert(vpr.TrueLit()())()
