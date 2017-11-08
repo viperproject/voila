@@ -2,7 +2,7 @@
   --- Done ---
     SpinLock.t
       TODO: makeLock()
-    CASCounter.t 	Updated all recursive examples. 	2 years ago
+    CASCounter.t
       TODO: makeCounter()
 
   --- To do ---

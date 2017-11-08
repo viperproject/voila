@@ -2,3 +2,7 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/TicketLock.t
 //
 
+struct mempair {
+  int f;
+  int g;
+}
