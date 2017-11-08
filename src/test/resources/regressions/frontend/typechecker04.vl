@@ -1,0 +1,26 @@
+void test01(id r)
+
+void test02(id r, int v) {
+  //:: ExpectedOutput(typechecker_error)
+  test01();
+}
+
+void test03(id r) {
+  //:: ExpectedOutput(typechecker_error)
+  test02(r, r);
+}
+
+void test04(id r) {
+  //:: ExpectedOutput(typechecker_error)
+  test03(r, r);
+}
+
+predicate pred(id r) {
+  //:: ExpectedOutput(typechecker_error)
+  test04(r)
+}
+
+void test05(id r) {
+  //:: ExpectedOutput(typechecker_error)
+  pred(r);
+}
