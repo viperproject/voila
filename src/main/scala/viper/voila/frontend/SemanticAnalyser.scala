@@ -60,6 +60,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               s"Type error: expected $PBoolType(), but found ${typ(exp)}",
               !isCompatible(typ(exp), PBoolType())))
 
+      case action: PAction =>
+        message(
+          action.to,
+          s"Type error: expected ${PSetType(typ(action.from))} but found ${typ(action.to)}",
+          !isCompatible(typ(action.to), PSetType(typ(action.from))))
+
       case PAssign(lhs, _) if !entity(lhs).isInstanceOf[LocalVariableEntity] =>
         message(lhs, s"Cannot assign to ${lhs.name}")
 
@@ -427,8 +433,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         }
 
       case PSetComprehension(qvar, filter, typeAnnotation) =>
-        /* TODO: Only works if the set comprehension occurs in an action definition */
-        typeOfLogicalVariable(qvar)
+        typeAnnotation match {
+          case Some(_typ) =>
+            PSetType(_typ)
+          case None =>
+            /* TODO: Only works if the set comprehension occurs in an action definition */
+            PSetType(typeOfLogicalVariable(qvar))
+        }
 
       case conditional: PConditional => typ(conditional.thn)
 

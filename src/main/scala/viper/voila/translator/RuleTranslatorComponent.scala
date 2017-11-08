@@ -291,9 +291,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
 
+    val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
     errorBacktranslator.addErrorTransformer {
-      case e: vprerr.FoldFailed if e causedBy unfoldRegionPredicate =>
-        UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
+      case e: vprerr.FoldFailed if e causedBy foldRegionPredicate =>
+        UseAtomicError(
+          useAtomic,
+          IllegalRegionStateChangeError(
+            useAtomic.regionPredicate,
+            ebt.translate(e.reason)))
     }
 
     val currentState =
