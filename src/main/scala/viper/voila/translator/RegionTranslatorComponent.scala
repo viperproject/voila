@@ -197,10 +197,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           val vprFrom = formalArgs(1).localVar
           val vprFromSet = vpr.ExplicitSet(Vector(vprFrom))()
 
-          /* Note: Needs to be generalised eventually */
-          actions match {
-            case Seq() => vprFromSet
-            case Seq(action) =>
+          /* TODO: Account for non-exclusive action constraints, e.g.
+           *         G: ?n if 0 < n  ~~> Set(...)
+           *         G: ?n if n < 10 ~~> Set(...)
+           */
+          actions
+            .foldLeft[vpr.Exp](vprFromSet)((acc, action) => {
               action match {
                 case PAction1(_, from, to) =>
                   /* Source: e ~> e'
@@ -209,7 +211,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                   vpr.CondExp(
                     cond = vpr.EqCmp(vprFrom, translate(from))(),
                     thn = translate(to),
-                    els = vprFromSet
+                    els = acc
                   )()
 
                 case PAction2(_, from, to) =>
@@ -245,16 +247,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                   vpr.CondExp(
                     cond = translate(constraint),
                     thn = vprComprehension,
-                    els = vprFromSet
+                    els = acc
                   )().transform {
                     case vpr.LocalVar(qvar.id.name) => vprFrom
                       /* TODO: Fragile, relies on 'x' being translated to 'x' */
                   }
               }
-
-            case _ =>
-              sys.error(s"Multiple actions per guard (here: ${guard.id.name}) are not yet supported")
-          }
+            })
         }
 
         vpr.Function(
