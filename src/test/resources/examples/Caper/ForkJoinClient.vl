@@ -1,0 +1,100 @@
+// Corresponds to:
+//   https://github.com/caper-tool/caper/blob/master/examples/iterative/ForkJoinClient.t
+//
+
+struct memcell {
+  int f;
+}
+
+
+
+region Join(id r, memcell x)
+  guards { unique SET; }
+  interpretation { x.f |-> ?v && (v == 0 || v == 1) }
+  state { v }
+  actions { SET: 0 ~> Set(0, 1); }
+
+// TODO: make_join()
+
+abstract_atomic void set(id r, memcell x)
+  // interference ?n in Set(0) on r;
+  requires Join(r, x, 0) && SET@r;
+  ensures  Join(r, x, 1) && SET@r;
+{
+  use_atomic
+    using Join(r, x) with SET@r;
+  {
+    x.f := 1;
+  }
+}
+
+void wait(id r, memcell x)
+  requires Join(r, x, ?z);
+  ensures  Join(r, x, 1);
+{
+  int v;
+
+  do
+    invariant Join(r, x, ?w);
+    invariant (v == 0 ? w >= 0 : w == 1);
+  {
+    open_region
+      using Join(r, x);
+    {
+      v := x.f;
+    }
+  } while (v == 0);
+}
+
+
+
+region Flag(id r, id s, memcell x, memcell y)
+  guards {unique SFLAG; }
+  interpretation {
+    x.f |-> ?v &&
+    (v == 0 ? Join(s, y, 0) && SET@s :
+     v == 1 ? Join(s, y) :
+     false)
+  }
+  state { v }
+  actions { SFLAG: 0 ~> Set(0, 1); }
+
+void thread2(id r, id s, memcell x, memcell y)
+  requires Flag(r, s, x, y, 0) && SFLAG@r;
+{
+  use_atomic
+    using Flag(r, s, x, y) with SFLAG@r;
+  {
+    assert Join(s, y, 0);
+    x.f := 1;
+  }
+
+  //unfold Flag(r, s, x, y, 1);
+  //assert Join(s, y, ?v);
+  //assume v == 0;
+  //fold Flag(r, s, x, y, 1);
+
+  use_atomic
+    using Flag(r, s, x, y) with SFLAG@r;
+  {
+    assert Join(s, y, 0);
+    set(s, y);
+  }
+}
+
+// TODO: Encode function main().
+//       Maybe fork (the fork-rule from Pedro's thesis) can be modelled as an
+//       abstract (body-less) atomic method, similar to CAS.
+
+// function main()
+//   requires true;
+//   ensures Flag(r,x,y,1) &*& ret = 1;
+// {
+//   x := alloc(1);
+//   [x] := 0;
+//   y := make_join();
+//   fork thread2(x, y);
+//   wait(y);
+//   v := [x];
+//   return v;
+// }

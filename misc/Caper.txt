@@ -4,6 +4,8 @@
       TODO: makeLock()
     CASCounter.t
       TODO: makeCounter()
+    ForkJoin.t
+      TODO: make_join()
 
   --- To do ---
     BagStack.t 	Nothing. 	a year ago
@@ -13,7 +15,7 @@
     BoundedReadWriteLock.t 	Minor tweaks. 	a year ago
 
     CounterClient.t 	Added iterative version of the parallel increment. 	6 months ago
-    ForkJoin.t 	Examples 	a year ago
+
     ForkJoinClient.t 	Examples 	a year ago
     IncDec.t 	Updated all recursive examples. 	2 years ago
     Queue.t 	Queue examples 	a year ago

@@ -1,0 +1,44 @@
+// Corresponds to:
+//   https://github.com/caper-tool/caper/blob/master/examples/iterative/ForkJoin.t
+//
+
+struct memcell {
+  int f;
+}
+
+region Join(id r, memcell x)
+  guards { unique SET; }
+  interpretation { x.f |-> ?v && (v == 0 || v == 1) }
+  state { v }
+  actions { SET: 0 ~> Set(0, 1); }
+
+// TODO: make_join()
+
+void set(id r, memcell x)
+  requires Join(r, x, 0) && SET@r;
+  ensures  Join(r, x, 1) && SET@r;
+{
+  use_atomic
+    using Join(r, x) with SET@r;
+  {
+    x.f := 1;
+  }
+}
+
+void wait(id r, memcell x)
+  requires Join(r, x, ?z);
+  ensures  Join(r, x, 1);
+{
+  int v;
+
+  do
+    invariant Join(r, x, ?w);
+    invariant (v == 0 ? w >= 0 : w == 1);
+  {
+    open_region
+      using Join(r, x);
+    {
+      v := x.f;
+    }
+  } while (v == 0);
+}
