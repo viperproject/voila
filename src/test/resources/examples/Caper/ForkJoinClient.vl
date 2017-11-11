@@ -15,9 +15,16 @@ region Join(id r, memcell x)
   actions { SET: 0 ~> Set(0, 1); }
 
 // TODO: make_join()
+memcell make_join(id r)
+  requires true;
+  ensures Join(r, ret, 0) && SET@r;
+//{
+//    v := alloc(1);
+//    [v] := 0;
+//    return v;
+//}
 
-abstract_atomic void set(id r, memcell x)
-  // interference ?n in Set(0) on r;
+void set(id r, memcell x)
   requires Join(r, x, 0) && SET@r;
   ensures  Join(r, x, 1) && SET@r;
 {
@@ -51,10 +58,7 @@ void wait(id r, memcell x)
 region Flag(id r, id s, memcell x, memcell y)
   guards {unique SFLAG; }
   interpretation {
-    x.f |-> ?v &&
-    (v == 0 ? Join(s, y, 0) && SET@s :
-     v == 1 ? Join(s, y) && SET@s :
-     false)
+    x.f |-> ?v && (v == 0 ==> Join(s, y, 0) && SET@s)
   }
   state { v }
   actions { SFLAG: 0 ~> Set(0, 1); }
@@ -69,37 +73,52 @@ void thread2(id r, id s, memcell x, memcell y)
     x.f := 1;
   }
 
-  //unfold Flag(r, s, x, y, 1);
-  //assert Join(s, y, ?v);
-  //assume v == 0;
-  //fold Flag(r, s, x, y, 1);
-
-  open_region
-    using Flag(r, s, x, y);
-  {
-    assert Join(s, y, 0);
-
-    use_atomic
-      using Join(s, y) with SET@s;
-    {
-      set(s, y);
-    }
-  }
+  set(s, y);
 }
 
-// TODO: Encode function main().
-//       Maybe fork (the fork-rule from Pedro's thesis) can be modelled as an
-//       abstract (body-less) atomic method, similar to CAS.
+void main()
+  requires true;
+  // ensures Flag(r,x,y,1) &*& ret = 1;
+{
+  id r;
+  id s;
+  memcell x;
+  memcell y;
+  int v;
 
-// function main()
-//   requires true;
-//   ensures Flag(r,x,y,1) &*& ret = 1;
-// {
-//   x := alloc(1);
-//   [x] := 0;
-//   y := make_join();
-//   fork thread2(x, y);
-//   wait(y);
-//   v := [x];
-//   return v;
-// }
+  // y := make_join();
+    y := make_join(s);
+
+  // x := alloc(1);
+    inhale x.f |-> ?q;
+
+  // [x] := 0;
+    x.f := 0;
+
+  (
+    // TODO: Encode region predicates with wildcard access to account for duplicability?
+      inhale Join(s, y);
+
+    // TODO: View shift in TaDA to get Flag(...) and SFLAG?
+      fold Flag(r, s, x, y, 0);
+      inhale SFLAG@r;
+    // TODO: Encode region predicates with wildcard access to account for duplicability?
+      inhale Flag(r, s, x, y);
+
+    // fork thread2(x, y);
+      exhale Flag(r, s, x, y, 0) && SFLAG@r;
+  );
+
+  // wait(y);
+    wait(s, y);
+
+  // v := [x];
+    open_region
+      using Flag(r, s, x, y);
+    {
+      v := x.f;
+    }
+
+  // return v;
+    assert Flag(r, s, x, y, 1) && v == 1;
+}

@@ -6,6 +6,9 @@
       TODO: makeCounter()
     ForkJoin.t
       TODO: make_join()
+    ForkJoinClient.t
+      TODO: make_join()
+      TODO: main() --- mostly manually encoded
 
   --- To do ---
     BagStack.t 	Nothing. 	a year ago
