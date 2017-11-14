@@ -1,7 +1,9 @@
 ===== Iterative =====
-  --- Done ---
-    SpinLock.t
-      TODO: makeLock()
+  --- Encoded ---
+    BoundedCounter.t
+      TODO: makeCounter()
+      TODO: Voila issue #28
+      TODO: incr(x)
     CASCounter.t
       TODO: makeCounter()
     ForkJoin.t
@@ -9,20 +11,30 @@
     ForkJoinClient.t
       TODO: make_join()
       TODO: main() --- mostly manually encoded
+    SpinLock.t
+      TODO: makeLock()
 
-  --- To do ---
-    BagStack.t 	Nothing. 	a year ago
-    Barrier.t 	Minor tweaks. 	a year ago
-    BarrierClient.t 	Minor tweaks. 	a year ago
-    BoundedCounter.t 	Added queue. 	a year ago
-    BoundedReadWriteLock.t 	Minor tweaks. 	a year ago
-
-    CounterClient.t 	Added iterative version of the parallel increment. 	6 months ago
-
-    ForkJoinClient.t 	Examples 	a year ago
-    IncDec.t 	Updated all recursive examples. 	2 years ago
-    Queue.t 	Queue examples 	a year ago
-    ReadWriteLock.t 	Updated file names. 	a year ago
-    ReferenceCount.t 	Updated ReferenceCount example. 	9 months ago
-    TicketLock.t 	Renamed guards. 	a year ago
-    TicketLockClient.t 	Minor tweaks. 	a year ago
+  --- Not yet encoded ---
+    BagStack.t
+    Barrier.t
+      TODO: Indexed guard algebra
+      TODO: Counting guard algebra
+      TODO: Sum guard algebra
+    BarrierClient.t
+      TODO: Indexed guard algebra
+      TODO: Counting guard algebra
+      TODO: Sum guard algebra
+    BoundedReadWriteLock.t
+    CounterClient.t
+      TODO: Counting guard algebra
+    IncDec.t
+      TODO: Product guard algebra
+    Queue.t
+    ReadWriteLock.t
+      TODO: Counting guard algebra
+    ReferenceCount.t
+      TODO: Counting guard algebra
+    TicketLock.t
+      TODO: Indexed guard algebra
+    TicketLockClient.t
+      TODO: Indexed guard algebra
