@@ -31,8 +31,8 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
         PostconditionError(sourceNode, translate(reason))
       case vprerr.PreconditionInCallFalse(Source(sourceNode: PProcedureCall), reason, _) =>
         PreconditionError(sourceNode, translate(reason))
-      case vprerr.AssertFailed(Source(sourceNode: PExpression), reason, _) =>
-        AssertionError(sourceNode, translate(reason))
+      case vprerr.AssertFailed(Source(sourceNode: PAssert), reason, _) =>
+        AssertError(sourceNode, translate(reason))
     }
 
   protected val defaultReasonTransformer: ReasonTransformer = {

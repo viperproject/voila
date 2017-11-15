@@ -111,10 +111,10 @@ case class PreconditionError(offendingNode: PProcedureCall, detail: Option[Verif
     copy(offendingNode, detail)
 }
 
-case class AssertError(offendingNode: PExpression, detail: Option[VerificationError] = None)
+case class AssertError(offendingNode: PAssert, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
-  type OffendingNode = PExpression
+  type OffendingNode = PAssert
   def localId: String = "assert_error"
   val localMessage: String = "Assert might fail"
 
