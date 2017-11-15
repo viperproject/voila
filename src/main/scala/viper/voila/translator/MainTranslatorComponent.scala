@@ -648,13 +648,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     )()
 
                   // TODO: See Voila issue #28
-                  val vprUnfoldingToLearnRegionStateInvariants =
-                    vpr.Assert(
-                      vpr.Unfolding(
-                        vprRegionPredicateAccess,
-                        vpr.TrueLit()()
-                      )()
-                    )()
+//                  val vprUnfoldingToLearnRegionStateInvariants =
+//                    vpr.Assert(
+//                      vpr.Unfolding(
+//                        vprRegionPredicateAccess,
+//                        vpr.TrueLit()()
+//                      )()
+//                    )()
 
                   val vprCurrentState =
                     vpr.FuncApp(
@@ -691,7 +691,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                       vprHavocRegion,
                       havocCalleeRegion.constrainStateViaGuards,
                       havocCalleeRegion.constrainStateViaAtomicityContext,
-                      vprUnfoldingToLearnRegionStateInvariants,
+//                      vprUnfoldingToLearnRegionStateInvariants,
                       vprCheckStateUnchanged),
                     Vector.empty
                   )()
