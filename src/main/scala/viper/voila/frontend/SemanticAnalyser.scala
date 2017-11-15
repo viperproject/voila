@@ -180,7 +180,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case decl: PProcedure => ProcedureEntity(decl)
           case decl: PPredicate => PredicateEntity(decl)
           case decl: PRegion => RegionEntity(decl)
-          case decl: PGuardDecl => GuardEntity(decl, tree.parent.pair.unapply(decl).get._2.asInstanceOf[PRegion])
+          case tree.parent.pair(decl: PGuardDecl, region: PRegion) => GuardEntity(decl, region)
           case decl: PFormalArgumentDecl => ArgumentEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
           case decl: PLogicalVariableBinder => LogicalVariableEntity(decl)

@@ -1,7 +1,7 @@
 import sbt._
 
 object Dependencies {
-  lazy val kiama = "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.0.0"
+  lazy val kiama = "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.1.0"
   lazy val scallop = "org.rogach" %% "scallop" % "2.0.7"
   lazy val logbackClassic = "ch.qos.logback" % "logback-classic" % "1.1.7" // Logging Backend
   lazy val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0" // Logging Frontend
