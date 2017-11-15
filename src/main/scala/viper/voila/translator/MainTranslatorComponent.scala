@@ -763,6 +763,19 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case pointsTo: PPointsTo => translate(pointsTo)
     case guard: PGuardExp => translate(guard)
 
+    case PUnfolding(predicate, body) =>
+      /* TODO: Rather brittle, improve! */
+      val vprPredicate =
+        translate(predicate) match {
+          case vprPredicate: vpr.PredicateAccessPredicate => vprPredicate
+          case vpr.And(vprPredicate: vpr.PredicateAccessPredicate, _: vpr.Exp) => vprPredicate
+          case other => sys.error(s"Unexpectedly found $other as the translation of $predicate")
+        }
+
+      val vprBody = translate(body)
+
+      vpr.Unfolding(vprPredicate, vprBody)().withSource(expression)
+
     case predicateExp @ PPredicateExp(id, args) =>
       semanticAnalyser.entity(id) match {
         case _: PredicateEntity =>

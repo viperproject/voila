@@ -240,6 +240,9 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PIntLit(value) => value.toString
       case PRet() => "ret"
 
+      case PUnfolding(predicate, body) =>
+        "unfolding" <+> toDoc(predicate) <+> "in" <+> toDoc(body)
+
       case PExplicitSet(args, typeAnnotation) =>
         "Set" <>
         typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>

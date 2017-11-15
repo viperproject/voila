@@ -458,6 +458,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         }
 
       case conditional: PConditional => typ(conditional.thn)
+      case unfolding: PUnfolding => typ(unfolding.body)
 
       case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
 
@@ -600,6 +601,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case PConditional(cond, thn, els) =>
         freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
+
+      case PUnfolding(predicate, body) =>
+        freeVariables(predicate) ++ freeVariables(body)
 
       case PGuardExp(guard, regionId) => ListSet(regionId)
       case PDiamond(regionId) => ListSet(regionId)

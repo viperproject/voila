@@ -32,7 +32,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "interference", "in", "on",
     "if", "else", "while", "do", "skip", "inhale", "exhale", "havoc", "assume", "assert",
     "make_atomic", "update_region", "use_atomic", "open_region",
-    "Int", "Nat"
+    "Int", "Nat",
+    "unfolding"
   )
 
   lazy val program: Parser[PProgram] =
@@ -276,6 +277,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "false" ^^^ PFalseLit() |
     "ret" ^^^ PRet() |
     "_" ^^^ PIrrelevantValue() |
+    ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
     setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     predicateExp |

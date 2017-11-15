@@ -299,6 +299,8 @@ case class PIdnExp(id: PIdnUse) extends PExpression
 case class PPredicateExp(predicate: PIdnUse, arguments: Vector[PExpression])
     extends PExpression with PPredicateAccess with PBindingContext
 
+case class PUnfolding(predicate: PPredicateExp, body: PExpression) extends PExpression
+
 sealed trait PSetExp extends PExpression
 
 case class PExplicitSet(args: Vector[PExpression], typeAnnotation: Option[PType])
