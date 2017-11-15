@@ -572,9 +572,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               vpr.Assert(vpr.TrueLit()())()
 
             case PAbstractAtomic() =>
-              val vprPreHavocLabel = freshLabel("pre_havoc")
-
+              // TODO: See Voila i ssue #29
               // TODO: Inject code comments at various places
+
+              val vprPreHavocLabel = freshLabel("pre_havoc")
 
               def generateParentRegionHavockingCode(childRegion: vpr.PredicateAccess): (vpr.Exp, vpr.Seqn) = {
                 currentlyOpenRegions match {
@@ -627,11 +628,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
                   val vprRegionArguments = regionArguments map translate
 
+                  val vprRegionPredicateAccess =
+                    regionPredicateAccess(region, vprRegionArguments)
+
                   val havocCalleeRegion =
                     havocSingleRegionInstance(region, regionArguments, vprPreHavocLabel, None)
 
                   val (vprHavocParentRegionCondition, vprHavocParentRegion) =
-                    generateParentRegionHavockingCode(regionPredicateAccess(region, vprRegionArguments).loc)
+                    generateParentRegionHavockingCode(vprRegionPredicateAccess.loc)
 
                   val vprHavocRegion =
                     vpr.If(
@@ -640,6 +644,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                       vpr.Seqn(
                         Vector(havocCalleeRegion.exhale, havocCalleeRegion.inhale),
                         Vector.empty
+                      )()
+                    )()
+
+                  // TODO: See Voila issue #28
+                  val vprUnfoldingToLearnRegionStateInvariants =
+                    vpr.Assert(
+                      vpr.Unfolding(
+                        vprRegionPredicateAccess,
+                        vpr.TrueLit()()
                       )()
                     )()
 
@@ -678,6 +691,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                       vprHavocRegion,
                       havocCalleeRegion.constrainStateViaGuards,
                       havocCalleeRegion.constrainStateViaAtomicityContext,
+                      vprUnfoldingToLearnRegionStateInvariants,
                       vprCheckStateUnchanged),
                     Vector.empty
                   )()
