@@ -2,10 +2,6 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/BoundedCounter.t
 //
 
-struct memcell {
-  int f;
-}
-
 region BCounter(id r, memcell x)
   guards { duplicable INCREMENT; }
   interpretation {
@@ -15,7 +11,7 @@ region BCounter(id r, memcell x)
   state { v }
   actions {
     // TODO: Are these action definitions transitively closed?
-    INCREMENT: ?n if n < 2 ~> Set(?m | n < m);
+    INCREMENT: ?n if n < 2 ~> Set(?m | n <= m <= 2);
     INCREMENT: 2 ~> Set(2, 0);
   }
 
@@ -29,85 +25,47 @@ region BCounter(id r, memcell x)
 //    return v;
 //}
 
-// TODO: Should return the last read value (i.e. v).
-//       However, 'ret := v' as the final statement currently "destroys" the atomic triple.
-//       Could make 'return v' a ghost statement that assigns to 'ret'.
-//       Could try to include 'ret := v' inside make_atomic.
-abstract_atomic void incr(id r, memcell x)
-  interference ?v0 in Set(0, 1, 2) on r;
-  requires BCounter(r, x, v0) && INCREMENT@r;
-  // ensures  BCounter(r, x, ?v1) && INCREMENT@r;
-  // ensures (p = 1p ? ret = v0 &*& (v0 < 2 ? v1 = (v0 + 1) : v1 = 0) : true);
+// Note: The Caper encoding can provide stronger guarantees in the case where
+//       the environment cannot change the counter, which (in Caper) is known
+//       if the current invocation of incr has full permissions to the
+//       INCREMENT guard. I am not sure if something similar is possible in TaDA;
+//       it is not supported by Voila in any case.
+int incr(id r, memcell x)
+  requires BCounter(r, x, ?v0) && INCREMENT@r;
+  ensures  BCounter(r, x, ?v1) && INCREMENT@r;
+  ensures  0 <= ret <= 2;
 {
   int v;
   int w;
   bool b;
 
-  make_atomic
-    using BCounter(r, x) with INCREMENT@r;
+  do
+    invariant BCounter(r, x);
+    invariant 0 <= v <= 2;
   {
-    do
-      invariant BCounter(r, x);
-      invariant !b ==> r |=> <D>;
-      invariant  b ==> r |=> (v, w);
-      //invariant  b ==> r |=> (v, v < 2 ? v + 1 : 0);
+    open_region
+      using BCounter(r, x);
     {
-      open_region
-        using BCounter(r, x);
-      {
-        v := x.f;
-      }
+      v := x.f;
+    }
 
-      if (v < 2) {
-        w := v + 1;
-      } else {
-        w := 0;
-      }
+    if (v < 2) {
+      w := v + 1;
+    } else {
+      w := 0;
+    }
 
-      update_region
-        using BCounter(r, x);
-      {
-        b := CAS(x, v, w);
-        // b := CAS(x, v, v < 2 ? v + 1 : 0);
-      }
-    } while (!b);
-  }
+    use_atomic
+      using BCounter(r, x) with INCREMENT@r;
+    {
+      b := CAS(x, v, w);
+    }
+  } while (!b);
+
+  ret := v;
 }
 
-//function incr(x)
-//  requires BCounter(r, x, v0) &*& r@INCREMENT[p];
-//  ensures BCounter(r, x, v1) &*& r@INCREMENT[p] &*& (p = 1p ? ret = v0 &*& (v0 < 2 ? v1 = (v0 + 1) : v1 = 0) : true);
-//{
-//    assert p = 1p ? true : true;
-//    do {
-//        v := [x];
-//        if (v < 2) {
-//            w := v + 1;
-//        } else {
-//            w := 0;
-//        }
-//        b := CAS(x, v, w);
-//    }
-//      invariant BCounter(r, x, vi) &*& r@INCREMENT[p] &*& (p = 1p ? (b != 0 &*& v = v0 &*& (v0 < 2 ? vi = (v0 + 1) : vi = 0)) : true);
-//    while (b = 0);
-//    return v;
-//}
-
-abstract_atomic int readAA(id r, memcell x)
-  interference ?v0 in Set(0, 1, 2) on r;
-  requires BCounter(r, x, v0) && INCREMENT@r;
-  ensures  BCounter(r, x, v0) && INCREMENT@r;
-  ensures  ret == v0;
-  ensures  ret == 0 || ret == 1 || ret == 2;
-{
-  open_region
-    using BCounter(r, x);
-  {
-    ret := x.f;
-  }
-}
-
-int readNA1(id r, memcell x)
+int read(id r, memcell x)
   requires BCounter(r, x, ?v0) && INCREMENT@r;
   ensures  BCounter(r, x, ?v1) && INCREMENT@r;
   ensures  ret == 0 || ret == 1 || ret == 2;
@@ -118,20 +76,13 @@ int readNA1(id r, memcell x)
     ret := x.f;
   }
 }
-
-int readNA2(id r, memcell x)
-  requires BCounter(r, x, ?v0) && INCREMENT@r;
-  ensures  BCounter(r, x, ?v1) && INCREMENT@r;
-  ensures  ret == 0 || ret == 1 || ret == 2;
-{
-  //:: UnexpectedOutput(precondition_error:interference_error, /voila/issue/28/)
-  ret := readAA(r, x);
-}
-
-
 
 primitive_atomic bool CAS(memcell x, int now, int thn)
   requires x.f |-> ?v;
   ensures  v == now
               ? ret && x.f |-> thn
               : !ret && x.f |-> v;
+
+struct memcell {
+  int f;
+}

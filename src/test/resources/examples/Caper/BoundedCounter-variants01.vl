@@ -1,0 +1,131 @@
+region BCounter(id r, memcell x)
+  guards { duplicable INCREMENT; }
+  interpretation {
+    x.f |-> ?v &&
+    (v == 0 || v == 1 || v == 2)
+  }
+  state { v }
+  actions {
+    // TODO: Are these action definitions transitively closed?
+    INCREMENT: ?n if n < 2 ~> Set(?m | n <= m <= 2);
+    INCREMENT: 2 ~> Set(2, 0);
+  }
+
+// TODO: Should return the last read value (i.e. v).
+//       However, 'ret := v' as the final statement currently "destroys" the atomic triple.
+//       Could make 'return v' a ghost statement that assigns to 'ret'.
+//       Could try to include 'ret := v' inside make_atomic.
+abstract_atomic void incrAA(id r, memcell x)
+  interference ?v0 in Set(0, 1, 2) on r;
+  requires BCounter(r, x, v0) && INCREMENT@r;
+  ensures  BCounter(r, x, ?v1) && INCREMENT@r;
+  ensures  0 <= v1 <= 2; // Rather boring postcondition
+{
+  int v;
+  int w;
+  bool b;
+
+  make_atomic
+    using BCounter(r, x) with INCREMENT@r;
+  {
+    do
+      invariant BCounter(r, x);
+      invariant !b ==> r |=> <D>;
+      invariant 0 <= v <= 2; // Note: Needed after the loop, by make_atomic
+      invariant  b ==> r |=> (v, v < 2 ? v + 1 : 0);
+    {
+      open_region
+        using BCounter(r, x);
+      {
+        v := x.f;
+      }
+
+      if (v < 2) {
+        w := v + 1;
+      } else {
+        w := 0;
+      }
+
+      assert unfolding BCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+      update_region
+        using BCounter(r, x);
+      {
+        b := CAS(x, v, w);
+      }
+    } while (!b);
+  }
+}
+
+// TODO: Should return the last read value, see comment on incrAA
+void incrNA1(id r, memcell x)
+  requires BCounter(r, x, ?v0) && INCREMENT@r;
+  ensures  BCounter(r, x, ?v1) && INCREMENT@r;
+  // ensures  0 <= ret <= 2;
+{
+  assert unfolding BCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+  incrAA(r, x);
+}
+
+int incrNA2(id r, memcell x)
+  requires BCounter(r, x, ?v0) && INCREMENT@r;
+  ensures  BCounter(r, x, ?v1) && INCREMENT@r;
+  ensures  0 <= ret <= 2;
+{
+  int v;
+  bool b;
+
+  v := 0;
+  b := false;
+
+  while (!b)
+    invariant BCounter(r, x);
+    invariant 0 <= v <= 2;
+  {
+    open_region
+      using BCounter(r, x);
+    {
+      v := x.f;
+    }
+
+    use_atomic
+      using BCounter(r, x) with INCREMENT@r;
+    {
+      b := CAS(x, v, v < 2 ? v + 1 : 0);
+    }
+  }
+
+  ret := v;
+}
+
+abstract_atomic int readAA(id r, memcell x)
+  interference ?v0 in Set(0, 1, 2) on r;
+  requires BCounter(r, x, v0) && INCREMENT@r;
+  ensures  BCounter(r, x, v0) && INCREMENT@r;
+  ensures  ret == v0;
+  ensures  0 <= ret <= 2;
+{
+  open_region
+    using BCounter(r, x);
+  {
+    ret := x.f;
+  }
+}
+
+int readNA(id r, memcell x)
+  requires BCounter(r, x, ?v0) && INCREMENT@r;
+  ensures  BCounter(r, x, ?v1) && INCREMENT@r;
+  ensures  0 <= ret <= 2;
+{
+  assert unfolding BCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+  ret := readAA(r, x);
+}
+
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
+
+struct memcell {
+  int f;
+}

@@ -1,0 +1,68 @@
+region FCounter(id r, memcell x)
+  guards { duplicable INCREMENT; }
+  interpretation { x.f |-> ?v && 0 <= v <= 2 }
+  state { v }
+  actions {
+    INCREMENT: ?n if n < 2 ~> Set(?m | n <= m <= 2);
+  }
+
+int incrOrNothing(id r, memcell x)
+  requires FCounter(r, x, ?v0) && INCREMENT@r;
+  ensures  FCounter(r, x, ?v1) && INCREMENT@r;
+  ensures  0 <= ret <= 2;
+{
+  int v;
+  bool changed;
+  bool full;
+
+  assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+
+  changed := false;
+  full := false;
+
+  assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+
+  do
+    invariant FCounter(r, x, ?vi);
+    invariant 0 <= v <= 2;
+    invariant 0 <= v0 <= vi;
+    invariant vi <= v;
+    // invariant changed ==> v0 < v;
+  {
+    assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+    open_region
+      using FCounter(r, x);
+    {
+      v := x.f;
+    }
+
+    assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+    if (v < 2) {
+      use_atomic
+        using FCounter(r, x) with INCREMENT@r;
+      {
+        changed := CAS(x, v, v + 1);
+      }
+    } else {
+      assume false;
+      full := true;
+    }
+
+    assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+  } while (!changed && !full);
+
+  ret := v;
+}
+
+
+
+
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
+
+struct memcell {
+  int f;
+}

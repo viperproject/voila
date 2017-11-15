@@ -2,8 +2,8 @@
   --- Encoded ---
     BoundedCounter.t
       TODO: makeCounter()
-      TODO: Voila issue #28
-      TODO: incr(x)
+      TODO: Voila issues #28 and #29
+      Encoded several variants
     CASCounter.t
       TODO: makeCounter()
     ForkJoin.t
