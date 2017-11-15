@@ -6,6 +6,7 @@
 
 package viper.voila.frontend
 
+import scala.annotation.switch
 import scala.language.postfixOps
 import org.bitbucket.inkytonik.kiama.parsing.Parsers
 import org.bitbucket.inkytonik.kiama.rewriting.{Cloner, PositionedRewriter}
@@ -254,12 +255,46 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     } |
     exp60
 
-  lazy val exp60: PackratParser[PExpression] = /* Left-associative*/
-    exp60 ~ ("<" ~> exp50) ^^ PLess |
-    exp60 ~ ("<=" ~> exp50) ^^ PAtMost |
-    exp60 ~ (">" ~> exp50) ^^ PGreater |
-    exp60 ~ (">=" ~> exp50) ^^ PAtLeast |
-    exp50
+//  lazy val exp60: PackratParser[PExpression] = /* Left-associative*/
+//    exp60 ~ ("<=" ~> exp50) ^^ PAtMost |
+//    exp60 ~ ("<" ~> exp50) ^^ PLess |
+//    exp60 ~ (">=" ~> exp50) ^^ PAtLeast |
+//    exp60 ~ (">" ~> exp50) ^^ PGreater |
+//    exp50
+
+  lazy val ineqOps: Parser[String] =
+    /* Note: Operators have to be ordered in descending prefix order, i.e.
+     *       '<=' must come before '<'.
+     */
+    "<=" | "<" | ">=" | ">"
+
+  lazy val exp60: PackratParser[PExpression] = /* TODO: Figure out associativity */
+    exp50 ~ (ineqOps ~ exp50).* ^^ {
+      case exp ~ Seq() =>
+        exp
+      case exp ~ chain =>
+        val init = (exp, Vector.empty[PBinOp])
+
+        val (_, comparisons) =
+          chain.foldLeft(init) {
+            case ((left, result), sym ~ right) =>
+              val op =
+                /* TODO: Avoid duplicating operators from rule ineqOps above */
+                (sym: @switch) match {
+                  case "<" => PLess
+                  case "<=" => PAtMost
+                  case ">" => PGreater
+                  case ">=" => PAtLeast
+                }
+
+              (positionedRewriter.deepclone(right),
+               result :+ op(left, right).range(left, right))
+          }
+
+        comparisons.tail.foldLeft(comparisons.head) { case (exp1, exp2) =>
+          PAnd(exp1, exp2).range(exp1, exp2)
+        }
+    }
 
   lazy val exp50: PackratParser[PExpression] = /* Left-associative */
     exp50 ~ ("+" ~> exp40) ^^ PAdd |

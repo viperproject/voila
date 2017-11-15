@@ -1,0 +1,17 @@
+void test01()
+  requires 0 < 1;
+  ensures  2 < 3 < 4;
+  //:: ExpectedOutput(postcondition_error:assertion_error)
+  ensures  2 < 3 < 4 < 0;
+{}
+
+void test02() {
+  int w;
+  w := 0;
+
+  while (false)
+     invariant 0 <= w <= 2;
+  {
+    skip;
+  }
+}
