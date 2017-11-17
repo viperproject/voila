@@ -431,7 +431,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         if (alreadyHavoced) {
           None
         } else {
-          logger.debug(s"${indent()} // Stabilising postcondition (havocking regions)")
+          logger.debug(s"${indent()} // Havocking regions " +
+                       s"(after ${statement.statementName}@${statement.lineColumnPosition})")
 
           Some(stabiliseAfter(statement))
         }

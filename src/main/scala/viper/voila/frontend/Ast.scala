@@ -27,6 +27,12 @@ sealed abstract class PAstNode extends Product {
       case None => sys.error(s"Failed to find position for node ${this.getClass.getSimpleName}: $this")
     }
   }
+
+  def lineColumnPosition: silver.ast.LineColumnPosition = {
+    val pos = this.position
+
+    silver.ast.LineColumnPosition(pos.line, pos.column)
+  }
 }
 
 case class PProgram(structs: Vector[PStruct],
