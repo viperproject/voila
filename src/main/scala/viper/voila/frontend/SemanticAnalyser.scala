@@ -457,6 +457,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             PSetType(typeOfLogicalVariable(qvar))
         }
 
+      case _: PSetContains => PBoolType()
+
       case conditional: PConditional => typ(conditional.thn)
       case unfolding: PUnfolding => typ(unfolding.body)
 
@@ -496,6 +498,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case cnd @ tree.parent(conditional: PConditional) if cnd eq conditional.cond => PBoolType()
       case els @ tree.parent(conditional: PConditional) if els eq conditional.els => typ(conditional.thn)
+
+      case set @ tree.parent(contains: PSetContains) if set eq contains.set => PSetType(typ(contains.element))
 
       case _ =>
         /* Returning unknown expresses that no particular type is expected */

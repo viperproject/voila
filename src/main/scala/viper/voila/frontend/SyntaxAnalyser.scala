@@ -260,6 +260,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 //    exp60 ~ ("<" ~> exp50) ^^ PLess |
 //    exp60 ~ (">=" ~> exp50) ^^ PAtLeast |
 //    exp60 ~ (">" ~> exp50) ^^ PGreater |
+//    exp60 ~ ("in" ~> exp50) ^^ PSetContains |
 //    exp50
 
   lazy val ineqOps: Parser[String] =
@@ -268,8 +269,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
      */
     "<=" | "<" | ">=" | ">"
 
-  lazy val exp60: PackratParser[PExpression] = /* TODO: Figure out associativity */
-    exp50 ~ (ineqOps ~ exp50).* ^^ {
+  lazy val exp60: PackratParser[PExpression] =
+    exp60 ~ ("in" ~> exp50) ^^ PSetContains | /* Left-associative */
+    exp50 ~ (ineqOps ~ exp50).* ^^ { /* TODO: Figure out associativity */
       case exp ~ Seq() =>
         exp
       case exp ~ chain =>
@@ -313,8 +315,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "ret" ^^^ PRet() |
     "_" ^^^ PIrrelevantValue() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
-    setLiteral |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
+    setLiteral |
     predicateExp |
     (location <~ "|->") ~ binderOrExpression ^^ PPointsTo |
     (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
@@ -331,7 +333,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val guardExp: Parser[PGuardExp] =
     (idnuse <~ "@") ~ idnuse ^^ PGuardExp
 
-  lazy val setLiteral: Parser[PLiteral] =
+  lazy val setLiteral: Parser[PSetExp with PLiteral] =
     "Set" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
       case typeAnnotation ~ elements => PExplicitSet(elements, typeAnnotation)
     } |
