@@ -414,7 +414,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val optVprHavoc =
       if (mustHavocAfter(statement)) {
-        val alreadyHavoced = false
+        val alreadyHavoced =
           statement match {
             case PSeqComp(_, second) => mustHavocAfter(second)
             case PIf(_, thn, els) => mustHavocAfter(thn) && els.fold(true)(mustHavocAfter)
