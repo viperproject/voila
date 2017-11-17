@@ -16,6 +16,13 @@ package object translator {
   type ReasonTransformer = PartialFunction[silver.verifier.ErrorReason, VerificationError]
 
   implicit class RichViperNode[N <: vpr.Node](node: N) {
+    def withSource(source: Option[PAstNode]): N = {
+      source match {
+        case Some(sourceNode) => this.withSource(sourceNode)
+        case None => node
+      }
+    }
+
     def withSource(source: PAstNode): N = {
       val (pos, info, errT) = node.getPrettyMetadata
 

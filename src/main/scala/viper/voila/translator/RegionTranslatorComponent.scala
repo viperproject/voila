@@ -413,16 +413,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(guardExp: PGuardExp): vpr.PredicateAccessPredicate = {
     semanticAnalyser.entity(guardExp.guard) match {
       case GuardEntity(guardDecl, region) =>
-        val vprGuardPredicate = guardPredicate(guardDecl, region)
-
         val guardPredicateAccess =
-          vpr.PredicateAccessPredicate(
-            vpr.PredicateAccess(
-              Vector(translateUseOf(guardExp.regionId)),
-              vprGuardPredicate.name
-            )().withSource(guardExp),
-            vpr.FullPerm()()
-          )().withSource(guardExp)
+          translateUseOf(region, guardDecl, translateUseOf(guardExp.regionId), Some(guardExp))
 
         errorBacktranslator.addReasonTransformer {
           case e: vprrea.InsufficientPermission if e causedBy guardPredicateAccess.loc =>
@@ -431,6 +423,26 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
         guardPredicateAccess
     }
+  }
+
+  def translateUseOf(region: PRegion,
+                     guardDecl: PGuardDecl,
+                     actualRegionId: vpr.Exp,
+                     source: Option[PAstNode])
+                    : vpr.PredicateAccessPredicate = {
+
+    val vprGuardPredicate = guardPredicate(guardDecl, region)
+
+    val guardPredicateAccess =
+      vpr.PredicateAccessPredicate(
+        vpr.PredicateAccess(
+          Vector(actualRegionId),
+          vprGuardPredicate.name
+        )().withSource(source),
+        vpr.FullPerm()()
+      )().withSource(source)
+
+    guardPredicateAccess
   }
 
   def havocSingleRegionInstance(region: PRegion,
