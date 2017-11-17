@@ -395,13 +395,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case _ =>
     }
 
-    if (semanticAnalyser.atomicity(statement) == AtomicityKind.Nonatomic &&
+    if (!semanticAnalyser.isGhost(statement) &&
+        semanticAnalyser.atomicity(statement) == AtomicityKind.Nonatomic &&
         semanticAnalyser.expectedAtomicity(statement) == AtomicityKind.Atomic) {
 
       /* TODO See issue #22 */
-      sys.error(  s"Direct use of a nonatomic statement (position: ${statement.position}, "
-                + s"class: ${statement.getClass.getSimpleName}) in an atomic context is "
-                + s"prohibited. See also issue #22.")
+      sys.error( "Direct use of a nonatomic statement " +
+                s"(${statement.statementName}@${statement.lineColumnPosition}) " +
+                 "in an atomic context is not supported. See also issue #22.")
     }
 
     val vprStatement = directlyTranslate(statement)
