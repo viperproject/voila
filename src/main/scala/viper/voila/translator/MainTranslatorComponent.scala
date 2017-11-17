@@ -7,6 +7,7 @@
 package viper.voila.translator
 
 import scala.collection.breakOut
+import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
@@ -571,6 +572,61 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, vprHavoc)
 
+      case PUseRegionInterpretation(regionPredicate) =>
+        val (region, regionArguments, None) = getRegionPredicateDetails(regionPredicate)
+        val regionFormalArguments = region.regionId +: region.formalArgs
+        val vprRegionArguments = regionArguments map translate
+        val vprRegionId = vprRegionArguments.head
+        val vprRegionPredicateAccess = regionPredicateAccess(region, vprRegionArguments)
+
+        val vprUnfoldRegion = vpr.Unfold(vprRegionPredicateAccess)()
+
+
+
+        val collectAllGuardExps = collect[Vector, PGuardExp] { case exp: PGuardExp => exp }
+        val guardExps = collectAllGuardExps(region.interpretation)
+
+        val vprGuardPredicateAccesses =
+          guardExps flatMap (guardExp => {
+            assert(regionFormalArguments.exists(_.id.name == guardExp.regionId.name),
+                    "Not yet supported: applying the use-region-interpretation statement to " +
+                    "a region whose interpretation includes guards whose arguments are not " +
+                    "directly formal region arguments. " +
+                   s"In this case: $guardExp from the interpretation of region ${region.id}.")
+
+            val guardDecl =
+              semanticAnalyser.entity(guardExp.guard).asInstanceOf[GuardEntity].declaration
+
+            guardDecl.modifier match {
+              case PUniqueGuard() => Some(translateUseOf(region, guardDecl, vprRegionId, None))
+              case PDuplicableGuard() => None
+            }
+          })
+
+        val vprPermissionConstraintsForUniqueGuards =
+          vprGuardPredicateAccesses map (vprGuardAccess => {
+            vpr.Inhale(
+              vpr.PermLeCmp(
+                vpr.CurrentPerm(vprGuardAccess.loc)(),
+                vpr.FullPerm()()
+              )()
+            )()
+          })
+
+
+
+        val vprFoldRegion = vpr.Fold(vprRegionPredicateAccess)()
+
+        val result =
+          vpr.Seqn(
+              vprUnfoldRegion +:
+              vprPermissionConstraintsForUniqueGuards :+
+              vprFoldRegion,
+            Vector.empty
+          )().withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, result)
+
       case call @ PProcedureCall(procedureId, arguments, optRhs) =>
         val callee =
           semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
@@ -857,7 +913,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         )()
       )()
 
-    case comprehension: PSetComprehension =>
+    case _: PSetComprehension =>
       sys.error("Set comprehensions are not yet supported in this position.")
 
     case PIrrelevantValue() =>

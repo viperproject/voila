@@ -31,7 +31,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "interference", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", //"ret",
     "interference", "in", "on",
-    "if", "else", "while", "do", "skip", "inhale", "exhale", "havoc", "assume", "assert",
+    "if", "else", "while", "do", "skip",
+    "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "Int", "Nat",
     "unfolding"
@@ -156,6 +157,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "assume" ~> expression <~ ";" ^^ PAssume |
     "assert" ~> expression <~ ";" ^^ PAssert |
     "havoc" ~> idnuse <~ ";" ^^ PHavoc |
+    "use_region_interpretation" ~> predicateExp <~ ";" ^^ PUseRegionInterpretation |
     makeAtomic |
     updateRegion |
     useAtomic |

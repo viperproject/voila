@@ -214,6 +214,8 @@ case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rh
 
 sealed trait PGhostStatement extends PStatement
 
+/* TODO: Consider changing PFold and PUnfold to take a PPredicateExp as their single argument */
+
 case class PFold(predicate: PIdnUse, arguments: Vector[PExpression])
     extends PGhostStatement with PPredicateAccess
 {
@@ -231,6 +233,10 @@ case class PExhale(assertion: PExpression) extends PGhostStatement { val stateme
 case class PAssume(assertion: PExpression) extends PGhostStatement { val statementName = "assume" }
 case class PAssert(assertion: PExpression) extends PGhostStatement { val statementName = "assert" }
 case class PHavoc(variable: PIdnUse) extends PGhostStatement { val statementName = "havoc" }
+
+case class PUseRegionInterpretation(regionPredicate: PPredicateExp) extends PGhostStatement {
+  val statementName = "use-region-interpretation"
+}
 
 sealed trait PRuleStatement extends PStatement
 
