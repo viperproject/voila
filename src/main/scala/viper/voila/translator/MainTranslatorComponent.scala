@@ -409,6 +409,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     def mustHavocAfter(s: PStatement): Boolean = {
       semanticAnalyser.atomicity(s) == AtomicityKind.Nonatomic ||
         (semanticAnalyser.atomicity(s) == AtomicityKind.Atomic &&
+         !semanticAnalyser.isGhost(s) &&
          semanticAnalyser.expectedAtomicity(s) == AtomicityKind.Nonatomic)
     }
 
