@@ -1,40 +1,43 @@
 ===== Iterative =====
   --- Encoded ---
     BoundedCounter.t
-      TODO: makeCounter()
-      TODO: Voila issues #28 and #29
-      Encoded several variants
+      - TODO: makeCounter()
+      - TODO: Voila issues #28 and #29
+      - Encoded several variants
+    BoundedReadWriteLock.t
+      - TODO: makeLock()
+      - Caper's original symmetry of readers w.r.t. concrete state transitions unfortunately
+        doesn't transfer to our encoding because we don't support non-deterministic choice
     CASCounter.t
-      TODO: makeCounter()
+      - TODO: makeCounter()
     ForkJoin.t
-      TODO: make_join()
+      - TODO: make_join()
     ForkJoinClient.t
-      TODO: make_join()
-      TODO: main() --- mostly manually encoded
+      - TODO: make_join()
+      - TODO: main() --- mostly manually encoded
     SpinLock.t
-      TODO: makeLock()
+      - TODO: makeLock()
 
   --- Not yet encoded ---
     BagStack.t
     Barrier.t
-      TODO: Indexed guard algebra
-      TODO: Counting guard algebra
-      TODO: Sum guard algebra
+      - TODO: Indexed guard algebra
+      - TODO: Counting guard algebra
+      - TODO: Sum guard algebra
     BarrierClient.t
-      TODO: Indexed guard algebra
-      TODO: Counting guard algebra
-      TODO: Sum guard algebra
-    BoundedReadWriteLock.t
+      - TODO: Indexed guard algebra
+      - TODO: Counting guard algebra
+      - TODO: Sum guard algebra
     CounterClient.t
-      TODO: Counting guard algebra
+      - TODO: Counting guard algebra
     IncDec.t
-      TODO: Product guard algebra
+      - TODO: Product guard algebra
     Queue.t
     ReadWriteLock.t
-      TODO: Counting guard algebra
+      - TODO: Counting guard algebra
     ReferenceCount.t
-      TODO: Counting guard algebra
+      - TODO: Counting guard algebra
     TicketLock.t
-      TODO: Indexed guard algebra
+      - TODO: Indexed guard algebra
     TicketLockClient.t
-      TODO: Indexed guard algebra
+      - TODO: Indexed guard algebra
