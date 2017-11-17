@@ -183,7 +183,7 @@ class Voila extends StrictLogging {
         }
 
         var siliconOptions: Vector[String] = Vector.empty
-        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
+//        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
         siliconOptions ++= Vector("--logLevel", "ERROR")
 
         logger.info("Encoded Voila program in Viper")
