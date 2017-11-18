@@ -1,0 +1,177 @@
+region RWLock(id r, memcell x)
+  guards {
+    duplicable WLOCK;
+    unique WUNLOCK;
+    unique RLOCK1;
+    unique RUNLOCK1;
+    unique RLOCK2;
+    unique RUNLOCK2;
+  }
+
+  interpretation {
+    x.f |-> ?v &&
+    (v ==  0 ? RUNLOCK1@r && RUNLOCK2@r && WUNLOCK@r :
+     v ==  1 ? WUNLOCK@r && RUNLOCK2@r :
+     v ==  2 ? WUNLOCK@r && RUNLOCK1@r :
+     v ==  3 ? WUNLOCK@r :
+     v == -1 ? RUNLOCK1@r && RUNLOCK2@r :
+     false)
+  }
+  state { v }
+  actions {
+    RLOCK1   :  0 ~> Set(0, 1);
+    RUNLOCK1 :  1 ~> Set(1, 0);
+    RLOCK2   :  0 ~> Set(0, 2);
+    RUNLOCK2 :  2 ~> Set(2, 0);
+    RLOCK1   :  2 ~> Set(2, 3);
+    RUNLOCK1 :  3 ~> Set(3, 2);
+    RLOCK2   :  1 ~> Set(1, 3);
+    RUNLOCK2 :  3 ~> Set(3, 1);
+    WLOCK    :  0 ~> Set(0, -1);
+    WUNLOCK  : -1 ~> Set(-1, 0);
+  }
+
+
+
+abstract_atomic void readerAcquire1AA(id r, memcell x)
+  interference ?m in Set(-1, 0, 2) on r;
+  requires RWLock(r, x, m) && RLOCK1@r;
+  ensures  RWLock(r, x, ?n) && RLOCK1@r && RUNLOCK1@r;
+  ensures  m in Set(0, 2) && n == m + 1;
+{
+  int v;
+  bool b;
+
+  make_atomic
+    using RWLock(r, x) with RLOCK1@r;
+  {
+    do
+      invariant RWLock(r, x);
+      invariant !b ==> r |=> <D> ;
+      invariant  b ==> r |=> (v, v + 1) && (v in Set(0, 2)) && RUNLOCK1@r;
+    {
+      open_region
+        using RWLock(r, x);
+      {
+        v := x.f;
+      }
+
+      if (v >= 0) {
+        update_region
+          using RWLock(r, x);
+        {
+          b := CAS(x, v, v + 1);
+        }
+      } else {
+        b := false;
+      }
+    } while (!b);
+  }
+}
+
+void readerAcquire1a(id r, memcell x)
+  requires RWLock(r, x, ?m) && RLOCK1@r && m != 1 && m != 3;
+  ensures  RWLock(r, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
+{
+  use_region_interpretation RWLock(r, x);
+    // Learn that m != 1 && m != 3 implies that m in {-1, 0, 2}
+  readerAcquire1AA(r,x);
+}
+
+void readerAcquire1b(id r, memcell x)
+  requires RWLock(r, x, ?m) && RLOCK1@r && m in Set(-1, 0, 2);
+  ensures  RWLock(r, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
+{
+  readerAcquire1AA(r,x);
+}
+
+
+
+abstract_atomic void readerRelease2AA(id r, memcell x)
+  interference ?m in Set(2, 3) on r;
+  requires RWLock(r, x, m) && RUNLOCK2@r;
+  ensures  RWLock(r, x);
+{
+  int v;
+  bool b;
+
+  make_atomic
+    using RWLock(r, x) with RUNLOCK2@r;
+  {
+    do
+      invariant RWLock(r, x);
+      invariant !b ==> r |=> <D>;
+      invariant  b ==> r |=> (v, v - 2) && (v in Set(2, 3));
+    {
+      open_region
+        using RWLock(r, x);
+      {
+        v := x.f;
+      }
+
+      //:: UnexpectedOutput(update-region_error:guard_permission_error, /voila/issue/19/)
+      update_region
+        using RWLock(r, x);
+      {
+        b := CAS(x, v, v - 2);
+      }
+    } while (!b);
+  }
+}
+
+
+
+abstract_atomic void writerAcquireAA(id r, memcell x)
+  interference ?m in Int on r;
+  requires RWLock(r, x, m) && WLOCK@r;
+  ensures  RWLock(r, x, -1) && WLOCK@r && WUNLOCK@r;
+{
+  bool b;
+
+  make_atomic
+    using RWLock(r, x) with WLOCK@r;
+  {
+    do
+      invariant RWLock(r, x);
+      invariant !b ==> r |=> <D>;
+      invariant  b ==> r |=> (0, -1) && WUNLOCK@r;
+    {
+      update_region
+        using RWLock(r, x);
+      {
+        b := CAS(x, 0, -1);
+      }
+    } while (!b);
+  }
+}
+
+abstract_atomic void writerReleaseAA(id r, memcell x)
+  interference ?m in Set(-1) on r;
+  requires RWLock(r, x, m) && WUNLOCK@r;
+  ensures  RWLock(r, x);
+{
+  use_atomic
+    using RWLock(r, x) with WUNLOCK@r;
+  {
+    x.f := 0;
+  }
+}
+
+abstract_atomic void writerRelease(id r, memcell x)
+  requires RWLock(r, x, -1) && WUNLOCK@r;
+  ensures  RWLock(r, x);
+{
+  writerReleaseAA(r, x);
+}
+
+
+
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
+
+struct memcell {
+  int f;
+}
