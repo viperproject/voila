@@ -109,7 +109,10 @@ abstract_atomic void readerRelease2AA(id r, memcell x)
         v := x.f;
       }
 
-      //:: UnexpectedOutput(update-region_error:guard_permission_error, /voila/issue/19/)
+      //:: ExpectedOutput(update-region_error:guard_permission_error)
+      //      Cannot close region RWLock(r, x) after a successful update: guard
+      //      RUNLOCK2@r, which must go into the region, is currently not
+      //      available since it is used by the surrounding make-atomic rule.
       update_region
         using RWLock(r, x);
       {

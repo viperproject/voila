@@ -199,7 +199,6 @@ void writerAcquire(id r, memcell x)
   } while (!b);
 }
 
-
 void writerRelease(id r, memcell x)
   requires RWLock(r, x, -1) && WUNLOCK@r;
   ensures  RWLock(r, x);

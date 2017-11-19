@@ -1,0 +1,214 @@
+region Lock(id s, memcell x)
+  guards { unique G; }
+  interpretation { x.f |-> ?v && -1 <= v <= 3 }
+  state { v }
+  actions {
+    G: ?m ~> Set(-1, 0, 1, 2, 3);
+  }
+
+region RWLock(id r, id s, memcell x)
+  guards {
+    duplicable WLOCK;
+    unique WUNLOCK;
+    unique RLOCK1;
+    unique RUNLOCK1;
+    unique RLOCK2;
+    unique RUNLOCK2;
+  }
+
+  interpretation {
+    Lock(s, x, ?v) && G@s &&
+    (v ==  0 ? RUNLOCK1@r && RUNLOCK2@r && WUNLOCK@r :
+     v ==  1 ? WUNLOCK@r && RUNLOCK2@r :
+     v ==  2 ? WUNLOCK@r && RUNLOCK1@r :
+     v ==  3 ? WUNLOCK@r :
+     v == -1 ? RUNLOCK1@r && RUNLOCK2@r :
+     false)
+  }
+  state { v }
+  actions {
+    RLOCK1   :  0 ~> Set(0, 1);
+    RUNLOCK1 :  1 ~> Set(1, 0);
+    RLOCK2   :  0 ~> Set(0, 2);
+    RUNLOCK2 :  2 ~> Set(2, 0);
+    RLOCK1   :  2 ~> Set(2, 3);
+    RUNLOCK1 :  3 ~> Set(3, 2);
+    RLOCK2   :  1 ~> Set(1, 3);
+    RUNLOCK2 :  3 ~> Set(3, 1);
+    WLOCK    :  0 ~> Set(0, -1);
+    WUNLOCK  : -1 ~> Set(-1, 0);
+  }
+
+
+
+abstract_atomic void readerAcquire1AA(id s, memcell x)
+  interference ?m in Set(-1, 0, 2) on s;
+  requires Lock(s, x, m) && G@s;
+  ensures  Lock(s, x, ?n) && G@s;
+  ensures  m in Set(0, 2) && n == m + 1;
+{
+  int v;
+  bool b;
+
+  make_atomic
+    using Lock(s, x) with G@s;
+  {
+    do
+      invariant Lock(s, x);
+      invariant !b ==> s |=> <D> ;
+      invariant  b ==> s |=> (v, v + 1) && (v in Set(0, 2));
+    {
+      open_region
+        using Lock(s, x);
+      {
+        v := x.f;
+      }
+
+      if (v >= 0) {
+        update_region
+          using Lock(s, x);
+        {
+          b := CAS(x, v, v + 1);
+        }
+      } else {
+        b := false;
+      }
+    } while (!b);
+  }
+}
+
+void readerAcquire1(id r, id s, memcell x)
+  requires RWLock(r, s, x, ?m) && RLOCK1@r && m != 1 && m != 3;
+  ensures  RWLock(r, s, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
+{
+  use_region_interpretation RWLock(r, s, x);
+    // Learn that m != 1 && m != 3 implies that m in {-1, 0, 2}
+
+    use_atomic
+      using RWLock(r, s, x) with RLOCK1@r;
+    {
+      readerAcquire1AA(s, x);
+    }
+}
+
+
+
+abstract_atomic void readerRelease2AA(id s, memcell x)
+  interference ?m in Set(2, 3) on s;
+  requires Lock(s, x, m) && G@s;
+  ensures  Lock(s, x, ?n) && G@s;
+  ensures  n == m - 2;
+{
+  int v;
+  bool b;
+
+  make_atomic
+    using Lock(s, x) with G@s;
+  {
+    do
+      invariant Lock(s, x);
+      invariant !b ==> s |=> <D>;
+      invariant  b ==> s |=> (v, v - 2) && (v in Set(2, 3));
+    {
+      open_region
+        using Lock(s, x);
+      {
+        v := x.f;
+      }
+
+      update_region
+        using Lock(s, x);
+      {
+        b := CAS(x, v, v - 2);
+      }
+    } while (!b);
+  }
+}
+
+void readerRelease2(id r, id s, memcell x)
+  requires RWLock(r, s, x, ?n) && n > 0 && RUNLOCK2@r;
+  ensures  RWLock(r, s, x);
+{
+  use_region_interpretation RWLock(r, s, x);
+    // Learn that n > 0 && RUNLOCK2@r implies that m in {2, 3}
+
+  use_atomic
+    using RWLock(r, s, x) with RUNLOCK2@r;
+  {
+    readerRelease2AA(s, x);
+  }
+}
+
+
+
+
+abstract_atomic void writerAcquireAA(id s, memcell x)
+  interference ?m in Int on s;
+  requires Lock(s, x, m) && G@s;
+  ensures  Lock(s, x, -1) && G@s;
+  ensures  m == 0;
+{
+  bool b;
+
+  make_atomic
+    using Lock(s, x) with G@s;
+  {
+    do
+      invariant Lock(s, x);
+      invariant !b ==> s |=> <D>;
+      invariant  b ==> s |=> (0, -1);
+    {
+      update_region
+        using Lock(s, x);
+      {
+        b := CAS(x, 0, -1);
+      }
+    } while (!b);
+  }
+}
+
+void writerAcquire(id r, id s, memcell x)
+  requires RWLock(r, s, x) && WLOCK@r;
+  ensures  RWLock(r, s, x, -1) && WLOCK@r && WUNLOCK@r;
+{
+  use_atomic
+    using RWLock(r, s, x) with WLOCK@r;
+  {
+    writerAcquireAA(s, x);
+  }
+}
+
+abstract_atomic void writerReleaseAA(id s, memcell x)
+  interference ?m in Set(-1) on s;
+  requires Lock(s, x, m) && G@s;
+  ensures  Lock(s, x, 0) && G@s;
+{
+  use_atomic
+    using Lock(s, x) with G@s;
+  {
+    x.f := 0;
+  }
+}
+
+void writerRelease(id r, id s, memcell x)
+  requires RWLock(r, s, x, -1) && WUNLOCK@r;
+  ensures  RWLock(r, s, x);
+{
+  use_atomic
+    using RWLock(r, s, x) with WUNLOCK@r;
+  {
+    writerReleaseAA(s, x);
+  }
+}
+
+
+
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
+
+struct memcell {
+  int f;
+}
