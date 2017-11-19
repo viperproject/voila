@@ -3,12 +3,12 @@
     BoundedCounter.t
       - TODO: makeCounter()
       - TODO: Voila issues #28 and #29
-      - Encoded variations
+      - Encoded variants
     BoundedReadWriteLock.t
       - TODO: makeLock()
       - Caper's original symmetry of readers w.r.t. concrete state transitions unfortunately
         doesn't transfer to our encoding because we don't support non-deterministic choice
-      - Encoded variants, but TODO: see also Voila issue #32
+      - Encoded variants
     CASCounter.t
       - TODO: makeCounter()
     ForkJoin.t

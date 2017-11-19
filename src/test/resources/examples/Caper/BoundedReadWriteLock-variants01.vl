@@ -7,7 +7,6 @@ region RWLock(id r, memcell x)
     unique RLOCK2;
     unique RUNLOCK2;
   }
-
   interpretation {
     x.f |-> ?v &&
     (v ==  0 ? RUNLOCK1@r && RUNLOCK2@r && WUNLOCK@r :

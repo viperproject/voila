@@ -1,9 +1,9 @@
-region Lock(id s, memcell x)
+region Cell(id s, memcell x)
   guards { unique G; }
-  interpretation { x.f |-> ?v && -1 <= v <= 3 }
+  interpretation { x.f |-> ?v }
   state { v }
   actions {
-    G: ?m ~> Set(-1, 0, 1, 2, 3);
+    G: ?m ~> Int;
   }
 
 region RWLock(id r, id s, memcell x)
@@ -15,9 +15,8 @@ region RWLock(id r, id s, memcell x)
     unique RLOCK2;
     unique RUNLOCK2;
   }
-
   interpretation {
-    Lock(s, x, ?v) && G@s &&
+    Cell(s, x, ?v) && G@s &&
     (v ==  0 ? RUNLOCK1@r && RUNLOCK2@r && WUNLOCK@r :
      v ==  1 ? WUNLOCK@r && RUNLOCK2@r :
      v ==  2 ? WUNLOCK@r && RUNLOCK1@r :
@@ -43,30 +42,30 @@ region RWLock(id r, id s, memcell x)
 
 abstract_atomic void readerAcquire1AA(id s, memcell x)
   interference ?m in Set(-1, 0, 2) on s;
-  requires Lock(s, x, m) && G@s;
-  ensures  Lock(s, x, ?n) && G@s;
+  requires Cell(s, x, m) && G@s;
+  ensures  Cell(s, x, ?n) && G@s;
   ensures  m in Set(0, 2) && n == m + 1;
 {
   int v;
   bool b;
 
   make_atomic
-    using Lock(s, x) with G@s;
+    using Cell(s, x) with G@s;
   {
     do
-      invariant Lock(s, x);
+      invariant Cell(s, x);
       invariant !b ==> s |=> <D> ;
       invariant  b ==> s |=> (v, v + 1) && (v in Set(0, 2));
     {
       open_region
-        using Lock(s, x);
+        using Cell(s, x);
       {
         v := x.f;
       }
 
       if (v >= 0) {
         update_region
-          using Lock(s, x);
+          using Cell(s, x);
         {
           b := CAS(x, v, v + 1);
         }
@@ -95,29 +94,29 @@ void readerAcquire1(id r, id s, memcell x)
 
 abstract_atomic void readerRelease2AA(id s, memcell x)
   interference ?m in Set(2, 3) on s;
-  requires Lock(s, x, m) && G@s;
-  ensures  Lock(s, x, ?n) && G@s;
+  requires Cell(s, x, m) && G@s;
+  ensures  Cell(s, x, ?n) && G@s;
   ensures  n == m - 2;
 {
   int v;
   bool b;
 
   make_atomic
-    using Lock(s, x) with G@s;
+    using Cell(s, x) with G@s;
   {
     do
-      invariant Lock(s, x);
+      invariant Cell(s, x);
       invariant !b ==> s |=> <D>;
       invariant  b ==> s |=> (v, v - 2) && (v in Set(2, 3));
     {
       open_region
-        using Lock(s, x);
+        using Cell(s, x);
       {
         v := x.f;
       }
 
       update_region
-        using Lock(s, x);
+        using Cell(s, x);
       {
         b := CAS(x, v, v - 2);
       }
@@ -144,22 +143,22 @@ void readerRelease2(id r, id s, memcell x)
 
 abstract_atomic void writerAcquireAA(id s, memcell x)
   interference ?m in Int on s;
-  requires Lock(s, x, m) && G@s;
-  ensures  Lock(s, x, -1) && G@s;
+  requires Cell(s, x, m) && G@s;
+  ensures  Cell(s, x, -1) && G@s;
   ensures  m == 0;
 {
   bool b;
 
   make_atomic
-    using Lock(s, x) with G@s;
+    using Cell(s, x) with G@s;
   {
     do
-      invariant Lock(s, x);
+      invariant Cell(s, x);
       invariant !b ==> s |=> <D>;
       invariant  b ==> s |=> (0, -1);
     {
       update_region
-        using Lock(s, x);
+        using Cell(s, x);
       {
         b := CAS(x, 0, -1);
       }
@@ -180,11 +179,11 @@ void writerAcquire(id r, id s, memcell x)
 
 abstract_atomic void writerReleaseAA(id s, memcell x)
   interference ?m in Set(-1) on s;
-  requires Lock(s, x, m) && G@s;
-  ensures  Lock(s, x, 0) && G@s;
+  requires Cell(s, x, m) && G@s;
+  ensures  Cell(s, x, 0) && G@s;
 {
   use_atomic
-    using Lock(s, x) with G@s;
+    using Cell(s, x) with G@s;
   {
     x.f := 0;
   }
