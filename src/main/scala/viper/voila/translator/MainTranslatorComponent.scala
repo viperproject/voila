@@ -586,22 +586,25 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val collectAllGuardExps = collect[Vector, PGuardExp] { case exp: PGuardExp => exp }
         val guardExps = collectAllGuardExps(region.interpretation)
 
-        val vprGuardPredicateAccesses =
-          guardExps flatMap (guardExp => {
-            assert(regionFormalArguments.exists(_.id.name == guardExp.regionId.name),
-                    "Not yet supported: applying the use-region-interpretation statement to " +
-                    "a region whose interpretation includes guards whose arguments are not " +
-                    "directly formal region arguments. " +
-                   s"In this case: $guardExp from the interpretation of region ${region.id}.")
+        val vprGuardPredicateAccesses = {
+          guardExps foreach (guardExp => {
+            assert(
+              regionFormalArguments.exists(_.id.name == guardExp.regionId.name),
+              "Not yet supported: applying the use-region-interpretation statement to " +
+              "a region whose interpretation includes guards whose arguments are not " +
+              "directly formal region arguments. " +
+              s"In this case: $guardExp from the interpretation of region ${region.id}.")})
 
-            val guardDecl =
-              semanticAnalyser.entity(guardExp.guard).asInstanceOf[GuardEntity].declaration
-
-            guardDecl.modifier match {
-              case PUniqueGuard() => Some(translateUseOf(region, guardDecl, vprRegionId, None))
-              case PDuplicableGuard() => None
-            }
-          })
+          guardExps
+            .map(guardExp => semanticAnalyser.entity(guardExp.guard).asInstanceOf[GuardEntity])
+            .filter(guardEntity => guardEntity.region == region)
+            .map(_.declaration)
+            .flatMap(guardDecl =>
+              guardDecl.modifier match {
+                case PUniqueGuard() => Some(translateUseOf(region, guardDecl, vprRegionId, None))
+                case PDuplicableGuard() => None
+              })
+        }
 
         val vprPermissionConstraintsForUniqueGuards =
           vprGuardPredicateAccesses map (vprGuardAccess => {
