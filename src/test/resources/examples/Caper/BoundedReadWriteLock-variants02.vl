@@ -83,11 +83,11 @@ void readerAcquire1(id r, id s, memcell x)
   use_region_interpretation RWLock(r, s, x);
     // Learn that m != 1 && m != 3 implies that m in {-1, 0, 2}
 
-    use_atomic
-      using RWLock(r, s, x) with RLOCK1@r;
-    {
-      readerAcquire1AA(s, x);
-    }
+  use_atomic
+    using RWLock(r, s, x) with RLOCK1@r;
+  {
+    readerAcquire1AA(s, x);
+  }
 }
 
 
@@ -129,7 +129,7 @@ void readerRelease2(id r, id s, memcell x)
   ensures  RWLock(r, s, x);
 {
   use_region_interpretation RWLock(r, s, x);
-    // Learn that n > 0 && RUNLOCK2@r implies that m in {2, 3}
+    // Learn that n > 0 && RUNLOCK2@r implies that n in {2, 3}
 
   use_atomic
     using RWLock(r, s, x) with RUNLOCK2@r;
