@@ -238,6 +238,49 @@ region CAPLock(id r, id s, memcell x)
     K: 1 ~> Set(1, 0);
   }
 
+void lock(id r, id s, memcell x)
+  requires CAPLock(r, s, x, ?m) && (m in Set(0, 1));
+  ensures  CAPLock(r, s, x, ?n) && n == 1 && K@r;
+{
+  use_atomic
+    using CAPLock(r, s, x) with Z@r;
+  {
+    assert Cell(s, x, ?v); // Bind region value before call
+    spinCAS(s, x, Int);
+      // cas_if := \v -> v == 0
+      // cas_to := \v -> 1
+    assert Cell(s, x, ?w); // Bind region value after call
+    assume v == 0; // From cas_if
+    assume w == 1; // From cas_to
+  }
+}
+
+abstract_atomic void unlockAA(id s, memcell x)
+  interference ?v in Set(1) on s;
+  requires Cell(s, x, v) && G@s;
+  ensures Cell(s, x, 0) && G@s;
+{
+  make_atomic
+    using Cell(s, x) with G@s;
+  {
+    update_region
+      using Cell(s, x);
+    {
+      x.f := 0;
+    }
+  }
+}
+
+void unlock(id r, id s, memcell x)
+  requires CAPLock(r, s, x, ?m) && m == 1 && K@r;
+  requires Inv();
+{
+  use_atomic
+    using CAPLock(r, s, x) with K@r;
+  {
+    unlockAA(s, x);
+  }
+}
 
 
 

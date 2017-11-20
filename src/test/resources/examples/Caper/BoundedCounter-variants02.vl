@@ -15,12 +15,12 @@ int incrOrNothing(id r, memcell x)
   bool changed;
   bool full;
 
-  assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+  use_region_interpretation FCounter(r, x); // TODO: See Voila issues #28 and #29
 
   changed := false;
   full := false;
 
-  assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+  use_region_interpretation FCounter(r, x); // TODO: See Voila issues #28 and #29
 
   do
     invariant FCounter(r, x, ?vi);
@@ -29,14 +29,14 @@ int incrOrNothing(id r, memcell x)
     invariant vi <= v;
     // invariant changed ==> v0 < v;
   {
-    assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+    use_region_interpretation FCounter(r, x); // TODO: See Voila issues #28 and #29
     open_region
       using FCounter(r, x);
     {
       v := x.f;
     }
 
-    assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+    use_region_interpretation FCounter(r, x); // TODO: See Voila issues #28 and #29
     if (v < 2) {
       use_atomic
         using FCounter(r, x) with INCREMENT@r;
@@ -48,7 +48,7 @@ int incrOrNothing(id r, memcell x)
       full := true;
     }
 
-    assert unfolding FCounter(r, x) in true; // TODO: See Voila issues #28 and #29
+    use_region_interpretation FCounter(r, x); // TODO: See Voila issues #28 and #29
   } while (!changed && !full);
 
   ret := v;

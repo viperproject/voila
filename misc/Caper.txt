@@ -8,7 +8,7 @@
       - TODO: makeLock()
       - Caper's original symmetry of readers w.r.t. concrete state transitions unfortunately
         doesn't transfer to our encoding because we don't support non-deterministic choice
-      - Encoded variants
+      - Encoded variants (particularly interesting: BoundedReadWriteLock-variants03.vl)
     CASCounter.t
       - TODO: makeCounter()
     ForkJoin.t
@@ -21,6 +21,9 @@
 
   --- Not yet encoded ---
     BagStack.t
+      - TODO: Might need mathematical pairs or predicates with multiple out-arguments,
+              e.g. either BagList(r, x, ?pair) and fst(pair)/snd(pair)
+              or BagList(r, x, ?fst, ?snd)
     Barrier.t
       - TODO: Indexed guard algebra
       - TODO: Counting guard algebra
