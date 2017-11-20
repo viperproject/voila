@@ -744,12 +744,19 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                       vprRegionArguments
                     )()
 
+                  val vprInterferenceSet = {
+                    val vprFormalsToActuals =
+                      callee.formalArgs.map(translate(_).localVar).zip(vprArguments).toMap
+
+                    translate(inter.set).replace(vprFormalsToActuals)
+                  }
+
                   val vprCheckStateUnchanged =
                     vpr.Assert(
                       vpr.AnySetContains(
                         vprCurrentState,
                         vpr.LabelledOld(
-                          translate(inter.set),
+                          vprInterferenceSet,
                           vprPreHavocLabel.name
                         )()
                       )()
