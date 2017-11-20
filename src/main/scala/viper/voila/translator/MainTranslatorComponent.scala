@@ -76,6 +76,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       Vector.empty
     )(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
 
+  val preStatementLabelPrefix: String = "pre_statement"
+
+  def preStatementLabel(statement: PStatement): vpr.Label =
+    vpr.Label(
+      s"${preStatementLabelPrefix}_${statement.position.line}_${statement.position.column}",
+      Vector.empty
+    )()
+
   val atomicityContextsDomainName: String = "$AtomicityContexts"
 
   def atomicityContextsDomain(regions: Vector[PRegion]): vpr.Domain =
@@ -557,6 +565,17 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         assume = assume.withSource(statement)
 
         surroundWithSectionComments(statement.statementName, assume)
+
+      // TODO: Special case (of the next case), should not be necessary in the long run.
+      case PAssert(predicateExp: PPredicateExp)
+              if predicateExp.arguments.last.isInstanceOf[PLogicalVariableBinder] =>
+
+        val vprLabel = preStatementLabel(statement)
+        val vprAssert = vpr.Assert(translate(predicateExp))().withSource(statement)
+
+        val vprResult = vpr.Seqn(Vector(vprLabel, vprAssert), Vector.empty)()
+
+        surroundWithSectionComments(statement.statementName, vprResult)
 
       case PAssert(assertion) =>
         var assert = vpr.Assert(translate(assertion))()

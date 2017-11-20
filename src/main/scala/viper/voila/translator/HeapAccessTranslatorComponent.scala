@@ -100,6 +100,15 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
         vpr.Old(vprHeapRead)()
 
+      case (LogicalVariableContext.Procedure, _) =>
+        val declaringStatement = semanticAnalyser.enclosingStatement(declaration)
+        val vprDrecedingLabel = preStatementLabel(declaringStatement)
+
+        vpr.LabelledOld(
+          vprHeapRead,
+          vprDrecedingLabel.name
+        )()
+
       case _ =>
         sys.error(
           s"""Unexpected situation:

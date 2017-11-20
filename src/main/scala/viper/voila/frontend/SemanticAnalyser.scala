@@ -343,6 +343,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => generalContextAttr(of)(p)
     }}
 
+  def enclosingStatement(of: PAstNode): PStatement =
+    enclosingStatementAttr(of)(of)
+
+  private lazy val enclosingStatementAttr: PAstNode => PAstNode => PStatement =
+    paramAttr { of => {
+      case statement: PStatement => statement
+      case tree.parent(p) => enclosingStatementAttr(of)(p)
+    }}
+
   lazy val isGhost: PStatement => Boolean =
     attr {
       case _: PGhostStatement => true
