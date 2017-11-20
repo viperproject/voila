@@ -40,7 +40,7 @@ region CAPLock(id r, id a, memcell x)
   }
 
 predicate isLock(id r, id a, memcell x) {
-  CAPLock(r, a, x, ?v) && (v == 0 || v == 1) // v in Set(0, 1) // TODO: Support simple set expressions
+  CAPLock(r, a, x, ?v) && (v in Set(0, 1))
 }
 
 predicate Locked(id r, id a, memcell x) {
