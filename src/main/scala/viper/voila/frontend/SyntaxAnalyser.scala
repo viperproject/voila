@@ -130,7 +130,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     typ ~ idndef ^^ { case tpe ~ id => PFormalArgumentDecl(id, tpe) }
 
   lazy val interference: Parser[PInterferenceClause] =
-    "interference" ~> binder ~ ("in" ~> setLiteral) ~ ("on" ~> idnuse <~ ";") ^^ PInterferenceClause
+    "interference" ~> binder ~
+    ("in" ~> expression) ~
+    ("on" ~> idnuse <~ ";") ^^ PInterferenceClause
 
   lazy val requires: Parser[PPreconditionClause] =
     "requires" ~> expression <~ ";" ^^ PPreconditionClause
@@ -368,6 +370,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "int" ^^^ PIntType() |
     "bool" ^^^ PBoolType() |
     "id" ^^^ PRegionIdType() |
+    "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     idnuse ^^ PRefType
 
   lazy val idndef: Parser[PIdnDef] =
