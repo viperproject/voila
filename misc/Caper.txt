@@ -16,6 +16,8 @@
     ForkJoinClient.t
       - TODO: make_join()
       - TODO: main() --- mostly manually encoded
+    IncDec.t
+      - TODO: Product guard algebra (one action is not encoded)
     SpinLock.t
       - TODO: makeLock()
 
@@ -34,8 +36,6 @@
       - TODO: Sum guard algebra
     CounterClient.t
       - TODO: Counting guard algebra
-    IncDec.t
-      - TODO: Product guard algebra
     Queue.t
     ReadWriteLock.t
       - TODO: Counting guard algebra
