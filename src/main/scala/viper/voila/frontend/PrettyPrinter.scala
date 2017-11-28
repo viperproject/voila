@@ -291,7 +291,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PIntType() => "int"
       case PBoolType() => "bool"
       case PSetType(elementType) => "set" <> brackets(toDoc(elementType))
-      case PRefType(referencedType) => toDoc(referencedType) <> asterisk
+      case PRefType(referencedType) => toDoc(referencedType)
       case PRegionIdType() => "id"
       case PVoidType() => "void"
       case PUnknownType() => "<unknown>"

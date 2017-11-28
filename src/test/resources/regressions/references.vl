@@ -12,3 +12,13 @@ void test() {
   n.val := 0;
   n.nxt := null;
 }
+
+region R(id a, llnode x)
+  guards { unique G; }
+  interpretation { x.nxt |-> ?n }
+  state { n }
+  actions { G: null ~> Set(null); }
+
+void test2() {
+
+}
