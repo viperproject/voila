@@ -1,0 +1,27 @@
+region Cell(id r, memcell x)
+  guards { unique G; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions { G: ?m ~> Int; }
+
+void test01(id r, memcell x)
+  requires Cell(r, x, 0) && G@r;
+  requires Cell(r, x, 0); // OK, since region assertions are duplicable
+{
+  // TODO: Opening a region assertion twice should not be allowed
+  unfold Cell(r, x, 0);
+  unfold Cell(r, x, 0);
+  assert false;
+}
+
+void test02(id r, memcell x)
+  requires Cell(r, x, 0) && G@r;
+  requires Cell(r, x, 0); // OK, since region assertions are duplicable
+{
+  // TODO: Opening a region assertion twice should not be allowed
+  assert unfolding Cell(r, x, 0) in unfolding Cell(r, x, 0) in false;
+}
+
+struct memcell {
+  int f;
+}

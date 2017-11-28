@@ -1,0 +1,23 @@
+region Cell(id r, memcell x)
+  guards { unique G; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions { G: ?m ~> Int; }
+
+void test01(id r, memcell x)
+  requires Cell(r, x, 0) && G@r;
+  requires Cell(r, x, 0); // OK, since region assertions are duplicable
+{
+  set_to_one(r, x);
+  assert Cell(r, x, 1);
+  assert false; // Follows from Cell(r, x, 0) && Cell(r, x, 1)
+}
+
+abstract_atomic void set_to_one(id r, memcell x)
+  interference ?v in Set[int](v) on r;
+  requires Cell(r, x, v) && G@r;
+  ensures  Cell(r, x, 1) && G@r;
+
+struct memcell {
+  int f;
+}
