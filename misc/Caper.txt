@@ -37,6 +37,7 @@
     CounterClient.t
       - TODO: Counting guard algebra
     Queue.t
+      - TODO: Issue #34
     ReadWriteLock.t
       - TODO: Counting guard algebra
     ReferenceCount.t
