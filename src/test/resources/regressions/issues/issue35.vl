@@ -1,5 +1,3 @@
-//:: IgnoreFile(/voila/issue/35/)
-
 region Dummy(id a)
   guards { unique G; }
   interpretation { true }
