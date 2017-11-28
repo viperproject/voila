@@ -1,0 +1,15 @@
+//:: IgnoreFile(/voila/issue/35/)
+
+region Dummy(id a)
+  guards { unique G; }
+  interpretation { true }
+  state { true }
+  actions {}
+
+void test(id a)
+  requires true;
+  ensures true;
+{
+  fold Dummy(a, true);
+  inhale G@a;
+}
