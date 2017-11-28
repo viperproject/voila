@@ -103,7 +103,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                    !isCompatible(typ(actual), formal.typ))
                })
 
-          case other =>
+          case _ =>
             message(call.procedure, s"Cannot call ${call.procedure}")
         }
 
@@ -459,7 +459,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case None => PSetType(typ(elements.head))
         }
 
-      case PSetComprehension(qvar, filter, typeAnnotation) =>
+      case PSetComprehension(qvar, _, typeAnnotation) =>
         typeAnnotation match {
           case Some(_typ) =>
             PSetType(_typ)
@@ -621,7 +621,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PUnfolding(predicate, body) =>
         freeVariables(predicate) ++ freeVariables(body)
 
-      case PGuardExp(guard, regionId) => ListSet(regionId)
+      case PGuardExp(_, regionId) => ListSet(regionId)
       case PDiamond(regionId) => ListSet(regionId)
 
       case PRegionUpdateWitness(regionId, from, to) =>
