@@ -278,6 +278,7 @@ sealed trait PLiteral extends PExpression
 
 case class PTrueLit() extends PLiteral
 case class PFalseLit() extends PLiteral
+case class PNullLit() extends PLiteral
 case class PIntLit(value: BigInt) extends PLiteral
 
 case class PRet() extends PLiteral
@@ -356,6 +357,7 @@ sealed trait PType extends PAstNode
 case class PIntType() extends PType
 case class PBoolType() extends PType
 case class PSetType(elementType: PType) extends PType
+case class PNullType() extends PType
 case class PRefType(id: PIdnUse) extends PType
 case class PRegionIdType() extends PType
 case class PVoidType() extends PType

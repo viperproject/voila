@@ -1,0 +1,14 @@
+struct llnode {
+  int val;
+  llnode nxt;
+}
+
+void test() {
+  llnode n;
+
+  inhale n.val |-> ?v1;
+  inhale n.nxt |-> ?v2;
+
+  n.val := 0;
+  n.nxt := null;
+}

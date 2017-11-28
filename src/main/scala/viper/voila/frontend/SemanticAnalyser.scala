@@ -90,7 +90,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         message(
           location,
           s"Type error: expected $locationType but got $rhsType",
-          !isCompatible(rhsType, locationType))
+          !isCompatible(locationType, rhsType))
 
       case call: PProcedureCall =>
         checkUse(entity(call.procedure)) {
@@ -111,7 +111,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
            message(
               exp,
               s"Type error: expected ${expectedType(exp)} but got ${typ(exp)}",
-              !isCompatible(typ(exp), expectedType(exp)))
+              !isCompatible(expectedType(exp), typ(exp)))
         ++
            check(exp) {
               case PIdnExp(id) =>
@@ -164,9 +164,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     * the same.
     */
   def isCompatible(t1: PType, t2: PType): Boolean =
-      (t1 == PUnknownType()) ||
-      (t2 == PUnknownType()) ||
-      (t1 == t2)
+    (t1 == t2) ||
+    (t1.isInstanceOf[PRefType] && t2.isInstanceOf[PNullType]) ||
+    (t1 == PUnknownType()) ||
+    (t2 == PUnknownType())
 
   /**
     * The entity defined by a defining occurrence of an identifier.
@@ -440,6 +441,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     attr {
       case _: PIntLit => PIntType()
       case _: PTrueLit | _: PFalseLit => PBoolType()
+      case _: PNullLit => PNullType()
 
       case ret: PRet => enclosingMember(ret).get.asInstanceOf[PProcedure].typ
 

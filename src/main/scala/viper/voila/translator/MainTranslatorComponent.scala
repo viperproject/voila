@@ -863,6 +863,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(expression: PExpression): vpr.Exp = expression match {
     case PTrueLit() => vpr.TrueLit()().withSource(expression)
     case PFalseLit() => vpr.FalseLit()().withSource(expression)
+    case PNullLit() => vpr.NullLit()().withSource(expression)
     case PIntLit(n) => vpr.IntLit(n)().withSource(expression)
     case PEquals(left, right) => vpr.EqCmp(translate(left), translate(right))().withSource(expression)
     case PAnd(left, right) => vpr.And(translate(left), translate(right))().withSource(expression)

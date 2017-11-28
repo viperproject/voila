@@ -237,6 +237,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
       case PTrueLit() => "true"
       case PFalseLit() => "false"
+      case PNullLit() => "null"
       case PIntLit(value) => value.toString
       case PRet() => "ret"
 
@@ -294,5 +295,6 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PRegionIdType() => "id"
       case PVoidType() => "void"
       case PUnknownType() => "<unknown>"
+      case PNullType() => "<null>"
     }
 }

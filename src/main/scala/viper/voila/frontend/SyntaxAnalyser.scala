@@ -34,6 +34,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "Int", "Nat", "Set",
+    "true", "false", "null",
     "unfolding"
   )
 
@@ -315,6 +316,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val exp0: PackratParser[PExpression] =
     "true" ^^^ PTrueLit() |
     "false" ^^^ PFalseLit() |
+    "null" ^^^ PNullLit() |
     "ret" ^^^ PRet() |
     "_" ^^^ PIrrelevantValue() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
