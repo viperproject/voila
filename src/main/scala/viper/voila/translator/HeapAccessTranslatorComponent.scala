@@ -77,7 +77,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
         case predicateExp: PPredicateExp =>
           regionState(predicateExp)
 
-        case PInterferenceClause(`declaration`, set, regionId) =>
+        case PInterferenceClause(`declaration`, _, regionId) =>
           regionState(semanticAnalyser.usedWithRegionPredicate(regionId))
 
         case other =>

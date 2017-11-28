@@ -435,7 +435,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             case _: PUseAtomic => false
             case _: POpenRegion => false
             case _: PCompoundStatement => ??? /* Forgot about a particular compound statement */
-            case other => false
+            case _ => false
           }
 
         if (alreadyHavoced) {
@@ -782,7 +782,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     )()
 
                   errorBacktranslator.addErrorTransformer {
-                    case e @ vprerr.PreconditionInAppFalse(_, reason: vprrea.InsufficientPermission, _)
+                    case e @ vprerr.PreconditionInAppFalse(_, _: vprrea.InsufficientPermission, _)
                          if e causedBy vprCurrentState =>
 
                       PreconditionError(call, InsufficientRegionPermissionError(regionPredicate))
