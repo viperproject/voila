@@ -283,17 +283,19 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     }
 
 
-  lazy val usedWithRegion: PIdnNode => PRegion = attr(regionIdUsedWith(_)._1)
+  lazy val usedWithRegion: PIdnNode => PRegion =
+    attr(regionIdUsedWith(_)._1)
 
-  lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp = attr(regionIdUsedWith(_)._2.get)
+  lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp =
+    attr(regionIdUsedWith(_)._2.get.asInstanceOf[PPredicateExp])
 
-  lazy val regionIdUsedWith: PIdnNode => (PRegion, Option[PPredicateExp]) =
+  lazy val regionIdUsedWith: PIdnNode => (PRegion, Option[PPredicateAccess]) =
     attr(id => enclosingMember(id) match {
       case Some(scope) =>
-        val regions =
-          collect[Vector, Option[(PRegion, Option[PPredicateExp])]] {
-            case exp @ PPredicateExp(region, PIdnExp(`id`) +: _) =>
-              entity(region) match {
+        val collectRegionAccesses =
+          collect[Vector, Option[(PRegion, Option[PPredicateAccess])]] {
+            case exp @ PPredicateAccess(predicate, PIdnExp(`id`) +: _) =>
+              entity(predicate) match {
                 case RegionEntity(decl) => Some((decl, Some(exp)))
                 case _ => None
               }
@@ -302,7 +304,18 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               Some(region, None)
           }
 
-        regions(scope).flatten.head
+        val regions = collectRegionAccesses(scope).flatten
+
+        /* TODO: Reconsider what this method does and what it's supposed to do.
+         *       In general, a region id can be used with multiple region
+         *       assertions in which the other region arguments differ.
+         *       Which region predicate access should be returned in such cases?
+         */
+//        assert( // Fails all the time ...
+//          regions.length == 1,
+//          s"Expected exactly one match, but found ${regions.length}: $regions")
+
+        regions.head
 
       case None =>
         ???
