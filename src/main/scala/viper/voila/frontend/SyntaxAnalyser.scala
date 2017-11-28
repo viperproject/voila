@@ -25,7 +25,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   val reservedWords = Set(
     "true", "false",
-    "void", "int", "bool", "id", "Set",
+    "void", "int", "bool", "id", "set",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
     "predicate", "struct",
     "interference", "in", "on", "requires", "ensures", "invariant",
@@ -33,7 +33,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "if", "else", "while", "do", "skip",
     "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation",
     "make_atomic", "update_region", "use_atomic", "open_region",
-    "Int", "Nat",
+    "Int", "Nat", "Set",
     "unfolding"
   )
 
