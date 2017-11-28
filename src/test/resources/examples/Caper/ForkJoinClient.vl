@@ -24,7 +24,7 @@ memcell make_join(id r)
 //    return v;
 //}
 
-void set(id r, memcell x)
+void set_to_one(id r, memcell x)
   requires Join(r, x, 0) && SET@r;
   ensures  Join(r, x, 1) && SET@r;
 {
@@ -73,7 +73,7 @@ void thread2(id r, id s, memcell x, memcell y)
     x.f := 1;
   }
 
-  set(s, y);
+  set_to_one(s, y);
 }
 
 void main()
@@ -87,6 +87,7 @@ void main()
   int v;
 
   // y := make_join();
+  // Yields Join(s, y, 0) && SET@s
     y := make_join(s);
 
   // x := alloc(1);
@@ -97,19 +98,30 @@ void main()
 
   (
     // TODO: Encode region predicates with wildcard access to account for duplicability?
+    //       Problem: unfolding doesn't automatically give write access to nested locations.
       inhale Join(s, y);
 
     // TODO: View shift in TaDA to get Flag(...) and SFLAG?
       fold Flag(r, s, x, y, 0);
       inhale SFLAG@r;
-    // TODO: Encode region predicates with wildcard access to account for duplicability?
+    // TODO: Account for duplicability
       inhale Flag(r, s, x, y);
 
     // fork thread2(x, y);
       exhale Flag(r, s, x, y, 0) && SFLAG@r;
+
+    // TODO: Since SFLAG@r has been exhaled, the remaining region assertion Flag(r, s, x, y, 0)
+    //       is no longer stable. The remaining region predicate must therefore be havocked.
+    //       See Voila issue #33.
   );
 
+  // Any non-ghost statement here will make sure that the Flag region is havocked.
+  //   skip;
+  //   assert Flag(r, s, x, y, 0); // Will fail
+  //   assert false;
+
   // wait(y);
+  // Note: Flag will be havocked before calling 'wait' since the call is a non-ghost statement
     wait(s, y);
 
   // v := [x];
