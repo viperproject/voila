@@ -1,0 +1,15 @@
+//:: IgnoreFile(/voila/issue/36/)
+
+region R(id s, int x)
+  guards { duplicable G; }
+  interpretation { true }
+  state { 0 }
+  actions {}
+
+int test(id s)
+  requires true;
+  ensures R(s, ret);
+{
+  ret := 0;
+  fold R(s, ret);
+}

@@ -1,0 +1,43 @@
+//:: IgnoreFile(/voila/issue/36/)
+
+struct head {
+  node ptr;
+}
+
+struct node {
+  int val;
+  node next;
+}
+
+
+region Qu(id s, head h)
+  guards {
+    duplicable G;
+  }
+  interpretation {
+    h.ptr |-> ?x
+  }
+  state { 0 }
+  actions {}
+
+
+
+head makeQueue(id r)
+  requires true;
+  ensures Qu(r, ret);
+{
+  node y;
+  head x;
+
+  inhale (y.val |-> ?v);
+  inhale (y.next |-> ?n);
+
+  y.next := null;
+
+  inhale (x.ptr |-> ?p);
+
+  x.ptr := y;
+
+  ret := x;
+  fold Qu(r, ret/*, 0*/);  // BUG: produces incorrect Viper program if we remove the last argument
+}

@@ -1,0 +1,33 @@
+struct head {
+  node ptr;
+}
+
+struct node {
+  int val;
+  node next;
+}
+
+
+region Qu(id s, head h)
+  guards {
+    duplicable G;
+  }
+  interpretation {
+    h.ptr |-> ?x
+  }
+  state { 0 }
+  actions {}
+
+
+
+region QL(id r, node x, int v)
+  guards {
+    unique OWN;
+  }
+  interpretation {
+    //:: UnexpectedOutput(typechecker_error, /voila/issue/37/)
+    x.val |-> v && x.next |-> ?dummy // BUG: points-to operator binds too strongly
+  }
+  state { dummy }
+  actions {}
+

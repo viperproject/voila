@@ -1,0 +1,126 @@
+// Corresponds to:
+//   https://github.com/caper-tool/caper/blob/master/examples/iterative/IncDec.t
+//
+
+struct memcell {
+  int val;
+}
+
+region IncDec(id r, memcell x)
+  guards {
+    unique INC;
+    unique DEC;
+  }
+  interpretation {
+    x.val |-> ?n
+  }
+  state { n }
+  actions {
+    INC: ?m1 ~> Set(?t1 | m1 <= t1);
+    DEC: ?m2 ~> Set(?t2 | t2 <= m2);
+    // not supported yet, but not needed here:
+    //INC * DEC : n ~> m;
+  }
+
+
+memcell makeCounter(id r)
+  ensures IncDec(r, ret, 0) && INC@r && DEC@r;
+{
+  memcell v;
+  // v := alloc(1);
+  inhale v.val |-> ?w;
+
+  // [v] := 0;
+  v.val := 0;
+
+  // return v;
+  ret := v;
+
+  inhale INC@r && DEC@r;
+  fold IncDec(r, ret, 0);
+}
+
+primitive_atomic bool CAS(memcell x, int now, int thn)
+  requires x.val |-> ?v;
+  ensures  v == now
+              ? ret && x.val |-> thn
+              : !ret && x.val |-> v;
+
+
+abstract_atomic void increment(id r, memcell x, int k)
+  //:: UnexpectedOutput(parser_error, /voila/issue/31/)
+  interference ?v0 in Set(?t | t <= v0) on r;  // not yet supported
+  requires IncDec(r, x, v0) && INC@r && k > 0;
+  ensures IncDec(r, x, ?v1) && INC@r; // && v1 <= v0 + k;
+{
+  bool b;
+  int v;
+
+  make_atomic
+    using IncDec(r, x) with INC@r;
+  {
+    do
+      invariant IncDec(r, x);
+      invariant !b ==> r |=> <D>;
+      invariant  b ==> r |=> (v, v + k);
+    {
+      open_region
+        using IncDec(r, x);
+      {
+        // v := [x];
+        v := x.val;
+      }
+
+      update_region
+        using IncDec(r, x);
+      {
+        b := CAS(x, v, v + k);
+      }
+    } while (!b);
+  }
+
+  //return v;
+  //ret := v; // there is an issue for that
+}
+
+int decrement(id r, memcell x, int k)
+  requires IncDec(r, x, ?v0) && DEC@r && k > 0;
+  ensures IncDec(r, x, ?v1) && DEC@r && v1 >= v0 - k;
+{
+  bool b;
+  int v;
+
+  do
+    invariant IncDec(r, x, ?vi) && DEC@r && k > 0 &&
+              (!b ? vi >= v0 : vi >= v0 - k);
+  {
+    open_region
+      using IncDec(r, x);
+    {
+      // v := [x];
+      v := x.val;
+    }
+    use_atomic
+      using IncDec(r, x) with DEC@r;
+    {
+      b := CAS(x, v, v - k);
+    }
+  } while (!b);
+
+  //return v;
+  ret := v;
+}
+
+
+int read(id r, memcell x)
+  requires IncDec(r, x, ?v0);
+  ensures IncDec(r, x);
+{
+  open_region
+    using IncDec(r, x);
+  {
+    // v := [x];
+    ret := x.val;
+    // return v;
+  }
+}
