@@ -338,6 +338,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val guardExp: Parser[PGuardExp] =
     (idnuse <~ "@") ~ idnuse ^^ PGuardExp
 
+  lazy val setExpression: Parser[PSetExp] =
+    setLiteral | setComprehension
+
   lazy val setLiteral: Parser[PSetExp with PLiteral] =
     "Set" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
       case typeAnnotation ~ elements => PExplicitSet(elements, typeAnnotation)
