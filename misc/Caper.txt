@@ -18,6 +18,7 @@
       - TODO: main() --- mostly manually encoded
     IncDec.t
       - TODO: Product guard algebra (one action is not encoded)
+      - TODO: makeCounter()
     SpinLock.t
       - TODO: makeLock()
 
