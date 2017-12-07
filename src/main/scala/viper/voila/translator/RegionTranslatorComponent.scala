@@ -228,25 +228,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                    * Encode: p(from) ? setcomprehension_i(from) : Set(from)
                    */
 
-                  val vprQVarType = translateNonVoid(semanticAnalyser.typeOfLogicalVariable(qvar))
-
-                  val vprComprehension = {
-                    val vprFunction = recordedSetComprehensions(to)
-
-                    vpr.FuncApp(
-                      vprFunction,
-                      vprFunction.formalArgs match {
-                        case Seq() => Vector.empty
-                        case Seq(_) => Vector(vpr.LocalVar(qvar.id.name)(typ = vprQVarType))
-                        case other =>
-                          sys.error(s"Unexpectedly found $other")
-                      }
-                    )()
-                  }
-
                   vpr.CondExp(
                     cond = translate(constraint),
-                    thn = vprComprehension,
+                    thn = translate(to),
                     els = acc
                   )().transform {
                     case vpr.LocalVar(qvar.id.name) => vprFrom

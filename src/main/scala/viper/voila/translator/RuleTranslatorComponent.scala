@@ -40,7 +40,6 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
     }
 
-
     val preHavocLabel1 = freshLabel("pre_havoc")
     val havoc1 = havocSingleRegionInstance(region, regionArgs, preHavocLabel1, None).asSeqn
 
@@ -63,13 +62,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       stepToLocation(vprRegionIdArg, regionType).withSource(regionId)
 
     val checkUpdatePermitted = {
-      val vprCheckFrom =
-        vpr.Assert(
-          vpr.AnySetContains(
-            vprStepFrom,
-            vprAtomicityContextX
-          )()
+      val vprStepFromAllowed =
+        vpr.AnySetContains(
+          vprStepFrom,
+          vprAtomicityContextX
         )().withSource(makeAtomic)
+
+      val vprCheckFrom =
+        vpr.Assert(vprStepFromAllowed)().withSource(makeAtomic)
 
       errorBacktranslator.addErrorTransformer {
         case e @ vprerr.AssertFailed(_, reason: vprrea.InsufficientPermission, _)
@@ -77,7 +77,21 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
           MakeAtomicError(makeAtomic)
             .dueTo(MissingRegionStateChangeError(makeAtomic.regionPredicate))
-            .dueTo(MiscellaneousError("This could be related to issue #8", regionId))
+            .dueTo(AdditionalErrorClarification("This could be related to issue #8", regionId))
+
+        case e @ vprerr.AssertFailed(_, reason: vprrea.AssertionFalse, _)
+             if (e causedBy vprCheckFrom) && (reason causedBy vprStepFromAllowed) =>
+
+          MakeAtomicError(makeAtomic)
+            .dueTo(IllegalRegionStateChangeError(makeAtomic.body))
+            .dueTo(AdditionalErrorClarification(
+                      "In particular, it cannot be shown that the region is transitioned from a " +
+                      "state that is compatible with the procedure's interference specification",
+                      regionId))
+            /* TODO: Only append next clarification if rule body contains a loop */
+            .dueTo(AdditionalErrorClarification(
+                      "A common source of this problem are insufficient loop invariants",
+                      regionId))
       }
 
       val vprCheckTo =
@@ -93,7 +107,16 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
       errorBacktranslator.addErrorTransformer {
         case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
-          MakeAtomicError(makeAtomic, IllegalRegionStateChangeError(makeAtomic.guard))
+          MakeAtomicError(makeAtomic)
+            .dueTo(IllegalRegionStateChangeError(makeAtomic.guard))
+            .dueTo(AdditionalErrorClarification(
+                      "In particular, it cannot be shown that the region is transitioned to a " +
+                      "state that is compatible with the procedure's interference specification",
+                      regionId))
+            /* TODO: Only append next clarification if rule body contains a loop */
+            .dueTo(AdditionalErrorClarification(
+                      "A common source of this problem are insufficient loop invariants",
+                      regionId))
       }
 
       vpr.Seqn(

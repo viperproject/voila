@@ -860,97 +860,119 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def translate(expression: PExpression): vpr.Exp = expression match {
-    case PTrueLit() => vpr.TrueLit()().withSource(expression)
-    case PFalseLit() => vpr.FalseLit()().withSource(expression)
-    case PNullLit() => vpr.NullLit()().withSource(expression)
-    case PIntLit(n) => vpr.IntLit(n)().withSource(expression)
-    case PEquals(left, right) => vpr.EqCmp(translate(left), translate(right))().withSource(expression)
-    case PAnd(left, right) => vpr.And(translate(left), translate(right))().withSource(expression)
-    case POr(left, right) => vpr.Or(translate(left), translate(right))().withSource(expression)
-    case PNot(operand) => vpr.Not(translate(operand))().withSource(expression)
-    case PLess(left, right) => vpr.LtCmp(translate(left), translate(right))().withSource(expression)
-    case PAtMost(left, right) => vpr.LeCmp(translate(left), translate(right))().withSource(expression)
-    case PGreater(left, right) => vpr.GtCmp(translate(left), translate(right))().withSource(expression)
-    case PAtLeast(left, right) => vpr.GeCmp(translate(left), translate(right))().withSource(expression)
-    case PAdd(left, right) => vpr.Add(translate(left), translate(right))().withSource(expression)
-    case PSub(left, right) => vpr.Sub(translate(left), translate(right))().withSource(expression)
-    case PConditional(cond, thn, els) => vpr.CondExp(translate(cond), translate(thn), translate(els))().withSource(expression)
-    case PExplicitSet(elements, _) => vpr.ExplicitSet(elements map translate)().withSource(expression)
-    case PSetContains(element, set) => vpr.AnySetContains(translate(element), translate(set))().withSource(expression)
-    case PIntSet() => intSet.withSource(expression)
-    case PNatSet() => natSet.withSource(expression)
-    case ret: PRet => returnVar(semanticAnalyser.typ(ret)).withSource(expression)
-    case PIdnExp(id) => translateUseOf(id).withSource(expression)
+  def translate(expression: PExpression): vpr.Exp =
+    translateWith(expression)(PartialFunction.empty)
 
-    case pointsTo: PPointsTo => translate(pointsTo)
-    case guard: PGuardExp => translate(guard)
+  def translateWith(expression: PExpression)
+                   (customTranslationScheme: PartialFunction[PExpression, vpr.Exp])
+                    : vpr.Exp = {
 
-    case PUnfolding(predicate, body) =>
-      /* TODO: Rather brittle, improve! */
-      val vprPredicate =
-        translate(predicate) match {
-          case vprPredicate: vpr.PredicateAccessPredicate => vprPredicate
-          case vpr.And(vprPredicate: vpr.PredicateAccessPredicate, _: vpr.Exp) => vprPredicate
-          case other => sys.error(s"Unexpectedly found $other as the translation of $predicate")
+    def go(expression: PExpression) = translateWith(expression)(customTranslationScheme)
+
+    val defaultTranslationScheme: PartialFunction[PExpression, vpr.Exp] = {
+      case PTrueLit() => vpr.TrueLit()().withSource(expression)
+      case PFalseLit() => vpr.FalseLit()().withSource(expression)
+      case PNullLit() => vpr.NullLit()().withSource(expression)
+      case PIntLit(n) => vpr.IntLit(n)().withSource(expression)
+      case PEquals(left, right) => vpr.EqCmp(go(left), go(right))().withSource(expression)
+      case PAnd(left, right) => vpr.And(go(left), go(right))().withSource(expression)
+      case POr(left, right) => vpr.Or(go(left), go(right))().withSource(expression)
+      case PNot(operand) => vpr.Not(go(operand))().withSource(expression)
+      case PLess(left, right) => vpr.LtCmp(go(left), go(right))().withSource(expression)
+      case PAtMost(left, right) => vpr.LeCmp(go(left), go(right))().withSource(expression)
+      case PGreater(left, right) => vpr.GtCmp(go(left), go(right))().withSource(expression)
+      case PAtLeast(left, right) => vpr.GeCmp(go(left), go(right))().withSource(expression)
+      case PAdd(left, right) => vpr.Add(go(left), go(right))().withSource(expression)
+      case PSub(left, right) => vpr.Sub(go(left), go(right))().withSource(expression)
+      case PConditional(cond, thn, els) => vpr.CondExp(go(cond), go(thn), go(els))().withSource(expression)
+      case PExplicitSet(elements, _) => vpr.ExplicitSet(elements map translate)().withSource(expression)
+      case PSetContains(element, set) => vpr.AnySetContains(go(element), go(set))().withSource(expression)
+      case PIntSet() => intSet.withSource(expression)
+      case PNatSet() => natSet.withSource(expression)
+      case ret: PRet => returnVar(semanticAnalyser.typ(ret)).withSource(expression)
+      case PIdnExp(id) => translateUseOf(id).withSource(expression)
+
+      case comprehension: PSetComprehension =>
+        val vprFunction = recordedSetComprehensions(comprehension)
+        val freeVariables = semanticAnalyser.freeVariables(comprehension)
+
+        assert(
+          vprFunction.formalArgs.length == freeVariables.size,
+          s"Cardinality mismatch: ${vprFunction.formalArgs.length} vs ${freeVariables.size}")
+
+        vpr.FuncApp(
+          vprFunction,
+          freeVariables.map(translateUseOf)(breakOut)
+        )()
+
+      case pointsTo: PPointsTo => translate(pointsTo)
+      case guard: PGuardExp => translate(guard)
+
+      case PUnfolding(predicate, body) =>
+        /* TODO: Rather brittle, improve! */
+        val vprPredicate =
+          go(predicate) match {
+            case vprPredicate: vpr.PredicateAccessPredicate => vprPredicate
+            case vpr.And(vprPredicate: vpr.PredicateAccessPredicate, _: vpr.Exp) => vprPredicate
+            case other => sys.error(s"Unexpectedly found $other as the translation of $predicate")
+          }
+
+        val vprBody = go(body)
+
+        vpr.Unfolding(vprPredicate, vprBody)().withSource(expression)
+
+      case predicateExp @ PPredicateExp(id, args) =>
+        semanticAnalyser.entity(id) match {
+          case _: PredicateEntity =>
+            vpr.PredicateAccessPredicate(
+              vpr.PredicateAccess(args map translate, id.name)().withSource(expression),
+              vpr.FullPerm()().withSource(expression)
+            )().withSource(predicateExp)
+
+          case _: RegionEntity =>
+            val (vprRegionAccess, vprRegionStateConstraint) = translateUseOf(predicateExp)
+
+            vpr.And(vprRegionAccess, vprRegionStateConstraint)().withSource(predicateExp)
+
+          case other =>
+            sys.error(s"Not yet supported: $other")
         }
 
-      val vprBody = translate(body)
+      case PDiamond(regionId) =>
+        diamondAccess(translateUseOf(regionId))
 
-      vpr.Unfolding(vprPredicate, vprBody)().withSource(expression)
+      case PRegionUpdateWitness(regionId, from, to) =>
+        val region = semanticAnalyser.usedWithRegion(regionId)
+        val vprRegionType = semanticAnalyser.typ(region.state)
+        val vprRegionReceiver = translateUseOf(regionId)
+        val vprFrom = go(from)
+        val vprTo = go(to)
 
-    case predicateExp @ PPredicateExp(id, args) =>
-      semanticAnalyser.entity(id) match {
-        case _: PredicateEntity =>
-          vpr.PredicateAccessPredicate(
-            vpr.PredicateAccess(args map translate, id.name)().withSource(expression),
-            vpr.FullPerm()().withSource(expression)
-          )().withSource(predicateExp)
-
-        case _: RegionEntity =>
-          val (vprRegionAccess, vprRegionStateConstraint) = translateUseOf(predicateExp)
-
-          vpr.And(vprRegionAccess, vprRegionStateConstraint)().withSource(predicateExp)
-
-        case other =>
-          sys.error(s"Not yet supported: $other")
-      }
-
-    case PDiamond(regionId) =>
-      diamondAccess(translateUseOf(regionId))
-
-    case PRegionUpdateWitness(regionId, from, to) =>
-      val region = semanticAnalyser.usedWithRegion(regionId)
-      val vprRegionType = semanticAnalyser.typ(region.state)
-      val vprRegionReceiver = translateUseOf(regionId)
-      val vprFrom = translate(from)
-      val vprTo = translate(to)
-
-      vpr.And(
         vpr.And(
-          stepFromAccess(vprRegionReceiver, vprRegionType),
-          vpr.EqCmp(
-            stepFromLocation(vprRegionReceiver, vprRegionType),
-            vprFrom
-          )()
-        )(),
-        vpr.And(
-          stepToAccess(vprRegionReceiver, vprRegionType),
-          vpr.EqCmp(
-            stepToLocation(vprRegionReceiver, vprRegionType),
-            vprTo
+          vpr.And(
+            stepFromAccess(vprRegionReceiver, vprRegionType),
+            vpr.EqCmp(
+              stepFromLocation(vprRegionReceiver, vprRegionType),
+              vprFrom
+            )()
+          )(),
+          vpr.And(
+            stepToAccess(vprRegionReceiver, vprRegionType),
+            vpr.EqCmp(
+              stepToLocation(vprRegionReceiver, vprRegionType),
+              vprTo
+            )()
           )()
         )()
-      )()
 
-    case _: PSetComprehension =>
-      sys.error("Set comprehensions are not yet supported in this position.")
+      case PIrrelevantValue() =>
+        sys.error("Wildcard arguments \"_\" are not yet supported in this position.")
 
-    case PIrrelevantValue() =>
-      sys.error("Wildcard arguments \"_\" are not yet supported in this position.")
+      case _: PLogicalVariableBinder =>
+        sys.error("Logical variable binders are not yet supported in this position.")
+    }
 
-    case _: PLogicalVariableBinder =>
-      sys.error("Logical variable binders are not yet supported in this position.")
+    customTranslationScheme.applyOrElse(expression, defaultTranslationScheme)
   }
 
   def translateUseOf(id: PIdnNode): vpr.Exp = {

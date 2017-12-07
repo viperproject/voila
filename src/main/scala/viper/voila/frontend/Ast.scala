@@ -108,6 +108,8 @@ sealed trait PAction extends PAstNode {
   def to: PExpression
 }
 
+/* TODO: Try unifying the action nodes */
+
 /* G: 0 ~> Set(0, 1) */
 case class PAction1(guard: PIdnUse, from: PExpression, to: PExpression) extends PAction
 
@@ -119,7 +121,7 @@ case class PAction2(guard: PIdnUse, from: PLogicalVariableBinder, to: PExpressio
 case class PAction3(guard: PIdnUse,
                     from: PLogicalVariableBinder,
                     constraint: PExpression,
-                    to: PSetComprehension)
+                    to: PExpression)
     extends PAction with PBindingContext
 
 /*

@@ -68,6 +68,7 @@ sealed abstract class AbstractVerificationError extends VerificationError {
   def id: String =
     detail match {
       case None => localId
+      case Some(_detail: AdditionalErrorClarification) => localId
       case Some(_detail) => s"$localId:${_detail.id}"
     }
 
@@ -264,13 +265,22 @@ case class MissingRegionStateChangeError(offendingNode: PPredicateExp, detail: O
     copy(offendingNode, detail)
 }
 
-case class MiscellaneousError(localMessage: String,
-                              offendingNode: PAstNode,
-                              detail: Option[VerificationError] = None)
+/** Do not use this error as the main error, only append it to one of the proper errors
+  * defined above.
+  *
+  * TODO: 1. Don't make AdditionalErrorClarification extend AbstractVerificationError
+  *       2. Change proper errors above s.t. field detail is of type
+  *          Option[Either[VerificationError, AdditionalErrorClarification]]
+  *       3. Change AdditionalErrorClarification.detail to be of type
+  *          Option[AdditionalErrorClarification]
+  */
+case class AdditionalErrorClarification(localMessage: String,
+                                        offendingNode: PAstNode,
+                                        detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
   type OffendingNode = PAstNode
-  def localId: String = "misc_error"
+  def localId: String = "additional_error_clarification"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(localMessage, offendingNode, detail)

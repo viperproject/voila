@@ -13,9 +13,15 @@ trait FreshIdentifiersComponent { this: PProgramToViperTranslator =>
   protected var identifierCounters: mutable.Map[String, Int] = mutable.Map.empty.withDefaultValue(0)
 
   def freshIdentifier(baseId: String): String = {
+    val counter = identifierCounters(baseId)
+
     identifierCounters(baseId) += 1
 
-    s"$baseId${identifierCounters(baseId)}"
+    if (counter == 1) {
+      s"$baseId"
+    } else {
+      s"$baseId$counter"
+    }
   }
 
   def freshLabel(baseId: String): vpr.Label = {

@@ -417,7 +417,22 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
 
       case comprehension @ PSetComprehension(`binder`, _, _) =>
-        typ(enclosingMember(comprehension).asInstanceOf[Option[PRegion]].get.state)
+        comprehension.typeAnnotation match {
+          case Some(_typ) =>
+            _typ
+
+          case None =>
+            val name = binder.id.name
+
+            val collectOccurrencesOfFreeVariable =
+              collect[Set, PIdnExp] { case exp @ PIdnExp(PIdnUse(`name`)) => exp }
+
+            val expectedTypes =
+              collectOccurrencesOfFreeVariable(comprehension.filter).map(expectedType)
+
+            if (expectedTypes.size != 1) PUnknownType()
+            else expectedTypes.head
+        }
 
       case other => sys.error(s"Unexpectedly found $other as the binding context of $binder")
     })
@@ -440,6 +455,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           }
 
         val idx = arguments.indices.find(arguments(_) == binder).get
+
         assert(idx == region.formalArgs.length + 1,
                  s"Expected logical variable binder $binder to be the last predicate argument, "
                + s"but got $predicateExp")
@@ -512,9 +528,20 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case tree.parent(PHeapWrite(location, _)) => typeOfLocation(location)
 
-      case e @ tree.parent(PEquals(lhs, rhs)) if e eq rhs =>
-        /* The expected type of the RHS of an equality is the type of the LHS */
-        typ(lhs)
+      case e @ tree.parent(PEquals(lhs, rhs)) =>
+        /* Given an equality lhs == rhs, the expected type of the lhs is the type of the rhs
+         * and vice versa.
+         * This, however, can result in a cycle; in particular, if lhs and rhs denote the
+         * same variable (whose type is to be determined). In this case, Kiama throws an
+         * IllegalStateException and we return PUnknownType.
+         */
+        try {
+          if (e eq lhs) typ(rhs)
+          else typ(lhs)
+        } catch {
+          case ex: IllegalStateException if ex.getMessage.toLowerCase.startsWith("cycle detected") =>
+            PUnknownType()
+        }
 
       case tree.parent(_: PAdd | _: PSub) => PIntType()
       case tree.parent(_: PAnd | _: POr | _: PNot) => PBoolType()

@@ -81,7 +81,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val action: Parser[PAction] =
     (idnuse <~ ":") ~ expression ~ ("~>" ~> expression <~ ";") ^^ PAction1 |
     (idnuse <~ ":") ~ binder ~ ("~>" ~> expression <~ ";") ^^ PAction2 |
-    (idnuse <~ ":") ~ binder ~ ("if" ~> expression).? ~ ("~>" ~> setComprehension <~ ";") ^^ {
+    (idnuse <~ ":") ~ binder ~ ("if" ~> expression).? ~ ("~>" ~> expression <~ ";") ^^ {
       case guardId ~ from ~ optConstraint ~ to =>
         PAction3(guardId, from, optConstraint.getOrElse(PTrueLit().at(from)), to)
     }
@@ -321,7 +321,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "_" ^^^ PIrrelevantValue() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
-    setLiteral |
+    setExpression |
     predicateExp |
     (location <~ "|->") ~ binderOrExpression ^^ PPointsTo |
     (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
