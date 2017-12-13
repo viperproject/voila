@@ -1,0 +1,23 @@
+int test01(seq<int> xs)
+  requires size(xs) > 0;
+  ensures  ret == head(xs);
+{
+  seq<int> ys;
+
+  ys := tail(xs);
+  ret := head(xs);
+
+  assert size(ys) == size(xs) - 1;
+}
+
+int test02()
+  ensures ret == 1;
+{
+  seq<int> xs;
+  int x;
+
+  xs := Seq(1, 2, 3);
+  x := test01(xs);
+
+  ret := x;
+}

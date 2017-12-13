@@ -482,10 +482,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case _: PIntSet | _: PNatSet => PSetType(PIntType())
 
-      case PExplicitSet(elements, typeAnnotation) =>
-        typeAnnotation match {
-          case Some(_typ) => PSetType(_typ)
-          case None => PSetType(typ(elements.head))
+      case explicitCollection: PExplicitCollection =>
+        val typeConstructor: PType => PCollectionType =
+          explicitCollection match {
+            case _: PExplicitSet => PSetType
+            case _: PExplicitSeq => PSeqType
+          }
+
+        explicitCollection.typeAnnotation match {
+          case Some(_typ) =>
+            typeConstructor(_typ)
+          case None =>
+            if (explicitCollection.elements.nonEmpty)
+              typeConstructor(typ(explicitCollection.elements.head))
+            else
+              PUnknownType()
         }
 
       case PSetComprehension(qvar, _, typeAnnotation) =>
@@ -498,6 +509,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         }
 
       case _: PSetContains => PBoolType()
+      case _: PSeqSize => PIntType()
+      case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
+      case tailExp: PSeqTail => typ(tailExp.seq)
 
       case conditional: PConditional => typ(conditional.thn)
       case unfolding: PUnfolding => typ(unfolding.body)
@@ -646,11 +660,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PIntSet => ListSet.empty
       case _: PNatSet => ListSet.empty
 
-      case PExplicitSet(arguments, _) =>
-        ListSet(arguments flatMap freeVariables :_*)
+      case explicitCollection: PExplicitCollection =>
+        ListSet(explicitCollection.elements flatMap freeVariables :_*)
 
       case PSetComprehension(qvar, filter, _) =>
         freeVariables(filter) - PIdnUse(qvar.id.name)
+
+      case PSeqSize(seq) => freeVariables(seq)
+      case PSeqHead(seq) => freeVariables(seq)
+      case PSeqTail(seq) => freeVariables(seq)
 
       case op: PUnOp => freeVariables(op.operand)
       case op: PBinOp => freeVariables(op.left) ++ freeVariables(op.right)

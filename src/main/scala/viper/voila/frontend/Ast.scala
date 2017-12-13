@@ -316,10 +316,21 @@ case class PPredicateExp(predicate: PIdnUse, arguments: Vector[PExpression])
 
 case class PUnfolding(predicate: PPredicateExp, body: PExpression) extends PExpression
 
-sealed trait PSetExp extends PExpression
+/*
+ * Collection expressions
+ */
 
-case class PExplicitSet(args: Vector[PExpression], typeAnnotation: Option[PType])
-    extends PSetExp with PLiteral
+sealed trait PCollectionExp extends PExpression
+
+sealed trait PExplicitCollection extends PCollectionExp with PLiteral {
+  def elements: Vector[PExpression]
+  def typeAnnotation: Option[PType]
+}
+
+sealed trait PSetExp extends PCollectionExp
+
+case class PExplicitSet(elements: Vector[PExpression], typeAnnotation: Option[PType])
+    extends PSetExp with PExplicitCollection
 
 case class PSetComprehension(qvar: PLogicalVariableBinder,
                              filter: PExpression,
@@ -333,6 +344,19 @@ case class PSetContains(element: PExpression, set: PExpression) extends PSetExp 
   val left: PExpression = element
   val right: PExpression = set
 }
+
+sealed trait PSeqExp extends PCollectionExp
+
+case class PExplicitSeq(elements: Vector[PExpression], typeAnnotation: Option[PType])
+    extends PSeqExp with PExplicitCollection
+
+case class PSeqSize(seq: PExpression) extends PSeqExp
+case class PSeqHead(seq: PExpression) extends PSeqExp
+case class PSeqTail(seq: PExpression) extends PSeqExp
+
+/*
+ * Miscellaneous expressions
+ */
 
 case class PPointsTo(location: PLocation, value: PExpression)
     extends PExpression with PBindingContext
@@ -358,12 +382,21 @@ sealed trait PType extends PAstNode
 
 case class PIntType() extends PType
 case class PBoolType() extends PType
-case class PSetType(elementType: PType) extends PType
 case class PNullType() extends PType
-case class PRefType(id: PIdnUse) extends PType
 case class PRegionIdType() extends PType
 case class PVoidType() extends PType
 case class PUnknownType() extends PType
+
+case class PRefType(id: PIdnUse) extends PType
+
+sealed trait PCollectionType extends PType {
+  def elementType: PType
+}
+
+case class PSetType(elementType: PType) extends PCollectionType
+case class PSeqType(elementType: PType) extends PCollectionType
+
+
 
 /*
  * Miscellaneous

@@ -249,6 +249,12 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
         typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
         "(" <> ssep(args map toDoc, comma <> space) <> ")"
 
+      /* TODO: Unify with case for PExplicitSet */
+      case PExplicitSeq(args, typeAnnotation) =>
+        "Seq" <>
+        typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
+        "(" <> ssep(args map toDoc, comma <> space) <> ")"
+
       case PSetComprehension(qvar, filter, typeAnnotation) =>
         "Set" <>
         typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
@@ -259,7 +265,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
       case PNot(operand) => "!" <> toDoc(operand)
 
-      /* TODO: Use associativity and precedence to avoid unncessary parentheses */
+      /* TODO: Use associativity and precedence to avoid unnecessary parentheses */
       case PEquals(left, right) => parens(toDoc(left) <+> "==" <+> toDoc(right))
       case PAnd(left, right) => parens(toDoc(left) <+> "&&" <+> toDoc(right))
       case POr(left, right) => parens(toDoc(left) <+> "||" <+> toDoc(right))
@@ -270,16 +276,22 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PAdd(left, right) => parens(toDoc(left) <+> "+" <+> toDoc(right))
       case PSub(left, right) => parens(toDoc(left) <+> "-" <+> toDoc(right))
       case PSetContains(element, set) => parens(toDoc(element) <+> "in" <+> toDoc(set))
+      case PSeqSize(seq) => "size" <> parens(toDoc(seq))
+      case PSeqHead(seq) => "head" <> parens(toDoc(seq))
+      case PSeqTail(seq) => "tail" <> parens(toDoc(seq))
+
       case PConditional(cond, thn, els) =>
         parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
 
       case PIdnExp(id) => toDoc(id)
+
       case PPredicateExp(predicate, arguments) =>
         toDoc(predicate) <> "(" <> ssep(arguments map toDoc, comma <> space) <> ")"
 
       case PPointsTo(id, value) => toDoc(id) <+> "|->" <+> toDoc(value)
       case PGuardExp(guard, regionId) => toDoc(guard) <> "@" <> toDoc(regionId)
       case PDiamond(regionId) => toDoc(regionId) <+> "|=>" <+> "<D>"
+
       case PRegionUpdateWitness(regionId, from, to) =>
         toDoc(regionId) <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"
 
@@ -290,7 +302,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
     typ match {
       case PIntType() => "int"
       case PBoolType() => "bool"
-      case PSetType(elementType) => "set" <> brackets(toDoc(elementType))
+      case PSetType(elementType) => "set" <> angles(toDoc(elementType))
+      case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
       case PRefType(referencedType) => toDoc(referencedType)
       case PRegionIdType() => "id"
       case PVoidType() => "void"
