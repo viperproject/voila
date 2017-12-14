@@ -1,4 +1,4 @@
-struct head {
+struct root {
   node ptr;
 }
 
@@ -8,7 +8,7 @@ struct node {
 }
 
 
-region Qu(id s, head h)
+region Qu(id s, root h)
   guards {
     duplicable G;
   }
