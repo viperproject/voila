@@ -275,6 +275,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PAtLeast(left, right) => parens(toDoc(left) <+> ">=" <+> toDoc(right))
       case PAdd(left, right) => parens(toDoc(left) <+> "+" <+> toDoc(right))
       case PSub(left, right) => parens(toDoc(left) <+> "-" <+> toDoc(right))
+      case PMod(left, right) => parens(toDoc(left) <+> "%" <+> toDoc(right))
+      case PDiv(left, right) => parens(toDoc(left) <+> "/" <+> toDoc(right))
       case PSetContains(element, set) => parens(toDoc(element) <+> "in" <+> toDoc(set))
       case PSeqSize(seq) => "size" <> parens(toDoc(seq))
       case PSeqHead(seq) => "head" <> parens(toDoc(seq))

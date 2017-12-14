@@ -306,6 +306,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val exp50: PackratParser[PExpression] = /* Left-associative */
     exp50 ~ ("+" ~> exp40) ^^ PAdd |
     exp50 ~ ("-" ~> exp40) ^^ PSub |
+    exp50 ~ ("%" ~> exp40) ^^ PMod |
+    exp50 ~ ("/" ~> exp40) ^^ PDiv |
     exp40
 
   lazy val exp40: PackratParser[PExpression] = /* Right-associative */

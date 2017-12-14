@@ -476,7 +476,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case PIdnExp(id) => typeOfIdn(id)
 
-      case _: PAdd | _: PSub => PIntType()
+      case _: PAdd | _: PSub | _: PMod | _: PDiv => PIntType()
       case _: PAnd | _: POr | _: PNot => PBoolType()
       case _: PEquals | _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
 
@@ -557,7 +557,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             PUnknownType()
         }
 
-      case tree.parent(_: PAdd | _: PSub) => PIntType()
+      case tree.parent(_: PAdd | _: PSub | _: PMod | _: PDiv) => PIntType()
       case tree.parent(_: PAnd | _: POr | _: PNot) => PBoolType()
       case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => PIntType()
 
