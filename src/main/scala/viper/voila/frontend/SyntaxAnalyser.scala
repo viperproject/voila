@@ -400,7 +400,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     identifier ^^ PIdnUse
 
   lazy val identifier: Parser[String] =
-    "[a-zA-Z][a-zA-Z0-9_]*".r into (s => {
+    "[a-zA-Z_][a-zA-Z0-9_]*".r into (s => {
       if (reservedWords contains s)
         failure(s"""keyword "$s" found where identifier expected""")
       else
