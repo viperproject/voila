@@ -35,11 +35,13 @@ sealed abstract class PAstNode extends Product {
   }
 }
 
+sealed trait PScope
+
 case class PProgram(structs: Vector[PStruct],
                     regions: Vector[PRegion],
                     predicates: Vector[PPredicate],
                     procedures: Vector[PProcedure])
-    extends PAstNode
+    extends PAstNode with PScope
 
 /*
  * Modifiers
@@ -115,20 +117,20 @@ case class PAction1(guard: PIdnUse, from: PExpression, to: PExpression) extends 
 
 /* G: ?n ~> Int */
 case class PAction2(guard: PIdnUse, from: PLogicalVariableBinder, to: PExpression)
-    extends PAction with PBindingContext
+    extends PAction with PBindingContext with PScope
 
 /* G: ?n if b(n) ~> Set(?m | c(n, m)) */
 case class PAction3(guard: PIdnUse,
                     from: PLogicalVariableBinder,
                     constraint: PExpression,
                     to: PExpression)
-    extends PAction with PBindingContext
+    extends PAction with PBindingContext with PScope
 
 /*
  * Members
  */
 
-sealed trait PMember extends PDeclaration
+sealed trait PMember extends PDeclaration with PScope
 
 case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMember
 
@@ -337,7 +339,7 @@ case class PExplicitSet(elements: Vector[PExpression], typeAnnotation: Option[PT
 case class PSetComprehension(qvar: PLogicalVariableBinder,
                              filter: PExpression,
                              typeAnnotation: Option[PType])
-    extends PSetExp with PLiteral with PBindingContext
+    extends PSetExp with PLiteral with PBindingContext with PScope
 
 case class PIntSet() extends PSetExp with PLiteral
 case class PNatSet() extends PSetExp with PLiteral

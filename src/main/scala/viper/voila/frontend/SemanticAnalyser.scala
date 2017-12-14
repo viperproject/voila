@@ -222,8 +222,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     chain(defenvin, defenvout)
 
   def defenvin(in: PAstNode => Environment): PAstNode ==> Environment = {
-    // At the root, get a new empty environment
     case program: PProgram =>
+      /* At the root, create a new environment with all top-level members and all guards.
+       * The latter is for simplicity, but means that guard names must be globally unique.
+       */
+
       val topLevelBindings = (
            program.regions.map(r => r.id.name -> RegionEntity(r))
         ++ program.structs.map(p => p.id.name -> StructEntity(p))
@@ -238,29 +241,51 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       rootenv(topLevelBindings ++ guardBindings :_*)
 
     case procedure: PProcedure =>
+      /* The special return value variable 'ret' is in scope of procedure bodies */
+
       val retDecl = PLocalVariableDecl(PIdnDef("ret"), procedure.typ)
-      val localBindings = Vector("ret" -> LocalVariableEntity(retDecl))
-      val procenv :: envs = enter(in(procedure))
 
-      (procenv ++ localBindings) :: envs
+      defineIfNew(enter(in(procedure)), "ret", LocalVariableEntity(retDecl))
 
-    // At a nested scope region, create a new empty scope inside the outer
-    // environment
-    case scope@(_: PMember) =>
+    case bindingContext: PBindingContext with PScope =>
+      /* A binding context that defines its own scope, such as a set comprehension
+       * Set(?c | 0 < c), results in adding a new scope (inside the outer environment)
+       * that contains the bound variable.
+       */
+
+      def add(binder: PLogicalVariableBinder): Environment =
+        defineIfNew(enter(in(bindingContext)), binder.id.name, definedEntity(binder.id))
+
+      bindingContext match {
+        case PAction2(_, from, to) => add(from)
+        case PAction3(_, from, _, _) => add(from)
+        case PSetComprehension(qvar, _, _) => add(qvar)
+      }
+
+    case scope@(_: PScope) =>
+      /* At a nested scope region, create a new empty scope inside the outer environment */
       enter(in(scope))
   }
 
   def defenvout(out: PAstNode => Environment): PAstNode ==> Environment = {
-    // When leaving a nested scope region, remove the innermost scope from
-    // the environment
-    case scope@(_: PMember) =>
-      leave(out(scope))
+    /*
+     *
+     * [2017-12-14 Malte]:
+     *   The analogous case in defenvin is needed, this one here isn't. I've no idea, why.
+     */
+    // case scope@(_: PScope) =>
+    //   /* When leaving a nested scope region, remove the innermost scope from the environment */
+    //   leave(out(scope))
 
-    // At a defining occurrence of an identifier, check to see if it's already
-    // been defined in this scope. If so, change its entity to MultipleEntity,
-    // otherwise use the entity appropriate for this definition.
     case idef: PIdnDef =>
-      defineIfNew(out(idef), idef.name, definedEntity(idef))
+      /* At a defining occurrence of an identifier, check to see if it's already
+       * been defined in this scope. If so, change its entity to MultipleEntity,
+       * otherwise use the entity appropriate for this definition.
+       */
+      idef match {
+        case tree.parent(tree.parent(ctx: PBindingContext with PScope)) => out(idef)
+        case _ => defineIfNew(out(idef), idef.name, definedEntity(idef))
+      }
   }
 
   /**********************************************************
