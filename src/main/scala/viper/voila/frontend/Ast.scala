@@ -381,13 +381,15 @@ case class PIrrelevantValue() extends PExpression
  */
 
 sealed trait PType extends PAstNode
+sealed trait PInternalType extends PType
 
 case class PIntType() extends PType
 case class PBoolType() extends PType
-case class PNullType() extends PType
 case class PRegionIdType() extends PType
 case class PVoidType() extends PType
-case class PUnknownType() extends PType
+
+case class PNullType() extends PInternalType
+case class PUnknownType() extends PInternalType
 
 case class PRefType(id: PIdnUse) extends PType
 

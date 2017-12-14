@@ -163,11 +163,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     * are compatible with anything. Otherwise, the two types have to be
     * the same.
     */
-  def isCompatible(t1: PType, t2: PType): Boolean =
+  def isCompatible(t1: PType, t2: PType): Boolean = {
     (t1 == t2) ||
     (t1.isInstanceOf[PRefType] && t2.isInstanceOf[PNullType]) ||
+    (t2.isInstanceOf[PRefType] && t1.isInstanceOf[PNullType]) ||
     (t1 == PUnknownType()) ||
     (t2 == PUnknownType())
+  }
 
   /**
     * The entity defined by a defining occurrence of an identifier.
