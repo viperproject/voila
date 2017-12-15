@@ -33,6 +33,10 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
         PreconditionError(sourceNode, translate(reason))
       case vprerr.AssertFailed(Source(sourceNode: PAssert), reason, _) =>
         AssertError(sourceNode, translate(reason))
+      case vprerr.LoopInvariantNotEstablished(Source(sourceNode: PInvariantClause), reason, _) =>
+        LoopInvariantEstablishmentError(sourceNode, translate(reason))
+      case vprerr.LoopInvariantNotPreserved(Source(sourceNode: PInvariantClause), reason, _) =>
+        LoopInvariantPreservationError(sourceNode, translate(reason))
     }
 
   protected val defaultReasonTransformer: ReasonTransformer = {
@@ -40,6 +44,8 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
       InsufficientPermissionError(sourceNode)
     case vprrea.AssertionFalse(Source(sourceNode: PExpression)) =>
       AssertionError(sourceNode)
+    case vprrea.AssertionFalse(Source(sourceNode: PInvariantClause)) =>
+      AssertionError(sourceNode.assertion)
 //      case vprrea.DummyReason =>
 //      case vprrea.InternalReason(offendingNode, explanation) =>
 //      case vprrea.FeatureUnsupported(offendingNode, explanation) =>

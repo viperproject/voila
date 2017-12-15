@@ -123,6 +123,28 @@ case class AssertError(offendingNode: PAssert, detail: Option[VerificationError]
     copy(offendingNode, detail)
 }
 
+case class LoopInvariantPreservationError(offendingNode: PInvariantClause, detail: Option[VerificationError] = None)
+    extends AbstractVerificationError {
+
+  type OffendingNode = PInvariantClause
+  def localId: String = "invariant_preservation_error"
+  val localMessage: String = "Loop invariant might not be preserved"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class LoopInvariantEstablishmentError(offendingNode: PInvariantClause, detail: Option[VerificationError] = None)
+    extends AbstractVerificationError {
+
+  type OffendingNode = PInvariantClause
+  def localId: String = "invariant_establishment_error"
+  val localMessage: String = "Loop invariant might not be established"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class UseAtomicError(offendingNode: PUseAtomic, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 

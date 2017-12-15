@@ -492,7 +492,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         var vprWhile =
           vpr.While(
             cond = translate(cond),
-            invs = invs map (inv => translate(inv.assertion)),
+            invs = invs map (inv => translate(inv.assertion).withSource(inv, overwrite = true)),
             body = vpr.Seqn(Seq(translate(body)), Vector.empty)()
           )()
 
