@@ -175,6 +175,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PAssign(lhs, rhs) => toDoc(lhs) <+> ":=" <+> toDoc(rhs)
       case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location)
       case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs)
+      case PReturn(result) => "return" <> toDoc(result)
 
       case PIf(cond, thn, els) => ???
 

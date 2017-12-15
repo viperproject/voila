@@ -216,6 +216,10 @@ case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rh
   val statementName = s"call:${procedure.name}"
 }
 
+case class PReturn(result: PExpression) extends PStatement {
+  val statementName = "return"
+}
+
 sealed trait PGhostStatement extends PStatement
 
 /* TODO: Consider changing PFold and PUnfold to take a PPredicateExp as their single argument */

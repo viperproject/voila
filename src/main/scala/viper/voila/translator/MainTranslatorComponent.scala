@@ -8,6 +8,7 @@ package viper.voila.translator
 
 import scala.collection.breakOut
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
+import viper.silver.ast.Label
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
@@ -32,10 +33,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
    * Immutable state and utility methods
    */
 
-  val returnVarName = "ret"
+  val returnVarName: String = "ret"
 
   def returnVar(typ: PType): vpr.LocalVar =
     vpr.LocalVar(returnVarName)(typ = translateNonVoid(typ))
+
+  val returnLabelName: String = "exit"
+  val returnLabel: Label = vpr.Label(returnLabelName, Vector.empty)()
 
   val diamondField: vpr.Field =
     vpr.Field("$diamond", vpr.Int)()
@@ -265,16 +269,17 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
     }
 
-    val bodyWithCollectedVariableDeclarations =
+    val bodyWithAdditionalDeclarations =
       vprMethod.body.map(actualBody =>
         actualBody.copy(
+          ss = actualBody.ss :+ returnLabel,
           scopedDecls = actualBody.scopedDecls ++ collectedVariableDeclarations
         )(actualBody.pos, actualBody.info, actualBody.errT))
 
     collectedVariableDeclarations = Vector.empty
 
     vprMethod.copy(
-      body = bodyWithCollectedVariableDeclarations
+      body = bodyWithAdditionalDeclarations
     )(vprMethod.pos, vprMethod.info, vprMethod.errT)
   }
 
@@ -520,6 +525,27 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val vprWrite = translate(write)
 
         surroundWithSectionComments(statement.statementName, vprWrite)
+
+      case PReturn(result) =>
+        val vprResult = translate(result)
+
+        val vprAssign =
+          vpr.LocalVarAssign(
+            returnVar(semanticAnalyser.typ(result)),
+            vprResult
+          )()
+
+        val vprGoto = vpr.Goto(returnLabelName)()
+
+        /* TODO: Havoc between assignment statement (vprAssign) and goto statement (vprGoto) */
+
+        val vprStatement =
+          vpr.Seqn(
+            Vector(vprAssign, vprGoto),
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, vprStatement)
 
       case stmt @ PPredicateAccess(predicate, arguments) =>
         val vprArguments =
