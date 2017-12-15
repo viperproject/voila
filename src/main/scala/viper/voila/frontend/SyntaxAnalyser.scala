@@ -30,7 +30,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "predicate", "struct",
     "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", //"ret",
-    "if", "else", "while", "do", "skip", "return",
+    "if", "else", "while", "do", "skip",
     "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "Int", "Nat", "Set",
@@ -161,7 +161,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "assert" ~> expression <~ ";" ^^ PAssert |
     "havoc" ~> idnuse <~ ";" ^^ PHavoc |
     "use_region_interpretation" ~> predicateExp <~ ";" ^^ PUseRegionInterpretation |
-    "return" ~> expression <~ ";" ^^ PReturn |
     makeAtomic |
     updateRegion |
     useAtomic |

@@ -613,9 +613,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PHeapWrite => AtomicityKind.Atomic
       case _: PHeapRead => AtomicityKind.Atomic
 
-      case _: PReturn => AtomicityKind.Nonatomic
-        /* Non-atomic, matches local variable assignments */
-
       /* TODO: Not sure if it makes sense to attribute an atomicity kind to ghost operations.
        *       See also `isGhost` and its uses.
        */
