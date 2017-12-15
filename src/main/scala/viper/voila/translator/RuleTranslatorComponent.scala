@@ -376,6 +376,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
 
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
+        OpenRegionError(openRegion, InsufficientRegionPermissionError(openRegion.regionPredicate))
+    }
+
     currentlyOpenRegions = (region, regionArgs, preOpenLabel) :: currentlyOpenRegions
     val ruleBody = translate(openRegion.body)
     assert(currentlyOpenRegions.head == (region, regionArgs, preOpenLabel))
@@ -383,6 +388,12 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val foldRegionPredicate =
       vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+
+    val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.FoldFailed if e causedBy foldRegionPredicate =>
+        OpenRegionError(openRegion, ebt.translate(e.reason))
+    }
 
     val currentState =
       vpr.FuncApp(
