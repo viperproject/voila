@@ -2,19 +2,18 @@ struct cell {
   int f;
 }
 
-void test1(cell x)
+procedure test1(cell x)
   //:: ExpectedOutput(typechecker_error)
   requires x.g |-> _;
 
 //:: ExpectedOutput(typechecker_error)
-void test2(hell x)
+procedure test2(hell x)
   requires true;
 
 //:: ExpectedOutput(typechecker_error)
-void test3(hell x)
-  //:: ExpectedOutput(typechecker_error)
+procedure test3(hell x)
   requires x.g |-> _;
 
-void test4(int x)
+procedure test4(int x)
   //:: ExpectedOutput(typechecker_error)
   requires x.f |-> _;

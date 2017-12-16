@@ -6,7 +6,7 @@ region R(id a, bool v)
   state { true }
   actions { }
 
-void test03(id a, id b)
+procedure test03(id a, id b)
   requires R(a, true) && X@b;
 {
   use_atomic

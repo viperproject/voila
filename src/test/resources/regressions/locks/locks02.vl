@@ -34,12 +34,12 @@ region CAPLock(id r, id a, memcell x)
 
 
 
-abstract_atomic void lock(id a, memcell x)
+abstract_atomic procedure lock(id a, memcell x)
   interference ?s in Set(0, 1) on a;
   requires Lock(a, x, s) && G@a;
   ensures Lock(a, x, 1) && G@a && s == 0;
 
-void non_atomic_lock01(id r, id a, memcell x)
+procedure non_atomic_lock01(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1);
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  CAPLock(r, a, x, ?w) && w == 1 && K@r;
@@ -51,7 +51,7 @@ void non_atomic_lock01(id r, id a, memcell x)
   }
 }
 
-void non_atomic_lock02(id r, id a, memcell x)
+procedure non_atomic_lock02(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v);
 {
   use_atomic

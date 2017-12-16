@@ -2,19 +2,19 @@ struct memcell {
   int f;
 }
 
-int test02(bool b) {
+procedure test02(bool b) returns (int ret) {
   //:: ExpectedOutput(typechecker_error)
   ret := b;
 }
 
-void test03(memcell x) {
+procedure test03(memcell x) {
   bool v;
 
   //:: ExpectedOutput(typechecker_error)
   v := x.f;
 }
 
-void test04()
+procedure test04()
   //:: ExpectedOutput(typechecker_error)
   requires 0;
 {}

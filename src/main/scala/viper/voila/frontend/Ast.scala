@@ -51,7 +51,7 @@ sealed trait PModifier extends PAstNode
 
 sealed trait PAtomicityModifier extends PModifier
 
-case class PNotAtomic() extends PAtomicityModifier
+case class PNonAtomic() extends PAtomicityModifier
 case class PPrimitiveAtomic() extends PAtomicityModifier
 case class PAbstractAtomic() extends PAtomicityModifier
 
@@ -80,6 +80,7 @@ sealed trait PDeclaration extends PAstNode {
 }
 
 case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PDeclaration
+case class PFormalReturnDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PDeclaration
 case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
 
@@ -145,7 +146,7 @@ case class PRegion(id: PIdnDef,
 
 case class PProcedure(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
-                      typ: PType,
+                      formalReturns: Vector[PFormalReturnDecl],
                       inters: Vector[PInterferenceClause],
                       pres: Vector[PPreconditionClause],
                       posts: Vector[PPostconditionClause],
@@ -210,7 +211,7 @@ case class PHeapRead(lhs: PIdnUse, location: PLocation) extends PHeapAccess {
   val statementName = "heap-read"
 }
 
-case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Option[PIdnUse])
+case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Vector[PIdnUse])
     extends PStatement {
 
   val statementName = s"call:${procedure.name}"
@@ -284,8 +285,6 @@ case class PTrueLit() extends PLiteral
 case class PFalseLit() extends PLiteral
 case class PNullLit() extends PLiteral
 case class PIntLit(value: BigInt) extends PLiteral
-
-case class PRet() extends PLiteral
 
 sealed trait PUnOp extends PExpression {
   def operand: PExpression
@@ -388,7 +387,6 @@ sealed trait PInternalType extends PType
 case class PIntType() extends PType
 case class PBoolType() extends PType
 case class PRegionIdType() extends PType
-case class PVoidType() extends PType
 
 case class PNullType() extends PInternalType
 case class PUnknownType() extends PInternalType

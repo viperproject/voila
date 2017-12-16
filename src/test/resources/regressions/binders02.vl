@@ -6,3 +6,12 @@ region R(id s)
     G: 0 ~> Set(?n | n == 0);
     G: 1 ~> Set(?n | n == 1);
   }
+
+procedure test01(id s)
+  requires R(s, ?b);
+{
+  set<int> bs;
+
+  bs := Set(?c | c == b);
+  bs := Set(?c | c == b);
+}

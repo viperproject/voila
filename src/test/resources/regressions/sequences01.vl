@@ -1,4 +1,4 @@
-int test01(seq<int> xs)
+procedure test01(seq<int> xs) returns (int ret)
   requires size(xs) > 0;
   ensures  ret == head(xs);
 {
@@ -10,7 +10,7 @@ int test01(seq<int> xs)
   assert size(ys) == size(xs) - 1;
 }
 
-int test02()
+procedure test02() returns (int ret)
   ensures ret == 1;
 {
   seq<int> xs;

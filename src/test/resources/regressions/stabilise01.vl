@@ -8,7 +8,7 @@ region Cell(id c, memcell x)
   state { n }
   actions { G: ?m ~> Int; }
 
-abstract_atomic void test02(id c, memcell x)
+abstract_atomic procedure test02(id c, memcell x)
   requires Cell(c, x, ?v);
   ensures Cell(c, x, ?w);
   ensures v == w; // OK
@@ -16,7 +16,7 @@ abstract_atomic void test02(id c, memcell x)
   skip;
 }
 
-void test03(id c, memcell x)
+procedure test03(id c, memcell x)
   requires Cell(c, x, ?v);
   ensures Cell(c, x, ?w);
   //:: ExpectedOutput(postcondition_error:assertion_error)

@@ -29,7 +29,7 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
     val setComprehensionFunctionName =
       freshIdentifier(s"comprehension_${comprehension.position.line}_${comprehension.position.column}")
 
-    val vprElementType = translateNonVoid(semanticAnalyser.typeOfIdn(comprehension.qvar.id))
+    val vprElementType = translate(semanticAnalyser.typeOfIdn(comprehension.qvar.id))
     val vprSetType = vpr.SetType(vprElementType)
 
     val freeVariables: ListSet[PIdnUse] = semanticAnalyser.freeVariables(comprehension)

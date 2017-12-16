@@ -45,7 +45,7 @@ region Counter(id c, memcell x)
   }
 
 
-abstract_atomic int read(id c, memcell x)
+abstract_atomic procedure read(id c, memcell x) returns (int ret)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -63,7 +63,7 @@ abstract_atomic int read(id c, memcell x)
   }
 }
 
-abstract_atomic int read2(id c, memcell x)
+abstract_atomic procedure read2(id c, memcell x) returns (int ret)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -76,13 +76,13 @@ abstract_atomic int read2(id c, memcell x)
   }
 }
 
-primitive_atomic bool CAS(memcell x, int now, int thn)
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
   requires x.f |-> ?v;
   ensures  v == now
               ? ret && x.f |-> thn
               : !ret && x.f |-> v;
 
-abstract_atomic void incr(id c, memcell x)
+abstract_atomic procedure incr(id c, memcell x)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n + 1) && G@c;
@@ -112,7 +112,7 @@ abstract_atomic void incr(id c, memcell x)
   }
 }
 
-abstract_atomic void wkincr(id c, memcell x)
+abstract_atomic procedure wkincr(id c, memcell x)
   interference ?n in Set[int](n) on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n + 1) && G@c;

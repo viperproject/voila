@@ -15,7 +15,7 @@ region Join(id r, memcell x)
   actions { SET: 0 ~> Set(0, 1); }
 
 // TODO: make_join()
-memcell make_join(id r)
+procedure make_join(id r) returns (memcell ret)
   requires true;
   ensures Join(r, ret, 0) && SET@r;
 //{
@@ -24,7 +24,7 @@ memcell make_join(id r)
 //    return v;
 //}
 
-void set_to_one(id r, memcell x)
+procedure set_to_one(id r, memcell x)
   requires Join(r, x, 0) && SET@r;
   ensures  Join(r, x, 1) && SET@r;
 {
@@ -35,7 +35,7 @@ void set_to_one(id r, memcell x)
   }
 }
 
-void wait(id r, memcell x)
+procedure wait(id r, memcell x)
   requires Join(r, x, ?z);
   ensures  Join(r, x, 1);
 {
@@ -63,7 +63,7 @@ region Flag(id r, id s, memcell x, memcell y)
   state { v }
   actions { SFLAG: 0 ~> Set(0, 1); }
 
-void thread2(id r, id s, memcell x, memcell y)
+procedure thread2(id r, id s, memcell x, memcell y)
   requires Flag(r, s, x, y, 0) && SFLAG@r;
 {
   use_atomic
@@ -76,7 +76,7 @@ void thread2(id r, id s, memcell x, memcell y)
   set_to_one(s, y);
 }
 
-void main()
+procedure main()
   requires true;
   // ensures Flag(r,x,y,1) &*& ret = 1;
 {

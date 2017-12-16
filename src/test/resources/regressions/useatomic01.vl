@@ -4,7 +4,7 @@ region R(id a, bool v)
   state { true }
   actions { }
 
-void test01(id a)
+procedure test01(id a)
   requires R(a, true) && X@a;
 {
   //:: ExpectedOutput(use-atomic_error:guard_permission_error)
@@ -15,7 +15,7 @@ void test01(id a)
   }
 }
 
-void test02(id a)
+procedure test02(id a)
   requires R(a, true) && X@a;
 {
   //:: ExpectedOutput(use-atomic_error:region_permission_error)

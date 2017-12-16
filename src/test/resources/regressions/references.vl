@@ -3,7 +3,7 @@ struct llnode {
   llnode nxt;
 }
 
-void test() {
+procedure test() {
   llnode n;
 
   inhale n.val |-> ?v1;
@@ -18,7 +18,3 @@ region R(id a, llnode x)
   interpretation { x.nxt |-> ?n }
   state { n }
   actions { G: null ~> Set(null); }
-
-void test2() {
-
-}

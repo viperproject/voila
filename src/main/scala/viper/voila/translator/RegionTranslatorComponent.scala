@@ -55,7 +55,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       {
         val formalRegionArg = translate(region.regionId)
         val formalRegularArgs = region.formalArgs map translate
-        val regionStateType = translateNonVoid(semanticAnalyser.typ(region.state))
+        val regionStateType = translate(semanticAnalyser.typ(region.state))
 
         /* acc(region(id, args)) */
         val predicateAccess =
@@ -156,7 +156,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       {
         val formalArgs =
           Vector(
-            vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))(),
+            vpr.LocalVarDecl("$r", translate(PRegionIdType()))(),
             vpr.LocalVarDecl("$p", vpr.Perm)())
 
         val body =
@@ -184,11 +184,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     guardTransitiveClosureFunctionCache.getOrElseUpdate(
       (guard, region),
       {
-        val regionType = translateNonVoid(semanticAnalyser.typ(region.state))
+        val regionType = translate(semanticAnalyser.typ(region.state))
 
         val formalArgs =
           Vector(
-            vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))(),
+            vpr.LocalVarDecl("$r", translate(PRegionIdType()))(),
             vpr.LocalVarDecl("$from", regionType)())
 
         val body = {
@@ -260,7 +260,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       (guard, region),
       vpr.Predicate(
         name = guardPredicateName(guard, region),
-        formalArgs = Vector(vpr.LocalVarDecl("$r", translateNonVoid(PRegionIdType()))()),
+        formalArgs = Vector(vpr.LocalVarDecl("$r", translate(PRegionIdType()))()),
         body = None
       )()
     )
@@ -459,8 +459,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         case Some(args) =>
           (args.head, args)
         case None =>
-          val idArg = vpr.LocalVar(s"$$${region.regionId.id.name}")(typ = translateNonVoid(region.regionId.typ))
-          val furtherArgs = region.formalArgs map (a => vpr.LocalVar(s"$$${a.id.name}")(typ = translateNonVoid(a.typ)))
+          val idArg = vpr.LocalVar(s"$$${region.regionId.id.name}")(typ = translate(region.regionId.typ))
+          val furtherArgs = region.formalArgs map (a => vpr.LocalVar(s"$$${a.id.name}")(typ = translate(a.typ)))
           (idArg, idArg +: furtherArgs)
       }
 

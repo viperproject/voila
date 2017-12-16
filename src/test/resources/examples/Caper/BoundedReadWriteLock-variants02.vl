@@ -40,7 +40,7 @@ region RWLock(id r, id s, memcell x)
 
 
 
-abstract_atomic void readerAcquire1AA(id s, memcell x)
+abstract_atomic procedure readerAcquire1AA(id s, memcell x)
   interference ?m in Set(-1, 0, 2) on s;
   requires Cell(s, x, m) && G@s;
   ensures  Cell(s, x, ?n) && G@s;
@@ -76,7 +76,7 @@ abstract_atomic void readerAcquire1AA(id s, memcell x)
   }
 }
 
-void readerAcquire1(id r, id s, memcell x)
+procedure readerAcquire1(id r, id s, memcell x)
   requires RWLock(r, s, x, ?m) && RLOCK1@r && m != 1 && m != 3;
   ensures  RWLock(r, s, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
 {
@@ -92,7 +92,7 @@ void readerAcquire1(id r, id s, memcell x)
 
 
 
-abstract_atomic void readerRelease2AA(id s, memcell x)
+abstract_atomic procedure readerRelease2AA(id s, memcell x)
   interference ?m in Set(2, 3) on s;
   requires Cell(s, x, m) && G@s;
   ensures  Cell(s, x, ?n) && G@s;
@@ -124,7 +124,7 @@ abstract_atomic void readerRelease2AA(id s, memcell x)
   }
 }
 
-void readerRelease2(id r, id s, memcell x)
+procedure readerRelease2(id r, id s, memcell x)
   requires RWLock(r, s, x, ?n) && n > 0 && RUNLOCK2@r;
   ensures  RWLock(r, s, x);
 {
@@ -141,7 +141,7 @@ void readerRelease2(id r, id s, memcell x)
 
 
 
-abstract_atomic void writerAcquireAA(id s, memcell x)
+abstract_atomic procedure writerAcquireAA(id s, memcell x)
   interference ?m in Int on s;
   requires Cell(s, x, m) && G@s;
   ensures  Cell(s, x, -1) && G@s;
@@ -166,7 +166,7 @@ abstract_atomic void writerAcquireAA(id s, memcell x)
   }
 }
 
-void writerAcquire(id r, id s, memcell x)
+procedure writerAcquire(id r, id s, memcell x)
   requires RWLock(r, s, x) && WLOCK@r;
   ensures  RWLock(r, s, x, -1) && WLOCK@r && WUNLOCK@r;
 {
@@ -177,7 +177,7 @@ void writerAcquire(id r, id s, memcell x)
   }
 }
 
-abstract_atomic void writerReleaseAA(id s, memcell x)
+abstract_atomic procedure writerReleaseAA(id s, memcell x)
   interference ?m in Set(-1) on s;
   requires Cell(s, x, m) && G@s;
   ensures  Cell(s, x, 0) && G@s;
@@ -189,7 +189,7 @@ abstract_atomic void writerReleaseAA(id s, memcell x)
   }
 }
 
-void writerRelease(id r, id s, memcell x)
+procedure writerRelease(id r, id s, memcell x)
   requires RWLock(r, s, x, -1) && WUNLOCK@r;
   ensures  RWLock(r, s, x);
 {
@@ -202,7 +202,7 @@ void writerRelease(id r, id s, memcell x)
 
 
 
-primitive_atomic bool CAS(memcell x, int now, int thn)
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
   requires x.f |-> ?v;
   ensures  v == now
               ? ret && x.f |-> thn

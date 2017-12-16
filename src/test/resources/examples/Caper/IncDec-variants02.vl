@@ -8,7 +8,7 @@ region Cell(id s, memcell x)
 
 // Basically a simplified version of the spinCAS used in BoundedReadWriteLock-variants03.vl
 // TODO: Should return the last read value (i.e. v).
-abstract_atomic void spinIncBy(id s, memcell x, int k, set<int> from)
+abstract_atomic procedure spinIncBy(id s, memcell x, int k, set<int> from)
   interference ?v0 in from on s;
   requires Cell(s, x, v0) && G@s;
   requires k != 0; // Needed because of Voila issue #8
@@ -60,7 +60,7 @@ region IncDec(id r, id s, memcell x)
   }
 
 // TODO: Should return the return value of spinIncBy, see comment above
-void increment(id r, id s, memcell x, int k)
+procedure increment(id r, id s, memcell x, int k)
   requires IncDec(r, s, x, ?v0) && INC@r && k > 0;
   ensures  IncDec(r, s, x, ?v1) && INC@r && v1 <= v0 + k;
 {
@@ -72,7 +72,7 @@ void increment(id r, id s, memcell x, int k)
 }
 
 // TODO: Should return the last read value (i.e. v), see comment above
-void decrement(id r, id s, memcell x, int k)
+procedure decrement(id r, id s, memcell x, int k)
   requires IncDec(r, s, x, ?v0) && DEC@r && k > 0;
   ensures  IncDec(r, s, x, ?v1) && DEC@r && v1 >= v0 - k;
 {
@@ -90,7 +90,7 @@ struct memcell {
   int val;
 }
 
-primitive_atomic bool CAS(memcell x, int now, int thn)
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
   requires x.val |-> ?v;
   ensures  v == now
               ? ret && x.val |-> thn

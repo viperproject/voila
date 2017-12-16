@@ -2,7 +2,7 @@ struct cell {
   int f;
 }
 
-void increment(cell x)
+procedure increment(cell x)
   requires x.f |-> ?v;
   ensures  x.f |-> v + 1;
 {

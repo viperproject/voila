@@ -12,7 +12,8 @@ import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{id => _, _}
 import org.bitbucket.inkytonik.kiama.util.Messaging._
-import org.bitbucket.inkytonik.kiama.util.{Entity, MultipleEntity, UnknownEntity}
+import org.bitbucket.inkytonik.kiama.util.{Entity, ErrorEntity, MultipleEntity, UnknownEntity}
+import viper.voila.reporting.PIdnNodeIdentifier
 
 class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   val symbolTable = new SymbolTable()
@@ -38,10 +39,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                       s"Receiver $receiver does not have a field $field",
                       !struct.fields.exists(_.id.name == field.name))
 
-                   case _ =>
+                   case other if !other.isInstanceOf[ErrorEntity] =>
                      message(receiver, s"Receiver $receiver is not of struct type")
                 }
-              case _ =>
+              case other if !other.isInstanceOf[PUnknownType] =>
                 message(receiver, s"Receiver $receiver is not of reference type")
             }
 
@@ -54,66 +55,53 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case PProcedure(_, _, _, _, pres, posts, _, _, _) =>
         (pres.map(_.assertion) ++ posts.map(_.assertion))
-          .flatMap (exp =>
-            message(
-              exp,
-              s"Type error: expected $PBoolType(), but found ${typ(exp)}",
-              !isCompatible(typ(exp), PBoolType())))
+            .flatMap(exp => reportTypeMismatch(exp, PBoolType()))
 
       case action: PAction =>
-        message(
-          action.to,
-          s"Type error: expected ${PSetType(typ(action.from))} but found ${typ(action.to)}",
-          !isCompatible(typ(action.to), PSetType(typ(action.from))))
+        reportTypeMismatch(action.to, PSetType(typ(action.from)))
 
-      case PAssign(lhs, _) if !entity(lhs).isInstanceOf[LocalVariableEntity] =>
-        message(lhs, s"Cannot assign to ${lhs.name}")
+      case PAssign(lhs, rhs) =>
+        val lhsEntity = entity(lhs)
+
+        message(
+          lhs,
+          s"Cannot assign to ${lhs.name}",
+          !lhsEntity.isInstanceOf[LocalVariableLikeEntity])
+
+        reportTypeMismatch(rhs, typeOfIdn(lhs), typ(rhs))
 
       case PHeapRead(localVariable, location) =>
         check(entity(localVariable)) {
-          case LocalVariableEntity(localVariableDecl) =>
-            val locationType = typeOfLocation(location)
-
-            message(
-              location,
-              s"Type error: expected ${localVariableDecl.typ} but got $locationType",
-              !isCompatible(locationType, localVariableDecl.typ))
+          case localVariableEntity: LocalVariableLikeEntity =>
+            reportTypeMismatch(location, localVariableEntity.typ, typeOfLocation(location))
 
           case other =>
-            message(localVariable, s"Type error: expected a local variable, but found $other")
+            checkUse(other){ case _ =>
+              message(
+                localVariable,
+                "Type error: expected a local variable, but found " +
+                  PIdnNodeIdentifier.fullyQualified(localVariable, other))
+            }
         }
 
       case PHeapWrite(location, rhs) =>
-        val locationType = typeOfLocation(location)
-        val rhsType = typ(rhs)
-
-        message(
-          location,
-          s"Type error: expected $locationType but got $rhsType",
-          !isCompatible(locationType, rhsType))
+        reportTypeMismatch(location, typeOfLocation(location), typ(rhs))
 
       case call: PProcedureCall =>
         checkUse(entity(call.procedure)) {
           case ProcedureEntity(decl) => (
                reportArgumentLengthMismatch(call, decl.id, decl.formalArgs.length, call.arguments.length)
-            ++ call.arguments.zip(decl.formalArgs).flatMap { case (actual, formal) =>
-                 message(
-                   actual,
-                   s"Type error: expected ${formal.typ} but got ${typ(actual)}",
-                   !isCompatible(typ(actual), formal.typ))
-               })
+            ++ reportArgumentLengthMismatch(call, decl.id, decl.formalReturns.length, call.rhs.length)
+            ++ call.arguments.zip(decl.formalArgs).flatMap { case (actual, formal) => reportTypeMismatch(actual, formal.typ) }
+            ++ call.rhs.zip(decl.formalReturns).flatMap { case (rhs, formal) => reportTypeMismatch(rhs, formal.typ) })
 
           case _ =>
             message(call.procedure, s"Cannot call ${call.procedure}")
         }
 
       case exp: PExpression => (
-           message(
-              exp,
-              s"Type error: expected ${expectedType(exp)} but got ${typ(exp)}",
-              !isCompatible(expectedType(exp), typ(exp)))
-        ++
-           check(exp) {
+           reportTypeMismatch(exp, expectedType(exp), typ(exp))
+        ++ check(exp) {
               case PIdnExp(id) =>
                 checkUse(entity(id)) {
                   case _: ProcedureEntity =>
@@ -157,6 +145,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       formalArgCount != actualArgCount)
   }
 
+  private def reportTypeMismatch(offendingNode: PExpression, expectedType: PType): Messages =
+    reportTypeMismatch(offendingNode, expectedType, typ(offendingNode))
+
+  private def reportTypeMismatch(offendingNode: PIdnUse, expectedType: PType): Messages =
+    reportTypeMismatch(offendingNode, expectedType, typeOfIdn(offendingNode))
+
+  private def reportTypeMismatch(offendingNode: PAstNode, expectedType: PType, foundType: PType)
+                                : Messages = {
+
+    message(
+      offendingNode,
+      s"Type error: expected $expectedType but got $foundType",
+      !isCompatible(foundType, expectedType))
+  }
+
   /**
     * Are two types compatible?  If either of them are unknown then we
     * assume an error has already been raised elsewhere so we say they
@@ -184,12 +187,22 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case decl: PPredicate => PredicateEntity(decl)
           case decl: PRegion => RegionEntity(decl)
           case tree.parent.pair(decl: PGuardDecl, region: PRegion) => GuardEntity(decl, region)
-          case decl: PFormalArgumentDecl => ArgumentEntity(decl)
+          case decl: PFormalArgumentDecl => FormalArgumentEntity(decl)
+          case decl: PFormalReturnDecl => FormalReturnEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
           case decl: PLogicalVariableBinder => LogicalVariableEntity(decl)
           case _ => UnknownEntity()
         }
     }
+
+  /* TODO: The environment computation is a big mess!
+   *       It has been adapted from a Kiama example
+   *       (Kiama\library\src\test\scala\org\bitbucket\inkytonik\kiama\example\minijava\SemanticAnalyser.scala)
+   *       but seamingly small differences in the AST design (Kiama has Class/Method and
+   *       ClassBody/MethodBody, Voila doesn't) make a big difference in the environment
+   *       computation.
+   *       Ultimately, I don't really know how the environment computation code works ...
+   */
 
   /**
     * The environment to use to lookup names at a node. Defined to be the
@@ -200,7 +213,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       // At a scope-introducing node, get the final value of the
       // defining environment, so that all of the definitions of
       // that scope are present.
-      case tree.lastChild.pair(_: PProgram | _: PMember, c) =>
+      case tree.lastChild.pair(_: PScope, c) =>
         defenv(c)
 
       // Otherwise, ask our parent so we work out way up to the
@@ -238,14 +251,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           region.guards.map(guard =>
             s"${guard.id.name}@${region.id.name}" -> GuardEntity(guard, region)))
 
-      rootenv(topLevelBindings ++ guardBindings :_*)
+      val bindings: Vector[(String, Entity)] = topLevelBindings ++ guardBindings
 
-    case procedure: PProcedure =>
-      /* The special return value variable 'ret' is in scope of procedure bodies */
-
-      val retDecl = PLocalVariableDecl(PIdnDef("ret"), procedure.typ)
-
-      defineIfNew(enter(in(procedure)), "ret", LocalVariableEntity(retDecl))
+      bindings.foldLeft(rootenv()) { case (currentEnv, currentBinding) =>
+        defineIfNew(currentEnv, currentBinding._1, currentBinding._2)
+      }
 
     case bindingContext: PBindingContext with PScope =>
       /* A binding context that defines its own scope, such as a set comprehension
@@ -263,28 +273,23 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       }
 
     case scope@(_: PScope) =>
-      /* At a nested scope region, create a new empty scope inside the outer environment */
       enter(in(scope))
   }
 
   def defenvout(out: PAstNode => Environment): PAstNode ==> Environment = {
-    /*
-     *
-     * [2017-12-14 Malte]:
-     *   The analogous case in defenvin is needed, this one here isn't. I've no idea, why.
-     */
-    // case scope@(_: PScope) =>
-    //   /* When leaving a nested scope region, remove the innermost scope from the environment */
-    //   leave(out(scope))
+     case scope@(_: PScope) =>
+       leave(out(scope))
 
     case idef: PIdnDef =>
-      /* At a defining occurrence of an identifier, check to see if it's already
-       * been defined in this scope. If so, change its entity to MultipleEntity,
-       * otherwise use the entity appropriate for this definition.
-       */
       idef match {
-        case tree.parent(tree.parent(ctx: PBindingContext with PScope)) => out(idef)
-        case _ => defineIfNew(out(idef), idef.name, definedEntity(idef))
+        case tree.parent(tree.parent(_: PBindingContext with PScope)) | /* PAction2, PAction3, PSetComprehension */
+             tree.parent(_: PScope) =>  /* PProcedure etc. */
+
+          /* Don't add identifiers that have already been added (in defenvin) */
+          out(idef)
+
+        case _ =>
+          defineIfNew(out(idef), idef.name, definedEntity(idef))
       }
   }
 
@@ -418,9 +423,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val typeOfIdn: PIdnNode => PType =
     attr(entity(_) match {
-      case ArgumentEntity(decl) => decl.typ
+      case FormalArgumentEntity(decl) => decl.typ
+      case FormalReturnEntity(decl) => decl.typ
       case LocalVariableEntity(decl) => decl.typ
-      case ProcedureEntity(decl) => decl.typ
+      case ProcedureEntity(decl) => ???
       case LogicalVariableEntity(decl) => typeOfLogicalVariable(decl)
       case _ => PUnknownType()
     })
@@ -498,8 +504,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PIntLit => PIntType()
       case _: PTrueLit | _: PFalseLit => PBoolType()
       case _: PNullLit => PNullType()
-
-      case ret: PRet => enclosingMember(ret).get.asInstanceOf[PProcedure].typ
 
       case PIdnExp(id) => typeOfIdn(id)
 
@@ -634,7 +638,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         val callee = entity(call.procedure).asInstanceOf[ProcedureEntity].declaration
 
         callee.atomicity match {
-          case PNotAtomic() => AtomicityKind.Nonatomic
+          case PNonAtomic() => AtomicityKind.Nonatomic
           case PPrimitiveAtomic() | PAbstractAtomic() => AtomicityKind.Atomic
         }
     }
@@ -656,7 +660,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(procedure: PProcedure) =>
         /* TODO: Unify with code above */
         procedure.atomicity match {
-          case PNotAtomic() => AtomicityKind.Nonatomic
+          case PNonAtomic() => AtomicityKind.Nonatomic
           case PPrimitiveAtomic() | PAbstractAtomic() => AtomicityKind.Atomic
         }
 
@@ -683,7 +687,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PTrueLit => ListSet.empty
       case _: PFalseLit => ListSet.empty
       case _: PIntLit => ListSet.empty
-      case _: PRet => ListSet.empty
       case _: PIntSet => ListSet.empty
       case _: PNatSet => ListSet.empty
 

@@ -6,8 +6,7 @@
 
 package viper.voila.frontend
 
-import org.bitbucket.inkytonik.kiama.util.Environments
-import org.bitbucket.inkytonik.kiama.util.Entity
+import org.bitbucket.inkytonik.kiama.util.{Entity, Environments}
 
 /** A symbol table and its entries */
 
@@ -35,8 +34,23 @@ case class GuardEntity(declaration: PGuardDecl, region: PRegion) extends Regular
 //  def unapply(entity: VariableEntity): Option[PDeclaration] = Some(entity.declaration)
 //}
 
-case class ArgumentEntity(declaration: PFormalArgumentDecl) extends RegularEntity
-case class LocalVariableEntity(declaration: PLocalVariableDecl) extends RegularEntity
+sealed trait LocalVariableLikeEntity extends Entity {
+  def id: PIdnDef
+  def typ: PType
+}
+
+case class FormalArgumentEntity(declaration: PFormalArgumentDecl) extends RegularEntity
+
+case class FormalReturnEntity(declaration: PFormalReturnDecl) extends LocalVariableLikeEntity {
+  val id: PIdnDef = declaration.id
+  val typ: PType = declaration.typ
+}
+
+case class LocalVariableEntity(declaration: PLocalVariableDecl) extends LocalVariableLikeEntity  {
+  val id: PIdnDef = declaration.id
+  val typ: PType = declaration.typ
+}
+
 case class LogicalVariableEntity(declaration: PLogicalVariableBinder) extends RegularEntity
 
 //// Internal types, not created from user programs by the parser but
@@ -46,5 +60,3 @@ case class LogicalVariableEntity(declaration: PLogicalVariableBinder) extends Re
 // * A reference type given by the declared class body.
 // */
 //case class ReferenceType(decl : Class) extends Type
-
-

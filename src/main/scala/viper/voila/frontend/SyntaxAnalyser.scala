@@ -25,11 +25,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   val reservedWords = Set(
     "true", "false",
-    "void", "int", "bool", "id", "set",
+    "int", "bool", "id", "set",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
-    "predicate", "struct",
-    "interference", "in", "on", "requires", "ensures", "invariant",
-    "abstract_atomic", "primitive_atomic", //"ret",
+    "predicate", "struct", "procedure",
+    "returns", "interference", "in", "on", "requires", "ensures", "invariant",
+    "abstract_atomic", "primitive_atomic", "non_atomic",
     "if", "else", "while", "do", "skip",
     "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation",
     "make_atomic", "update_region", "use_atomic", "open_region",
@@ -95,14 +95,14 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val procedure: Parser[PProcedure] =
-    atomicityModifier ~
-    typeOrVoid ~
+    (atomicityModifier <~ "procedure") ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
+    ("returns" ~> ("(" ~> formalArgs <~ ")")).? ~
     interference.* ~
     requires.* ~
     ensures .* ~
     (("{" ~> varDeclStmt.*) ~ (statementsOrSkip <~ "}")).? ^^ {
-      case mod ~ tpe ~ id ~ args ~ inters ~ pres ~ posts ~ optBraces =>
+      case mod ~ id ~ args ~ optReturns ~ inters ~ pres ~ posts ~ optBraces =>
         val (locals, body) =
           optBraces match {
             case None =>
@@ -113,7 +113,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
               (l, Some(b))
           }
 
-        PProcedure(id, args, tpe, inters, pres, posts, locals, body, mod)
+        val returns =
+          optReturns.getOrElse(Vector.empty).map(fa => PFormalReturnDecl(fa.id, fa.typ).at(fa))
+
+        PProcedure(id, args, returns, inters, pres, posts, locals, body, mod)
     }
 
   lazy val statementsOrSkip: Parser[PStatement] =
@@ -122,7 +125,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val atomicityModifier: Parser[PAtomicityModifier] =
     "abstract_atomic" ^^^ PAbstractAtomic() |
     "primitive_atomic" ^^^ PPrimitiveAtomic() |
-    success(PNotAtomic())
+    "non_atomic" ^^^ PNonAtomic() |
+    success(PNonAtomic())
 
   lazy val formalArgs: Parser[Vector[PFormalArgumentDecl]] =
     repsep(formalArg, ",")
@@ -166,8 +170,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     useAtomic |
     openRegion |
     "(" ~> statements <~ ")" <~ ";" |
-    (idnuse <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
-      case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs)
+    (repsep(idnuse, ",") <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
+      case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs.getOrElse(Vector.empty))
     } |
     idnuse ~ (":=" ~> location) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     location ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
@@ -320,7 +324,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "true" ^^^ PTrueLit() |
     "false" ^^^ PFalseLit() |
     "null" ^^^ PNullLit() |
-    "ret" ^^^ PRet() |
     "_" ^^^ PIrrelevantValue() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
@@ -380,10 +383,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val listOfBindersOrExpressions: Parser[Vector[PExpression]] =
     repsep(binderOrExpression, ",")
-
-  lazy val typeOrVoid: Parser[PType] =
-    "void" ^^^ PVoidType() |
-    typ
 
   lazy val typ: PackratParser[PType] =
     "int" ^^^ PIntType() |

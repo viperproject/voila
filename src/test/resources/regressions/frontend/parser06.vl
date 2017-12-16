@@ -1,11 +1,11 @@
-void test01()
+procedure test01()
   requires 0 < 1;
   ensures  2 < 3 < 4;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  2 < 3 < 4 < 0;
 {}
 
-void test02() {
+procedure test02() {
   int w;
   w := 0;
 

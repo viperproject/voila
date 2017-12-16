@@ -14,7 +14,7 @@ region Counter(id c, memcell x)
 
 
 
-abstract_atomic int read01(id c, memcell x)
+abstract_atomic procedure read01(id c, memcell x) returns (int ret)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -27,7 +27,7 @@ abstract_atomic int read01(id c, memcell x)
   }
 }
 
-abstract_atomic int read02(id c, memcell x)
+abstract_atomic procedure read02(id c, memcell x) returns (int ret)
   interference ?n in Set[int](n) on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -42,7 +42,7 @@ abstract_atomic int read02(id c, memcell x)
 
 
 
-int read01_client01(id c, memcell x)
+procedure read01_client01(id c, memcell x) returns (int ret)
   requires Counter(c, x, ?n) && G@c;
   ensures Counter(c, x, ?m) && G@c;
   ensures ret == n;
@@ -50,7 +50,7 @@ int read01_client01(id c, memcell x)
   ret := read01(c, x);
 }
 
-int read01_client02(id c, memcell x)
+procedure read01_client02(id c, memcell x) returns (int ret)
   requires Counter(c, x, ?n) && G@c;
   ensures Counter(c, x, ?m) && G@c;
   //:: ExpectedOutput(postcondition_error:assertion_error)
@@ -60,7 +60,7 @@ int read01_client02(id c, memcell x)
   ret := read01(c, x);
 }
 
-int read01_client03(id c, memcell x)
+procedure read01_client03(id c, memcell x) returns (int ret)
   requires Counter(c, x, ?n) && G@c;
   ensures ret == n;
   //:: ExpectedOutput(postcondition_error:region_state_error)
@@ -73,14 +73,14 @@ int read01_client03(id c, memcell x)
 
 
 
-int read02_client01(id c, memcell x)
+procedure read02_client01(id c, memcell x) returns (int ret)
   requires Counter(c, x, ?n) && G@c; // TODO: Unstable, see Voila issue #15
 {
   //:: ExpectedOutput(precondition_error:interference_error)
   ret := read02(c, x);
 }
 
-int read02_client02(id c, memcell x)
+procedure read02_client02(id c, memcell x) returns (int ret)
   // interference ?n in Set[int](n) on c; // TODO: See Voila issue #14
   requires Counter(c, x, ?n) && G@c;      // TODO: Unstable, see Voila issue #15
   ensures ret == n;
@@ -90,7 +90,7 @@ int read02_client02(id c, memcell x)
   ret := read02(c, x);
 }
 
-int read02_client03(id c, memcell x)
+procedure read02_client03(id c, memcell x) returns (int ret)
   requires Counter(c, x, ?n) && G@c; // TODO: Unstable, see Voila issue #15
 {
   skip;
@@ -123,7 +123,7 @@ region ParCounter(id k, id c, memcell x)
     P: ?m ~> Int;
   }
 
-int read01_seqclient01(id k, id c, memcell x)
+procedure read01_seqclient01(id k, id c, memcell x) returns (int ret)
   requires SeqCounter(k, c, x) && S@k;
   ensures  SeqCounter(k, c, x) && S@k;
 {
@@ -137,7 +137,7 @@ int read01_seqclient01(id k, id c, memcell x)
   }
 }
 
-int read01_parclient01(id k, id c, memcell x)
+procedure read01_parclient01(id k, id c, memcell x) returns (int ret)
   requires ParCounter(k, c, x) && P@k;
   ensures  ParCounter(k, c, x) && P@k;
 {
@@ -151,7 +151,7 @@ int read01_parclient01(id k, id c, memcell x)
   }
 }
 
-int read02_seqclient01(id k, id c, memcell x)
+procedure read02_seqclient01(id k, id c, memcell x) returns (int ret)
   requires SeqCounter(k, c, x) && S@k;
   ensures  SeqCounter(k, c, x) && S@k;
 {
@@ -165,7 +165,7 @@ int read02_seqclient01(id k, id c, memcell x)
   }
 }
 
-int read02_parclient01(id k, id c, memcell x)
+procedure read02_parclient01(id k, id c, memcell x) returns (int ret)
   requires ParCounter(k, c, x) && P@k;
   ensures  ParCounter(k, c, x) && P@k;
 {

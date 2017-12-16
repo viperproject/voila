@@ -10,7 +10,7 @@ region R1(id r, memcell x)
   state { v }
   actions { G1: 0 ~> Set(0, 1); }
 
-void test01(id r, memcell x)
+procedure test01(id r, memcell x)
   requires R1(r, x, 0) && G1@r;
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
@@ -32,7 +32,7 @@ region R2(id r, memcell x)
   state { v }
   actions { G2: 0 ~> Set(0, 1); }
 
-void test02(id r, memcell x)
+procedure test02(id r, memcell x)
   requires R2(r, x, 0) && K2@r;
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
@@ -51,7 +51,7 @@ region R3(id r, memcell x)
   state { v }
   actions { G3: 0 ~> Set(0); }
 
-void test03(id r, memcell x)
+procedure test03(id r, memcell x)
   requires R3(r, x, 0) && G3@r;
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)

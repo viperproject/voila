@@ -13,7 +13,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   def toField(declaredBy: PStruct, id: PIdnNode): vpr.Field = {
     val fieldType = declaredBy.fields.find(_.id.name == id.name).get.typ
 
-    vpr.Field(s"$$${declaredBy.id.name}_$$${id.name}", translateNonVoid(fieldType))()
+    vpr.Field(s"$$${declaredBy.id.name}_$$${id.name}", translate(fieldType))()
   }
 
   def translate(location: PLocation): vpr.FieldAccess = {
@@ -30,7 +30,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(read: PHeapRead): vpr.Stmt = {
-    val vprLocalVarType = translateNonVoid(semanticAnalyser.typeOfIdn(read.lhs))
+    val vprLocalVarType = translate(semanticAnalyser.typeOfIdn(read.lhs))
     val vprLocalVar = vpr.LocalVar(read.lhs.name)(typ = vprLocalVarType).withSource(read.lhs)
     val vprFieldAccess = translate(read.location)
 
@@ -101,13 +101,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.Old(vprHeapRead)()
 
       case (LogicalVariableContext.Procedure, _) =>
-        val declaringStatement = semanticAnalyser.enclosingStatement(declaration)
-        val vprDrecedingLabel = preStatementLabel(declaringStatement)
-
-        vpr.LabelledOld(
-          vprHeapRead,
-          vprDrecedingLabel.name
-        )()
+        vpr.LocalVar(declaration.id.name)(translate(semanticAnalyser.typeOfIdn(declaration.id)))
 
       case _ =>
         sys.error(

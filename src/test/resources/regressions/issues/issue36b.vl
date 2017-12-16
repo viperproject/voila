@@ -22,7 +22,7 @@ region Qu(id s, head h)
 
 
 
-head makeQueue(id r)
+procedure makeQueue(id r) returns (head ret)
   requires true;
   ensures Qu(r, ret);
 {

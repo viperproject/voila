@@ -66,7 +66,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
   def toDoc(modifier: PAtomicityModifier): Doc = {
     modifier match {
-      case PNotAtomic() => emptyDoc
+      case PNonAtomic() => "non_atomic"
       case PPrimitiveAtomic() => "primitive_atomic"
       case PAbstractAtomic() => "abstract_atomic"
     }
@@ -105,8 +105,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
   def toDoc(declaration: PDeclaration): Doc = {
     declaration match {
       case member: PMember => toDoc(member)
-
       case PFormalArgumentDecl(id, typ) => toDoc(id) <> ":" <+> toDoc(typ)
+      case PFormalReturnDecl(id, typ) => toDoc(id) <> ":" <+> toDoc(typ)
       case PLocalVariableDecl(id, typ) =>  toDoc(typ) <+> toDoc(id)
       case PGuardDecl(id, modifier) =>  toDoc(modifier) <+> toDoc(id)
       case PLogicalVariableBinder(id) =>  "?" <> toDoc(id)
@@ -129,17 +129,23 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
          <> nest("state" <+> braces(toDoc(state)))
          <> nest("actions" <+> braces(ssep(actions map toDoc, semi <> line))))
 
-      case PProcedure(id, formalArgs, typ, inters, pres, posts, locals, optBody, atomicity) =>
-        (   toDoc(atomicity) <+> toDoc(typ) <+> toDoc(id) <+> asFormalArguments(formalArgs) <> line
-         <> nest(ssep(inters map toDoc, semi <> line)) <> line
-         <> nest(ssep(pres map toDoc, semi <> line)) <> line
-         <> (optBody match {
-              case None =>
-                require(locals.isEmpty)
-                emptyDoc
-              case Some(body) =>
-                braces(ssep(locals map toDoc, semi <> line <> toDoc(body)))
-            }))
+      case PProcedure(id, formalArgs, formalReturns, inters, pres, posts, locals, optBody, atomicity) =>
+        toDoc(atomicity) <+> "procedure" <+>
+        toDoc(id) <+> asFormalArguments(formalArgs) <> (
+          if (formalReturns.isEmpty)
+            emptyDoc
+          else
+            space <> "returns" <+> asFormalReturns(formalReturns)
+        ) <> line <>
+        nest(ssep(inters map toDoc, semi <> line)) <> line <>
+        nest(ssep(pres map toDoc, semi <> line)) <> line <> (
+        optBody match {
+          case None =>
+            require(locals.isEmpty)
+            emptyDoc
+          case Some(body) =>
+            braces(ssep(locals map toDoc, semi <> line <> toDoc(body)))
+        })
 
       case PPredicate(id, formalArgs, optBody) =>
         (    "predicate" <+> toDoc(id) <> asFormalArguments(formalArgs)
@@ -148,22 +154,6 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
                 case Some(body) => braces(nest(toDoc(body)))
               }))
     }
-  }
-
-  def toDoc(procedure: PProcedure): Doc = {
-    val PProcedure(id, formalArgs, typ, inters, pres, posts, locals, body, atomicity) = procedure
-
-    val signatureDoc =
-      toDoc(typ) <+> toDoc(id) <> asFormalArguments(formalArgs)
-
-    val contractDoc = emptyDoc // TODO: Implement
-
-    val bodyDoc = (
-         ssep(locals map toDoc, line)
-      <> line
-      <> body.fold(emptyDoc)(toDoc)) // TODO: Account for abstract procedures
-
-    signatureDoc <> nest(line <> contractDoc) <> braces(nest(line <> bodyDoc))
   }
 
   def toDoc(statement: PStatement): Doc =
@@ -183,13 +173,11 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
          <> nest(ssep(invariants map toDoc, semi <> line)) <> line
          <> braces(nest(toDoc(body))))
 
-      case PProcedureCall(procedure, arguments, optRhs) =>
+      case PProcedureCall(procedure, arguments, rhs) =>
         val lhsDoc = toDoc(procedure) <> asArguments(arguments)
 
-        optRhs match {
-          case Some(rhs) => toDoc(rhs) <+> ":=" <+> lhsDoc
-          case None => lhsDoc
-        }
+        if (rhs.isEmpty) lhsDoc
+        else ssep(rhs map toDoc, comma <> space) <+> ":=" <+> lhsDoc
     }
 
   def toDoc(statement: PGhostStatement): Doc = {
@@ -209,6 +197,9 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
   def asFormalArguments(arguments: Vector[PFormalArgumentDecl]): Doc =
     parens(ssep(arguments map toDoc, comma <> space))
+
+  def asFormalReturns(returns: Vector[PFormalReturnDecl]): Doc =
+    parens(ssep(returns map toDoc, comma <> space))
 
   def toDoc(rule: PRuleStatement): Doc = {
     rule match {
@@ -239,7 +230,6 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PFalseLit() => "false"
       case PNullLit() => "null"
       case PIntLit(value) => value.toString
-      case PRet() => "ret"
 
       case PUnfolding(predicate, body) =>
         "unfolding" <+> toDoc(predicate) <+> "in" <+> toDoc(body)
@@ -308,7 +298,6 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
       case PRefType(referencedType) => toDoc(referencedType)
       case PRegionIdType() => "id"
-      case PVoidType() => "void"
       case PUnknownType() => "<unknown>"
       case PNullType() => "<null>"
     }

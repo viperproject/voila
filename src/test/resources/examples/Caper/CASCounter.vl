@@ -16,7 +16,7 @@ region Counter(id r, memcell x)
 
 // TODO: makeCounter()
 
-int incr(id r, memcell x)
+procedure incr(id r, memcell x) returns (int ret)
   requires Counter(r, x, ?v0) && INCREMENT@r;
   ensures  Counter(r, x, ?v1) && INCREMENT@r;
   ensures  v0 < v1;
@@ -41,7 +41,7 @@ int incr(id r, memcell x)
   } while (!b);
 }
 
-int read(id r, memcell x)
+procedure read(id r, memcell x) returns (int ret)
   requires Counter(r, x, ?v0) && INCREMENT@r;
   ensures  Counter(r, x, ?v1) && INCREMENT@r;
   ensures  ret <= v1;
@@ -53,7 +53,7 @@ int read(id r, memcell x)
   }
 }
 
-primitive_atomic bool CAS(memcell x, int now, int thn)
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
   requires x.f |-> ?v;
   ensures  v == now
               ? ret && x.f |-> thn

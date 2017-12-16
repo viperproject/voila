@@ -1,13 +1,6 @@
-//:: IgnoreFile(/voila/issue/0000/)
-
-
 // Corresponds to:
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/Queue.t
 //
-
-//struct root {
-//  node ptr;
-//}
 
 struct node {
   int value;
@@ -18,16 +11,18 @@ struct node {
 
 predicate Inv(int v)
 
-//region Qu(id s, id rs, root h)
-//  guards { duplicable G; }
-//  interpretation {
-//    h.ptr |-> ?x &&
-//    QL(rs, x, null) //&&
-////    OWN@rs
+region Qu(id s, node sentinel)
+  guards { duplicable G; }
+  interpretation {
 ////    0 : p |-> x &*& QL(rs,x,_,3*n+1) &*& n >= 0 &*& rs@OWN;
-//  }
-//  state { 0 }
-//  actions {}
+    (sentinel.next |-> ?x) &&
+    (sentinel._absstate |-> ?x_a) && x_a >= 0 && x_a % 3 == 1 &&
+    (sentinel._nextrid |-> ?x_r) &&
+    QL(x_r, x, x_a) &&
+    OWN@x_r
+  }
+  state { 0 }
+  actions {}
 
 region QL(id r, node x/*, int v */)
   guards {
@@ -63,12 +58,12 @@ region QL(id r, node x/*, int v */)
     (x.value |-> ?v) &&
     (x.next |-> ?y) &&
     (x._absstate |-> ?a) &&
-    (x._nextrid |-> ?yr) &&
+    (x._nextrid |-> ?y_r) &&
     (  a == 0     ? (Inv(v) && y == null)
      : a == 1     ? (          y == null)
-     : a % 3 == 0 ? (Inv(v) && OWN@yr && QL(yr, y, a))
-     : a % 3 == 1 ? (          OWN@yr && QL(yr, y, a))
-     : a % 3 == 2 ? (          OWN@r  && QL(yr, y))
+     : a % 3 == 0 ? (Inv(v) && OWN@y_r && QL(y_r, y, a))
+     : a % 3 == 1 ? (          OWN@y_r && QL(y_r, y, a))
+     : a % 3 == 2 ? (          OWN@r   && QL(y_r, y))
      : false)
   }
   state { a }
@@ -118,41 +113,45 @@ region QL(id r, node x/*, int v */)
 //  fold Qu(r, rs, ret, 0);
 //}
 
-node getTail(id s, node x)
-  // requires QL(s, x, _, _) &*& x > 0;
-  requires QL(s, x, ?a0) && x != null;
-  // ensures QL(t, ret, _, _) &*& ret > 0;
-  ensures QL(s, ret, ?a1) && ret != null;
-    // TODO: Region id 's' is not correct
-    //       Could return a struct pair (node, id)
+procedure getTail(id r, node x) returns (node y, id y_r) // y_r is ghost
+  requires QL(r, x, ?x_a) && x != null;
+  ensures QL(y_r, y, ?y_a) && y != null;
 {
-  node y;
   node n;
   bool cont;
 
   y := x;
+
+  // ghost assignment to y_r
+  havoc y_r;
+  assume y_r == r;
+
   cont := true;
 
   while (cont)
-    invariant QL(s, y, ?ai) && y != null;
-    invariant !cont ==> ret == y;
+    invariant QL(y_r, y) && y != null;
   {
     open_region
-      using QL(s, y);
+      using QL(y_r, y);
     {
       n := y.next;
+
+      // Ghost code
+      assert y._nextrid |-> ?n_r; // Let n_s be the region id of the next node
+      assert n != null ==> QL(n_r, n); // If next node exist, we should hold QL(n_s, n)
+      inhale n != null ==> QL(n_r, n); // In this case, duplicate the region assertion
     }
 
     if (n == null) {
       // return y;
-      ret := y;
       cont := false;
+    } else {
+      y := n;
 
-      // TODO: Add "return e" statement
-      //       Encode as "returnvalue := e; goto lastline"
+      // ghost assignment to y_r
+      havoc y_r;
+      assume y_r == n_r;
     }
-
-    y := n;
   }
 }
 

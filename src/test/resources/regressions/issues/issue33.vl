@@ -4,7 +4,7 @@ region Cell(id r, memcell x)
   state { v }
   actions { G: ?m ~> Int; }
 
-void test01(id r, memcell x)
+procedure test01(id r, memcell x)
   requires Cell(r, x, 0) && G@r;
   requires Cell(r, x, 0); // OK, since region assertions are duplicable
 {
@@ -13,7 +13,7 @@ void test01(id r, memcell x)
   assert false; // Follows from Cell(r, x, 0) && Cell(r, x, 1)
 }
 
-abstract_atomic void set_to_one(id r, memcell x)
+abstract_atomic procedure set_to_one(id r, memcell x)
   interference ?v in Set[int](v) on r;
   requires Cell(r, x, v) && G@r;
   ensures  Cell(r, x, 1) && G@r;

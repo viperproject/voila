@@ -14,7 +14,7 @@ region Join(id r, memcell x)
 
 // TODO: make_join()
 
-void set_to_one(id r, memcell x)
+procedure set_to_one(id r, memcell x)
   requires Join(r, x, 0) && SET@r;
   ensures  Join(r, x, 1) && SET@r;
 {
@@ -25,7 +25,7 @@ void set_to_one(id r, memcell x)
   }
 }
 
-void wait(id r, memcell x)
+procedure wait(id r, memcell x)
   requires Join(r, x, ?z);
   ensures  Join(r, x, 1);
 {

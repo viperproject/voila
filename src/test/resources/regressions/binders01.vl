@@ -4,19 +4,19 @@ region R(id s)
   state { true }
   actions {}
 
-void test01() {
+procedure test01() {
   set<bool> bs;
 
   bs := Set[bool](?c | c);
 }
 
-void test02() {
+procedure test02() {
   set<bool> bs;
 
   // bs := Set(?c | c); // TODO: Requires better type inference
 }
 
-void test03(id s)
+procedure test03(id s)
   requires R(s, ?b);
 {
   set<bool> bs;
@@ -24,7 +24,7 @@ void test03(id s)
   bs := Set[bool](?c | c == b);
 }
 
-void test04(id s)
+procedure test04(id s)
   requires R(s, ?b);
 {
   set<bool> bs;
@@ -40,15 +40,15 @@ region RR(id s)
   state { 0 }
   actions {}
 
-void callee01(set<int> xs)
+procedure callee01(set<int> xs)
 
-void test05(id s)
+procedure test05(id s)
   requires RR(s, ?v);
 {
   callee01(Set[int](?w | w <= v));
 }
 
-void test06(id s)
+procedure test06(id s)
   requires RR(s, ?v);
 {
   callee01(Set(?w | w <= v));

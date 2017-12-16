@@ -1,8 +1,8 @@
-void test01()
+procedure test01()
   requires true;
 {}
 
-void test02()
+procedure test02()
   requires true
   //:: ExpectedOutput(parser_error)
 {}

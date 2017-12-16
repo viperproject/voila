@@ -6,7 +6,7 @@ region R(id s, int x)
   state { 0 }
   actions {}
 
-int test(id s)
+procedure test(id s) returns (int ret)
   requires true;
   ensures R(s, ret);
 {

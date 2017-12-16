@@ -33,7 +33,7 @@ region CAPLock(id r, id a, memcell x)
 
 
 
-abstract_atomic void unlock01(id a, memcell x)
+abstract_atomic procedure unlock01(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a;
 {
@@ -49,7 +49,7 @@ abstract_atomic void unlock01(id a, memcell x)
   }
 }
 
-abstract_atomic void unlock02(id a, memcell x)
+abstract_atomic procedure unlock02(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a;
 {

@@ -3,5 +3,5 @@ struct memcell {
   id a;
 }
 
-void test01(memcell x) {}
-void test02(id x) {}
+procedure test01(memcell x) {}
+procedure test02(id x) {}

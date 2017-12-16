@@ -33,12 +33,12 @@ region CAPLock(id r, id a, memcell x)
 
 
 
-abstract_atomic void unlock(id a, memcell x)
+abstract_atomic procedure unlock(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a;
   ensures Lock(a, x, 0) && G@a;
 
-void non_atomic_unlock01(id r, id a, memcell x)
+procedure non_atomic_unlock01(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
   requires Inv();
 {
@@ -52,7 +52,7 @@ void non_atomic_unlock01(id r, id a, memcell x)
   }
 }
 
-void non_atomic_unlock02(id r, id a, memcell x)
+procedure non_atomic_unlock02(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
   requires Inv();
 {
@@ -66,7 +66,7 @@ void non_atomic_unlock02(id r, id a, memcell x)
   skip;
 }
 
-void non_atomic_unlock03(id r, id a, memcell x)
+procedure non_atomic_unlock03(id r, id a, memcell x)
   requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
   requires Inv();
 {

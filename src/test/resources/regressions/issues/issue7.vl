@@ -4,7 +4,7 @@ region Cell(id r, memcell x)
   state { v }
   actions { G: ?m ~> Int; }
 
-void test01(id r, memcell x)
+procedure test01(id r, memcell x)
   requires Cell(r, x, 0) && G@r;
   requires Cell(r, x, 0); // OK, since region assertions are duplicable
 {
@@ -14,7 +14,7 @@ void test01(id r, memcell x)
   assert false;
 }
 
-void test02(id r, memcell x)
+procedure test02(id r, memcell x)
   requires Cell(r, x, 0) && G@r;
   requires Cell(r, x, 0); // OK, since region assertions are duplicable
 {

@@ -24,7 +24,7 @@ region SLock(id r, memcell x)
   }
 
 // TODO: Too many issues
-memcell makeLock(id r)
+procedure makeLock(id r) returns (memcell ret)
 //  // ensures SLock(r, ret, 0) && LOCK@r; // TODO: See issue #23
 {
 //  // ret := alloc(1); // See Voila issue #17
@@ -40,7 +40,7 @@ memcell makeLock(id r)
 //  ret := x;
 }
 
-abstract_atomic void acquire(id r, memcell x)
+abstract_atomic procedure acquire(id r, memcell x)
   interference ?v in Set(0, 1) on r;
   requires SLock(r, x) && LOCK@r;
   ensures  SLock(r, x, 1);
@@ -66,7 +66,7 @@ abstract_atomic void acquire(id r, memcell x)
   }
 }
 
-abstract_atomic void release1(id r, memcell x)
+abstract_atomic procedure release1(id r, memcell x)
   interference ?s in Set(1) on r;
   requires SLock(r, x, 1) && UNLOCK@r;
   ensures  SLock(r, x, 0) && LOCK@r;
@@ -88,7 +88,7 @@ abstract_atomic void release1(id r, memcell x)
   }
 }
 
-abstract_atomic void release2(id r, memcell x)
+abstract_atomic procedure release2(id r, memcell x)
   interference ?s in Set(1) on r;
   requires SLock(r, x, 1) && UNLOCK@r;
   ensures  SLock(r, x, 0);
@@ -103,7 +103,7 @@ abstract_atomic void release2(id r, memcell x)
 }
 
 
-primitive_atomic bool CAS(memcell x, int now, int thn)
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
   requires x.f |-> ?v;
   ensures  v == now
               ? ret && x.f |-> thn

@@ -4,7 +4,7 @@ region Dummy(id a)
   state { true }
   actions {}
 
-void test(id a)
+procedure test(id a)
   requires true;
   ensures true;
 {

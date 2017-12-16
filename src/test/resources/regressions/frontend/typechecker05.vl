@@ -1,0 +1,18 @@
+//:: ExpectedOutput(typechecker_error)
+struct cell { }
+
+//:: ExpectedOutput(typechecker_error)
+struct cell { }
+
+//:: ExpectedOutput(typechecker_error)
+procedure cell()
+
+//:: ExpectedOutput(typechecker_error)
+procedure cell()
+
+procedure test(cell c) {
+  cell := c.f;
+}
+
+//:: ExpectedOutput(typechecker_error)
+procedure cell()

@@ -35,18 +35,18 @@ class ParserTests extends FunSuite with Matchers {
   }
 
   test("Parse: simple program") {
-    val src = "void proc() {}"
+    val src = "procedure proc() {}"
 
     val proc =
       PProcedure(PIdnDef("proc"),
                  Emp,
-                 PVoidType(),
+                 Emp,
                  Emp,
                  Emp,
                  Emp,
                  Emp,
                  Some(PSkip()),
-                 PNotAtomic())
+                 PNonAtomic())
 
     frontend.parse(src) should matchPattern {
       case Right(PProgram(Emp, Emp, Emp, Vector(`proc`))) =>

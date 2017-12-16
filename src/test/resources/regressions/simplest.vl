@@ -1,8 +1,8 @@
-void testAbstractMethod()
+procedure testAbstractMethod()
   requires true;
   ensures false;
 
-void testEmptyMethodBody()
+procedure testEmptyMethodBody()
   requires true;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures false;

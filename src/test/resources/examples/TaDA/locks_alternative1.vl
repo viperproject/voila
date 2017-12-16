@@ -23,7 +23,7 @@ predicate L(id a, memcell x) {
 }
 */
 
-abstract_atomic void unlock(id a, memcell x)
+abstract_atomic procedure unlock(id a, memcell x)
   interference ?s in Set(1) on a;
   requires Lock(a, x, s) && G@a; // L(a, x)
   ensures Lock(a, x, 0) && G@a; // U(a, x)
@@ -48,7 +48,7 @@ abstract_atomic void unlock(id a, memcell x)
   // fold U(a, x);
 }
 
-abstract_atomic void lock(id a, memcell x)
+abstract_atomic procedure lock(id a, memcell x)
   interference ?s in Set(0, 1) on a;
   // requires s == 0 ? U(a, x) : L(a, x);
   requires Lock(a, x, s) && G@a;
@@ -83,7 +83,7 @@ abstract_atomic void lock(id a, memcell x)
   // fold L(a, x);
 }
 
-primitive_atomic bool CASifNeg(memcell x, int thn)
+primitive_atomic procedure CASifNeg(memcell x, int thn) returns (bool ret)
   requires x.f |-> ?v;
   ensures  v < 0
               ? ret && x.f |-> thn

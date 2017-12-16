@@ -1,10 +1,10 @@
-void test01()
+procedure test01()
   requires true;
 {
   skip;
 }
 
-void test02()
+procedure test02()
   requires true;
 {
   skip

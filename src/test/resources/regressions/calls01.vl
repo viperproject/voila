@@ -12,7 +12,7 @@ region Counter(id c, memcell x)
     G: ?m ~> Int;
   }
 
-abstract_atomic int read(id c, memcell x)
+abstract_atomic procedure read(id c, memcell x) returns (int ret)
   interference ?n in Int on c;
   requires Counter(c, x, n) && G@c;
   ensures Counter(c, x, n) && G@c;
@@ -25,7 +25,7 @@ abstract_atomic int read(id c, memcell x)
   }
 }
 
-void test01(id c, memcell x)
+procedure test01(id c, memcell x)
   requires Counter(c, x, ?n) && G@c;
 {
   int v;

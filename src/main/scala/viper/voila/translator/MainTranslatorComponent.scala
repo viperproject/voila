@@ -7,11 +7,12 @@
 package viper.voila.translator
 
 import scala.collection.breakOut
-import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
+import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
 import viper.voila.reporting.{InsufficientRegionPermissionError, InterferenceError, PreconditionError}
+import viper.silver.ast.LocalVarDecl
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -32,11 +33,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
    * Immutable state and utility methods
    */
 
-  val returnVarName = "ret"
-
-  def returnVar(typ: PType): vpr.LocalVar =
-    vpr.LocalVar(returnVarName)(typ = translateNonVoid(typ))
-
   val diamondField: vpr.Field =
     vpr.Field("$diamond", vpr.Int)()
 
@@ -47,7 +43,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAccessPredicate(diamondLocation(rcvr), vpr.FullPerm()())()
 
   def stepFromField(typ: PType): vpr.Field =
-    vpr.Field(s"$$stepFrom_$typ", translateNonVoid(typ))()
+    vpr.Field(s"$$stepFrom_$typ", translate(typ))()
 
   def stepFromLocation(rcvr: vpr.Exp, typ: PType): vpr.FieldAccess =
     vpr.FieldAccess(rcvr, stepFromField(typ))()
@@ -56,7 +52,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAccessPredicate(stepFromLocation(rcvr, typ), vpr.FullPerm()())()
 
   def stepToField(typ: PType): vpr.Field =
-    vpr.Field(s"$$stepTo_$typ", translateNonVoid(typ))()
+    vpr.Field(s"$$stepTo_$typ", translate(typ))()
 
   def stepToLocation(rcvr: vpr.Exp, typ: PType): vpr.FieldAccess =
     vpr.FieldAccess(rcvr, stepToField(typ))()
@@ -75,14 +71,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       "NatSet",
       Vector.empty
     )(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
-
-  val preStatementLabelPrefix: String = "pre_statement"
-
-  def preStatementLabel(statement: PStatement): vpr.Label =
-    vpr.Label(
-      s"${preStatementLabelPrefix}_${statement.position.line}_${statement.position.column}",
-      Vector.empty
-    )()
 
   val atomicityContextsDomainName: String = "$AtomicityContexts"
 
@@ -113,10 +101,17 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
   }
 
+  def localVariableDeclaration(binder: PLogicalVariableBinder): LocalVarDecl = {
+    vpr.LocalVarDecl(
+      binder.id.name,
+      translate(semanticAnalyser.typeOfIdn(binder.id))
+    )()
+  }
+
   protected var collectedVariableDeclarations: Vector[vpr.LocalVarDecl] = Vector.empty
 
   def declareFreshVariable(typ: PType, basename: String): vpr.LocalVarDecl =
-    declareFreshVariable(translateNonVoid(typ), basename)
+    declareFreshVariable(translate(typ), basename)
 
   def declareFreshVariable(typ: vpr.Type, basename: String): vpr.LocalVarDecl = {
     val decl = vpr.LocalVarDecl(s"$$$basename${collectedVariableDeclarations.length}", typ)()
@@ -131,7 +126,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       PBoolType() +:
       tree.nodes.collect { case PHavoc(variable) => semanticAnalyser.typ(PIdnExp(variable)) }
 
-    val vprTypes = voilaTypes.map(translateNonVoid).distinct
+    val vprTypes = voilaTypes.map(translate).distinct
 
     vprTypes map (typ =>
       vpr.Method(
@@ -257,7 +252,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case PAbstractAtomic() =>
           logger.debug(s"\nTranslating abstract-atomic procedure ${procedure.id.name}")
           translateAbstractlyAtomicProcedure(procedure)
-        case PNotAtomic() =>
+        case PNonAtomic() =>
           logger.debug(s"\nTranslating non-atomic procedure ${procedure.id.name}")
           translateStandardProcedure(procedure)
         case PPrimitiveAtomic() =>
@@ -265,16 +260,35 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
     }
 
-    val bodyWithCollectedVariableDeclarations =
+    /* TODO: Related to code inside 'def directlyTranslate(PStatement)', case 'PAssert' --- unify */
+
+    val procedureWideBoundLogicalVariableDeclarations = {
+      val collectBinders = collect[Vector, PLogicalVariableBinder] {
+        case binder: PLogicalVariableBinder => binder
+      }
+
+      val collectRelevantBinders = collect[Vector, Vector[PLogicalVariableBinder]] {
+        case PAssert(assertion) => collectBinders(assertion)
+      }
+
+      collectRelevantBinders(procedure.body)
+        .flatten
+        .map(localVariableDeclaration)
+    }
+
+    val bodyWithAdditionalVariableDeclarations =
       vprMethod.body.map(actualBody =>
         actualBody.copy(
-          scopedDecls = actualBody.scopedDecls ++ collectedVariableDeclarations
+          scopedDecls =
+              actualBody.scopedDecls ++
+              procedureWideBoundLogicalVariableDeclarations ++
+              collectedVariableDeclarations
         )(actualBody.pos, actualBody.info, actualBody.errT))
 
     collectedVariableDeclarations = Vector.empty
 
     vprMethod.copy(
-      body = bodyWithCollectedVariableDeclarations
+      body = bodyWithAdditionalVariableDeclarations
     )(vprMethod.pos, vprMethod.info, vprMethod.errT)
   }
 
@@ -282,12 +296,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case class Entry(clause: PInterferenceClause,
                      regionPredicate: PPredicateExp,
                      atomicityContext: vpr.DomainFuncApp)
-
-    val formalReturns =
-      procedure.typ match {
-        case PVoidType() => Nil
-        case other => Seq(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
-      }
 
     val regionInterferenceVariables: Map[PIdnUse, Entry] =
       procedure.inters.map(inter => {
@@ -338,7 +346,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.Method(
       name = procedure.id.name,
       formalArgs = procedure.formalArgs map translate,
-      formalReturns = formalReturns,
+      formalReturns = procedure.formalReturns map translate,
       pres = vprPres,
       posts = vprPosts,
       body = Some(vprBody)
@@ -350,12 +358,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       procedure.inters.isEmpty,
         s"Expected procedure ${procedure.id} to have no interference clause, "
       + s"but found ${procedure.inters}")
-
-    val formalReturns =
-      procedure.typ match {
-        case PVoidType() => Vector.empty
-        case other => Vector(vpr.LocalVarDecl(returnVarName, translateNonVoid(other))())
-      }
 
     val pres = procedure.pres.map(pre => translate(pre.assertion))
 
@@ -372,7 +374,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.Method(
       name = procedure.id.name,
       formalArgs = procedure.formalArgs map translate,
-      formalReturns = formalReturns,
+      formalReturns = procedure.formalReturns map translate,
       pres = pres,
       posts = procedure.posts map (post => translate(post.assertion)),
       body = Some(body)
@@ -380,7 +382,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
-    vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
+    vpr.LocalVarDecl(declaration.id.name, translate(declaration.typ))()
+
+  def translate(declaration: PFormalReturnDecl): vpr.LocalVarDecl =
+    vpr.LocalVarDecl(declaration.id.name, translate(declaration.typ))()
 
   def translate(interference: PInterferenceClause): vpr.AnySetContains = {
     val vprSet = translate(interference.set)
@@ -503,7 +508,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PAssign(lhs, rhs) =>
         var vprAssign =
           vpr.LocalVarAssign(
-            vpr.LocalVar(lhs.name)(typ = translateNonVoid(semanticAnalyser.typeOfIdn(lhs))),
+            vpr.LocalVar(lhs.name)(typ = translate(semanticAnalyser.typeOfIdn(lhs))),
             translate(rhs)
           )()
 
@@ -566,23 +571,37 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, assume)
 
-      // TODO: Special case (of the next case), should not be necessary in the long run.
-      case PAssert(predicateExp: PPredicateExp)
-              if predicateExp.arguments.last.isInstanceOf[PLogicalVariableBinder] =>
-
-        val vprLabel = preStatementLabel(statement)
-        val vprAssert = vpr.Assert(translate(predicateExp))().withSource(statement)
-
-        val vprResult = vpr.Seqn(Vector(vprLabel, vprAssert), Vector.empty)()
-
-        surroundWithSectionComments(statement.statementName, vprResult)
-
       case PAssert(assertion) =>
         var assert = vpr.Assert(translate(assertion))()
 
         assert = assert.withSource(statement)
 
-        surroundWithSectionComments(statement.statementName, assert)
+        /* TODO: Related to code inside 'def translate(PProcedure)' --- unify! */
+
+        val collectLogicalVariableAssignments =
+          collectall[Vector, vpr.LocalVarAssign] {
+            case PPointsTo(location, binder: PLogicalVariableBinder) =>
+              val vprVar = localVariableDeclaration(binder).localVar
+              val vprValue = translate(location)
+
+              Vector(vpr.LocalVarAssign(vprVar, vprValue)())
+
+            case predicateExp @ PPredicateExp(_, _ :+ (binder: PLogicalVariableBinder)) =>
+              val vprVar = localVariableDeclaration(binder).localVar
+              val vprValue = regionState(predicateExp)
+
+              Vector(vpr.LocalVarAssign(vprVar, vprValue)())
+          }
+
+        val vprAssignments = collectLogicalVariableAssignments(assertion)
+
+        val vprResult =
+          vpr.Seqn(
+            assert +: vprAssignments,
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, vprResult)
 
       case PHavoc(variable) =>
         var vprHavoc = havoc(variable)
@@ -649,24 +668,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, result)
 
-      case call @ PProcedureCall(procedureId, arguments, optRhs) =>
+      case call @ PProcedureCall(procedureId, arguments, rhs) =>
         val callee =
           semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration
 
         val vprArguments = arguments map translate
-
-        val vprFormalReturns =
-          optRhs match {
-            case Some(rhs) =>
-              val typ = translateNonVoid(semanticAnalyser.typ(PIdnExp(rhs)))
-              Vector(vpr.LocalVarDecl(rhs.name, typ)())
-            case None =>
-              Vector.empty
-          }
+        val vprReturns = rhs map (id => translateUseOf(id).asInstanceOf[vpr.LocalVar])
 
         val vprInterferenceChecks: vpr.Stmt =
           callee.atomicity match {
-            case PNotAtomic() =>
+            case PNonAtomic() =>
               vpr.Assert(vpr.TrueLit()())()
 
             case PPrimitiveAtomic() =>
@@ -831,7 +842,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.MethodCall(
             callee.id.name,
             vprArguments,
-            vprFormalReturns map (_.localVar)
+            vprReturns
           )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos).withSource(statement)
 
         val result =
@@ -895,7 +906,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
       case PIntSet() => intSet.withSource(expression)
       case PNatSet() => natSet.withSource(expression)
-      case ret: PRet => returnVar(semanticAnalyser.typ(ret)).withSource(expression)
       case PIdnExp(id) => translateUseOf(id).withSource(expression)
 
       case comprehension: PSetComprehension =>
@@ -984,8 +994,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translateUseOf(id: PIdnNode): vpr.Exp = {
     semanticAnalyser.entity(id) match {
       case entity: LogicalVariableEntity => translateUseOf(id, entity.declaration)
-      case ArgumentEntity(decl) => vpr.LocalVar(id.name)(typ = translateNonVoid(decl.typ))
-      case LocalVariableEntity(decl) => vpr.LocalVar(id.name)(typ = translateNonVoid(decl.typ))
+      case FormalArgumentEntity(decl) => vpr.LocalVar(id.name)(typ = translate(decl.typ))
+      case FormalReturnEntity(decl) => vpr.LocalVar(id.name)(typ = translate(decl.typ))
+      case LocalVariableEntity(decl) => vpr.LocalVar(id.name)(typ = translate(decl.typ))
     }
   }
 
@@ -995,7 +1006,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
            | PAction3(_, `binder`, _, _)
            | PSetComprehension(`binder`, _, _) =>
 
-        val vprType = translateNonVoid(semanticAnalyser.typeOfLogicalVariable(binder))
+        val vprType = translate(semanticAnalyser.typeOfLogicalVariable(binder))
 
         vpr.LocalVar(id.name)(typ = vprType)
 
@@ -1006,16 +1017,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(declaration: PLocalVariableDecl): vpr.LocalVarDecl =
-    vpr.LocalVarDecl(declaration.id.name, translateNonVoid(declaration.typ))()
+    vpr.LocalVarDecl(declaration.id.name, translate(declaration.typ))()
 
-  def translateNonVoid(typ: PType): vpr.Type = typ match {
+  def translate(typ: PType): vpr.Type = typ match {
     case PIntType() => vpr.Int
     case PBoolType() => vpr.Bool
-    case PSetType(elementType) => vpr.SetType(translateNonVoid(elementType))
-    case PSeqType(elementType) => vpr.SeqType(translateNonVoid(elementType))
+    case PSetType(elementType) => vpr.SetType(translate(elementType))
+    case PSeqType(elementType) => vpr.SeqType(translate(elementType))
     case PRefType(_) => vpr.Ref
     case PRegionIdType() => vpr.Ref
-    case unsupported@(_: PVoidType | _: PUnknownType) =>
+    case unsupported@(_: PUnknownType) =>
       sys.error(s"Cannot translate type '$unsupported'")
   }
 }
