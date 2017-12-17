@@ -237,7 +237,8 @@ case class PInhale(assertion: PExpression) extends PGhostStatement { val stateme
 case class PExhale(assertion: PExpression) extends PGhostStatement { val statementName = "exhale" }
 case class PAssume(assertion: PExpression) extends PGhostStatement { val statementName = "assume" }
 case class PAssert(assertion: PExpression) extends PGhostStatement { val statementName = "assert" }
-case class PHavoc(variable: PIdnUse) extends PGhostStatement { val statementName = "havoc" }
+case class PHavocVariable(variable: PIdnUse) extends PGhostStatement { val statementName = "havoc" }
+case class PHavocLocation(location: PLocation) extends PGhostStatement { val statementName = "havoc" }
 
 case class PUseRegionInterpretation(regionPredicate: PPredicateExp) extends PGhostStatement {
   val statementName = "use-region-interpretation"

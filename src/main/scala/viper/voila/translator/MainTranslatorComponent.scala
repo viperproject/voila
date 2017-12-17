@@ -121,10 +121,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     decl
   }
 
-  def usedHavocs(tree: VoilaTree): Vector[vpr.Method] = {
+  def usedVariableHavocs(tree: VoilaTree): Vector[vpr.Method] = {
     val voilaTypes =
       PBoolType() +:
-      tree.nodes.collect { case PHavoc(variable) => semanticAnalyser.typ(PIdnExp(variable)) }
+      tree.nodes.collect { case PHavocVariable(variable) => semanticAnalyser.typ(PIdnExp(variable)) }
 
     val vprTypes = voilaTypes.map(translate).distinct
 
@@ -167,7 +167,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             diamondField,
             regionStateTriggerFunctionDomain,
             atomicityContextsDomain(tree.root.regions))
-      ++ usedHavocs(tree)
+      ++ usedVariableHavocs(tree)
       ++ recordedSetComprehensions.values
       ++ tree.root.regions.flatMap(region => {
             val typ = semanticAnalyser.typ(region.state)
@@ -603,12 +603,30 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, vprResult)
 
-      case PHavoc(variable) =>
+      case PHavocVariable(variable) =>
         var vprHavoc = havoc(variable)
 
         vprHavoc = vprHavoc.withSource(statement)
 
         surroundWithSectionComments(statement.statementName, vprHavoc)
+
+      case PHavocLocation(location) =>
+        val vprAcc =
+          vpr.FieldAccessPredicate(
+            translate(location),
+            vpr.FullPerm()()
+          )().withSource(statement)
+
+        val vprExhale = vpr.Exhale(vprAcc)()
+        val vprInhale = vpr.Inhale(vprAcc)()
+
+        val vprStatement =
+          vpr.Seqn(
+            Vector(vprExhale, vprInhale),
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, vprStatement)
 
       case PUseRegionInterpretation(regionPredicate) =>
         val (region, regionArguments, None) = getRegionPredicateDetails(regionPredicate)

@@ -188,7 +188,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PExhale(assertion) => "exhale" <+> toDoc(assertion)
       case PAssume(assertion) => "assume" <+> toDoc(assertion)
       case PAssert(assertion) => "assert" <+> toDoc(assertion)
-      case PHavoc(variable) => "havoc" <+> toDoc(variable)
+      case PHavocVariable(variable) => "havoc" <+> toDoc(variable)
+      case PHavocLocation(location) => "havoc" <+> toDoc(location)
     }
   }
 

@@ -626,7 +626,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PExhale => AtomicityKind.Atomic
       case _: PAssume => AtomicityKind.Atomic
       case _: PAssert => AtomicityKind.Atomic
-      case _: PHavoc => AtomicityKind.Atomic
+      case _: PHavocVariable => AtomicityKind.Atomic
+      case _: PHavocLocation => AtomicityKind.Atomic
       case _: PUseRegionInterpretation => AtomicityKind.Atomic
 
       case _: PMakeAtomic => AtomicityKind.Atomic

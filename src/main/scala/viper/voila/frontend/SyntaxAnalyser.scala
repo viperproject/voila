@@ -163,7 +163,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "exhale" ~> expression <~ ";" ^^ PExhale |
     "assume" ~> expression <~ ";" ^^ PAssume |
     "assert" ~> expression <~ ";" ^^ PAssert |
-    "havoc" ~> idnuse <~ ";" ^^ PHavoc |
+    "havoc" ~> idnuse <~ ";" ^^ PHavocVariable |
+    "havoc" ~> location <~ ";" ^^ PHavocLocation |
     "use_region_interpretation" ~> predicateExp <~ ";" ^^ PUseRegionInterpretation |
     makeAtomic |
     updateRegion |
