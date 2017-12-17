@@ -152,6 +152,27 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
   }
 
+  def extractLogicalVariableBindings(assertion: PExpression): Vector[vpr.LocalVarAssign] = {
+    /* TODO: Related to code inside 'def translate(PProcedure)' --- unify! */
+
+    val collectBindings =
+      collectall[Vector, vpr.LocalVarAssign] {
+        case PPointsTo(location, binder: PLogicalVariableBinder) =>
+          val vprVar = localVariableDeclaration(binder).localVar
+          val vprValue = translate(location)
+
+          Vector(vpr.LocalVarAssign(vprVar, vprValue)())
+
+        case predicateExp @ PPredicateExp(_, _ :+ (binder: PLogicalVariableBinder)) =>
+          val vprVar = localVariableDeclaration(binder).localVar
+          val vprValue = regionState(predicateExp)
+
+          Vector(vpr.LocalVarAssign(vprVar, vprValue)())
+      }
+
+    collectBindings(assertion)
+  }
+
   /*
    * Main functionality
    */
@@ -269,6 +290,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       val collectRelevantBinders = collect[Vector, Vector[PLogicalVariableBinder]] {
         case PAssert(assertion) => collectBinders(assertion)
+        case PExhale(assertion) => collectBinders(assertion)
+        case PInhale(assertion) => collectBinders(assertion)
       }
 
       collectRelevantBinders(procedure.body)
@@ -551,18 +574,46 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
       case PInhale(assertion) =>
-        var inhale = vpr.Inhale(translate(assertion))()
+        val vprInhale =
+          vpr.Inhale(translate(assertion))().withSource(statement)
 
-        inhale = inhale.withSource(statement)
+        val vprAssignments = extractLogicalVariableBindings(assertion)
 
-        surroundWithSectionComments(statement.statementName, inhale)
+        val vprResult =
+          vpr.Seqn(
+            vprInhale +: vprAssignments,
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, vprResult)
 
       case PExhale(assertion) =>
-        var exhale = vpr.Exhale(translate(assertion))()
+        val vprExhale =
+          vpr.Exhale(translate(assertion))().withSource(statement)
 
-        exhale = exhale.withSource(statement)
+        val vprAssignments = extractLogicalVariableBindings(assertion)
 
-        surroundWithSectionComments(statement.statementName, exhale)
+        val vprResult =
+          vpr.Seqn(
+            vprAssignments :+ vprExhale,
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, vprResult)
+
+      case PAssert(assertion) =>
+        val vprAssert =
+          vpr.Assert(translate(assertion))().withSource(statement)
+
+        val vprAssignments = extractLogicalVariableBindings(assertion)
+
+        val vprResult =
+          vpr.Seqn(
+            vprAssert +: vprAssignments,
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, vprResult)
 
       case PAssume(assertion) =>
         var assume = vpr.Inhale(translate(assertion))()
@@ -570,38 +621,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         assume = assume.withSource(statement)
 
         surroundWithSectionComments(statement.statementName, assume)
-
-      case PAssert(assertion) =>
-        var assert = vpr.Assert(translate(assertion))()
-
-        assert = assert.withSource(statement)
-
-        /* TODO: Related to code inside 'def translate(PProcedure)' --- unify! */
-
-        val collectLogicalVariableAssignments =
-          collectall[Vector, vpr.LocalVarAssign] {
-            case PPointsTo(location, binder: PLogicalVariableBinder) =>
-              val vprVar = localVariableDeclaration(binder).localVar
-              val vprValue = translate(location)
-
-              Vector(vpr.LocalVarAssign(vprVar, vprValue)())
-
-            case predicateExp @ PPredicateExp(_, _ :+ (binder: PLogicalVariableBinder)) =>
-              val vprVar = localVariableDeclaration(binder).localVar
-              val vprValue = regionState(predicateExp)
-
-              Vector(vpr.LocalVarAssign(vprVar, vprValue)())
-          }
-
-        val vprAssignments = collectLogicalVariableAssignments(assertion)
-
-        val vprResult =
-          vpr.Seqn(
-            assert +: vprAssignments,
-            Vector.empty
-          )()
-
-        surroundWithSectionComments(statement.statementName, vprResult)
 
       case PHavocVariable(variable) =>
         var vprHavoc = havoc(variable)
