@@ -14,11 +14,15 @@ import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   override val whitespace: Parser[String] =
-    """(\s|(//.*\s*\n)|/\*(?s:(.*)?)\*/)*""".r
+    """(\s|(//.*\s*\n)|/\*(?:.|[\n\r])*?\*/)*""".r
+
+//    """(\s|(//.*\s*\n)|/\*(?s:(.*)?)\*/)*""".r
       // The above regex matches the same whitespace strings as this one:
       //   (\s|(//.*\s*\n)|/\*(?:.|[\n\r])*?\*/)*
-      // but (hopefully) avoids potential stack overflows caused by an open issue
-      // of Oracle's JDK. See also:
+      // but (hopefully) avoids potential stack overflows caused by an issue
+      // of Oracle's JDK. Note: the issue was reported for Java 6 and 7, it
+      // appears to not affect Java 8.
+      // See also:
       //   - http://bugs.java.com/bugdatabase/view_bug.do?bug_id=6882582
       //   - https://stackoverflow.com/a/31691056
       //
