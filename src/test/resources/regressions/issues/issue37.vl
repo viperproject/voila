@@ -1,33 +1,14 @@
-struct root {
-  node ptr;
-}
-
-struct node {
+struct cell {
   int val;
-  node next;
 }
 
+procedure test01(cell c1, cell c2)
+  requires c1.val |-> ?a && c2.val |-> a && true;
+{
+  c1.val := 0;
+  c2.val := 0;
+}
 
-region Qu(id s, root h)
-  guards {
-    duplicable G;
-  }
-  interpretation {
-    h.ptr |-> ?x
-  }
-  state { 0 }
-  actions {}
-
-
-
-region QL(id r, node x, int v)
-  guards {
-    unique OWN;
-  }
-  interpretation {
-    //:: UnexpectedOutput(typechecker_error, /voila/issue/37/)
-    x.val |-> v && x.next |-> ?dummy // BUG: points-to operator binds too strongly
-  }
-  state { dummy }
-  actions {}
-
+procedure test02(cell c1)
+  requires c1.val |-> 1 + 2 && c1 != null;
+  ensures  c1.val |-> 3;

@@ -336,7 +336,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     seqLiteral |
     seqOperation |
     predicateExp |
-    (location <~ "|->") ~ binderOrExpression ^^ PPointsTo |
+    (location <~ "|->") ~ (binder | exp70) ^^ PPointsTo |
     (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
     idnuse <~ "|=>" <~ "<D>" ^^ PDiamond |
     guardExp |
@@ -379,15 +379,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val binder: Parser[PLogicalVariableBinder] =
     "?" ~> idndef ^^ (id => PLogicalVariableBinder(id))
 
-  lazy val binderOrExpression: Parser[PExpression] =
-    "?" ~> idndef ^^ (id => PLogicalVariableBinder(id)) |
-    expression
-
   lazy val listOfExpressions: Parser[Vector[PExpression]] =
     repsep(expression, ",")
 
   lazy val listOfBindersOrExpressions: Parser[Vector[PExpression]] =
-    repsep(binderOrExpression, ",")
+    repsep(binder | expression, ",")
 
   lazy val typ: PackratParser[PType] =
     "int" ^^^ PIntType() |
