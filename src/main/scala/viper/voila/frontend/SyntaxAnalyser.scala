@@ -59,19 +59,21 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val region: Parser[PRegion] =
     ("region" ~> idndef) ~
-    ("(" ~> formalArg) ~ (("," ~> formalArgs).? <~ ")") ~
+    ("(" ~> formalArgsNonEmpty) ~ ((";" ~> formalArgsNonEmpty).? <~ ")") ~
     ("guards" ~> "{" ~> guard.+ <~ "}") ~
     ("interpretation" ~> "{" ~> expression <~ "}") ~
     ("state" ~> "{" ~> expression <~ "}") ~
     ("actions" ~> "{" ~> action.* <~ "}") ^^ {
-      case id ~ regionId ~ optArgs ~ guards ~ interpretation ~ abstraction ~ actions =>
+      case id ~ inArgs ~ optOutArgs ~ guards ~ interpretation ~ state ~ actions =>
+        val outArgs = optOutArgs.getOrElse(Vector.empty)
+
         PRegion(
           id,
-          regionId,
-          optArgs.getOrElse(Vector.empty),
+          inArgs,
+          outArgs,
           guards,
           interpretation,
-          abstraction,
+          state,
           actions)
     }
 
@@ -131,6 +133,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "primitive_atomic" ^^^ PPrimitiveAtomic() |
     "non_atomic" ^^^ PNonAtomic() |
     success(PNonAtomic())
+
+  lazy val formalArgsNonEmpty: Parser[Vector[PFormalArgumentDecl]] =
+    rep1sep(formalArg, ",")
 
   lazy val formalArgs: Parser[Vector[PFormalArgumentDecl]] =
     repsep(formalArg, ",")
@@ -315,6 +320,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val exp50: PackratParser[PExpression] = /* Left-associative */
     exp50 ~ ("+" ~> exp40) ^^ PAdd |
     exp50 ~ ("-" ~> exp40) ^^ PSub |
+    exp50 ~ ("*" ~> exp40) ^^ PMul |
     exp50 ~ ("%" ~> exp40) ^^ PMod |
     exp50 ~ ("/" ~> exp40) ^^ PDiv |
     exp40

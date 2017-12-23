@@ -115,17 +115,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
                   case RegionEntity(decl) =>
                     /* A region predicate has the following argument structure:
-                     * one region id, several regular arguments, one optional out-argument.
--                    * Hence, the provided argument count should be formal arguments plus 1 or 2.
+                     * one region id, followed by multiple in-arguments, optionally followed by
+                     * out-arguments.
 -                    */
-                    val requiredArgCount = 1 + decl.formalArgs.length
+                    val expectedArgCounts =
+                      (decl.formalInArgs.length,
+                       decl.formalInArgs.length + decl.formalOutArgs.length + 1)
+
                     val actualArgCount = args.length
-                    val delta = actualArgCount - requiredArgCount
+
                     message(
                       id,
-                        s"Wrong number of arguments for '${id.name}', got $actualArgCount "
-                      + s"but expected $requiredArgCount or ${requiredArgCount + 1}",
-                      delta != 0 && delta != 1)
+                        s"Wrong number of arguments for '${id.name}': expected at least "
+                      + s"${expectedArgCounts._1} (no out-arguments) and at most "
+                      + s"${expectedArgCounts._2} (all out-arguments), but got $actualArgCount",
+                      !(expectedArgCounts._1 <= actualArgCount && actualArgCount <= expectedArgCounts._2))
 
                   case _ =>
                     message(id, s"Cannot call ${id.name} here")
@@ -282,8 +286,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
     case idef: PIdnDef =>
       idef match {
+        case tree.parent(tree.parent(region: PRegion)) if region.formalOutArgs.exists(_.id eq idef) =>
+          /* Region out args must be bound inside the interpretation; thus, don't add them here */
+          out(idef)
+
         case tree.parent(tree.parent(_: PBindingContext with PScope)) | /* PAction2, PAction3, PSetComprehension */
-             tree.parent(_: PScope) =>  /* PProcedure etc. */
+             tree.parent(_: PScope) => /* PProcedure etc. */
 
           /* Don't add identifiers that have already been added (in defenvin) */
           out(idef)
@@ -398,6 +406,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => enclosingStatementAttr(of)(p)
     }}
 
+  def enclosingAssertion(of: PAstNode): PExpression =
+    enclosingAssertionAttr(of)(of)
+
+  private lazy val enclosingAssertionAttr: PAstNode => PAstNode => PExpression =
+    paramAttr { of => {
+      case tree.parent(p: PExpression) => enclosingAssertionAttr(of)(p)
+      case p: PExpression => p
+    }}
+
   lazy val isGhost: PStatement => Boolean =
     attr {
       case _: PGhostStatement => true
@@ -436,9 +453,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PPointsTo(location, _) =>
         typeOfLocation(location)
 
-      case PPredicateExp(id, _) =>
+      case predicateExp @ PPredicateExp(id, _) =>
         val region = entity(id).asInstanceOf[RegionEntity].declaration
-        typ(region.state)
+
+        outArgumentIndexOf(predicateExp)(binder) match {
+          case Some(idx) => region.formalOutArgs(idx).typ
+          case None => typ(region.state)
+        }
 
       case PInterferenceClause(`binder`, set, _) =>
         typ(set).asInstanceOf[PSetType].elementType
@@ -489,12 +510,31 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         val idx = arguments.indices.find(arguments(_) == binder).get
 
-        assert(idx == region.formalArgs.length + 1,
-                 s"Expected logical variable binder $binder to be the last predicate argument, "
-               + s"but got $predicateExp")
+        assert(idx >= region.formalInArgs.length,
+               s"Logical variables can only be bound by out-arguments")
 
         predicateExp
     }
+
+  lazy val outArgumentIndexOf: PPredicateExp => PLogicalVariableBinder => Option[Int] =
+    paramAttr(exp => binder => {
+      val region =
+        entity(exp.predicate) match {
+          case regionEntity: RegionEntity => regionEntity.declaration
+          case _ => sys.error(s"Logical variables cannot yet be bound by a non-region predicate: $exp")
+        }
+
+      val args = exp.arguments
+
+      val idx =
+        args.indices.find(args(_) == binder).get - region.formalInArgs.length
+
+      assert(0 <= idx && idx < region.formalOutArgs.length + 1,
+             s"Logical variables can only be bound by out-arguments")
+
+      if (idx < region.formalOutArgs.length) Some(idx) /* Regular out-argument */
+      else None /* Region state out-argument */
+    })
 
   /**
     * What is the type of an expression?
@@ -507,7 +547,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case PIdnExp(id) => typeOfIdn(id)
 
-      case _: PAdd | _: PSub | _: PMod | _: PDiv => PIntType()
+      case _: PAdd | _: PSub | _: PMul | _: PMod | _: PDiv => PIntType()
       case _: PAnd | _: POr | _: PNot => PBoolType()
       case _: PEquals | _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
 
@@ -588,7 +628,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             PUnknownType()
         }
 
-      case tree.parent(_: PAdd | _: PSub | _: PMod | _: PDiv) => PIntType()
+      case tree.parent(_: PAdd | _: PSub | _: PMul | _: PMod | _: PDiv) => PIntType()
       case tree.parent(_: PAnd | _: POr | _: PNot) => PBoolType()
       case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => PIntType()
 

@@ -19,11 +19,16 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = makeAtomic.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, vprRegionArgs, None) =
+    val (region, vprInArgs, outArgs) =
       getAndTranslateRegionPredicateDetails(makeAtomic.regionPredicate)
 
+    assert(
+      outArgs.isEmpty,
+       "Using-clauses expect region assertions without out-arguments, but got " +
+      s"${makeAtomic.regionPredicate} at ${makeAtomic.regionPredicate.position}")
+
     val regionType = semanticAnalyser.typ(region.state)
-    val vprRegionIdArg = vprRegionArgs.head
+    val vprRegionIdArg = vprInArgs.head
 
     val guard =
       semanticAnalyser.entity(makeAtomic.guard.guard).asInstanceOf[GuardEntity]
@@ -51,7 +56,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val vprAtomicityContextX =
       vpr.DomainFuncApp(
         atomicityContextFunction(regionId),
-        vprRegionArgs,
+        vprInArgs,
         Map.empty[vpr.TypeVar, vpr.Type]
       )()
 
@@ -130,7 +135,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val vprRegionState =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprRegionArgs
+        vprInArgs
       )()
 
     val assumeCurrentStateIsStepTo =
@@ -186,19 +191,24 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(updateRegion: PUpdateRegion): vpr.Stmt = {
-    val (region, vprRegionArgs, None) =
+    val (region, vprInArgs, vprOutArgs) =
       getAndTranslateRegionPredicateDetails(updateRegion.regionPredicate)
 
+      assert(
+        vprOutArgs.isEmpty,
+         "Using-clauses expect region assertions without out-arguments, but got " +
+        s"${updateRegion.regionPredicate} at ${updateRegion.regionPredicate.position}")
+
     val regionType = semanticAnalyser.typ(region.state)
-    val vprRegionIdArg = vprRegionArgs.head
+    val vprRegionId = vprInArgs.head
 
     val exhaleDiamond =
-      vpr.Exhale(diamondAccess(vprRegionIdArg))()
+      vpr.Exhale(diamondAccess(vprRegionId))()
 
     val label = freshLabel("pre_region_update")
 
     val unfoldRegionPredicate =
-      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))().withSource(updateRegion.regionPredicate)
+      vpr.Unfold(regionPredicateAccess(region, vprInArgs))().withSource(updateRegion.regionPredicate)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
@@ -208,7 +218,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val ruleBody = translate(updateRegion.body)
 
     val foldRegionPredicate =
-      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))().withSource(updateRegion.regionPredicate)
+      vpr.Fold(regionPredicateAccess(region, vprInArgs))().withSource(updateRegion.regionPredicate)
 
     val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
     errorBacktranslator.addErrorTransformer {
@@ -219,7 +229,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val currentState =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprRegionArgs
+        vprInArgs
       )()
 
     val oldState =
@@ -231,8 +241,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val stateChanged = vpr.NeCmp(currentState, oldState)()
 
     val obtainTrackingResource = {
-      val stepFrom = stepFromAccess(vprRegionIdArg, regionType)
-      val stepTo = stepToAccess(vprRegionIdArg, regionType)
+      val stepFrom = stepFromAccess(vprRegionId, regionType)
+      val stepTo = stepToAccess(vprRegionId, regionType)
 
       val inhaleFromTo =
         vpr.Inhale(
@@ -254,7 +264,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       )()
     }
 
-    val inhaleDiamond = vpr.Inhale(diamondAccess(vprRegionIdArg))()
+    val inhaleDiamond = vpr.Inhale(diamondAccess(vprRegionId))()
 
     val postRegionUpdate =
       vpr.If(
@@ -279,10 +289,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(useAtomic: PUseAtomic): vpr.Stmt = {
-    val (region, regionArgs, None) =
-      getRegionPredicateDetails(useAtomic.regionPredicate)
-    val vprRegionArgs = regionArgs map translate
-    val vprRegionIdArg = vprRegionArgs.head
+    val (region, inArgs, outArgs) = getRegionPredicateDetails(useAtomic.regionPredicate)
+    val vprInArgs = inArgs map translate
+    val vprRegionId = vprInArgs.head
+
+    assert(
+      outArgs.isEmpty,
+       "Using-clauses expect region assertions without out-arguments, but got " +
+      s"${useAtomic.regionPredicate} at ${useAtomic.regionPredicate.position}")
 
     val guard =
       semanticAnalyser.entity(useAtomic.guard.guard).asInstanceOf[GuardEntity]
@@ -299,35 +313,38 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val unfoldRegionPredicate =
-      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
+      vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
         UseAtomicError(useAtomic, InsufficientRegionPermissionError(useAtomic.regionPredicate))
     }
 
-    currentlyOpenRegions = (region, regionArgs, preUseAtomicLabel) :: currentlyOpenRegions
+    currentlyOpenRegions = (region, inArgs, preUseAtomicLabel) :: currentlyOpenRegions
     val ruleBody = translate(useAtomic.body)
-    assert(currentlyOpenRegions.head == (region, regionArgs, preUseAtomicLabel))
+    assert(currentlyOpenRegions.head == (region, inArgs, preUseAtomicLabel))
     currentlyOpenRegions = currentlyOpenRegions.tail
 
     val foldRegionPredicate =
-      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+      vpr.Fold(
+        regionPredicateAccess(region, vprInArgs).withSource(useAtomic.regionPredicate)
+      )().withSource(useAtomic.regionPredicate)
+
+    /* TODO: Reconsider error messages - introduce dedicated "region closing failed" error? */
 
     val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.FoldFailed if e causedBy foldRegionPredicate =>
-        UseAtomicError(
-          useAtomic,
-          IllegalRegionStateChangeError(
-            useAtomic.regionPredicate,
-            ebt.translate(e.reason)))
+        UseAtomicError(useAtomic)
+          .dueTo(IllegalRegionStateChangeError(useAtomic.regionPredicate))
+          .dueTo(AdditionalErrorClarification("In particular, closing the region at the end of the use-atomic block might fail", useAtomic.regionPredicate))
+          .dueTo(ebt.translate(e.reason))
     }
 
     val currentState =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprRegionArgs
+        vprInArgs
       )()
 
     val oldState =
@@ -342,7 +359,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           currentState,
           vpr.FuncApp(
             guardTransitiveClosureFunction(guard, region),
-            Vector(vprRegionIdArg, oldState)
+            Vector(vprRegionId, oldState)
           )()
         )()
       )()
@@ -368,26 +385,30 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(openRegion: POpenRegion): vpr.Stmt = {
-    val (region, regionArgs, None) =
-      getRegionPredicateDetails(openRegion.regionPredicate)
-    val vprRegionArgs = regionArgs map translate
+    val (region, inArgs, outArgs) = getRegionPredicateDetails(openRegion.regionPredicate)
+    val vprInArgs = inArgs map translate
     val preOpenLabel = freshLabel("pre_open_region")
 
+    assert(
+      outArgs.isEmpty,
+       "Using-clauses expect region assertions without out-arguments, but got " +
+      s"${openRegion.regionPredicate} at ${openRegion.regionPredicate.position}")
+
     val unfoldRegionPredicate =
-      vpr.Unfold(regionPredicateAccess(region, vprRegionArgs))()
+      vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
         OpenRegionError(openRegion, InsufficientRegionPermissionError(openRegion.regionPredicate))
     }
 
-    currentlyOpenRegions = (region, regionArgs, preOpenLabel) :: currentlyOpenRegions
+    currentlyOpenRegions = (region, inArgs, preOpenLabel) :: currentlyOpenRegions
     val ruleBody = translate(openRegion.body)
-    assert(currentlyOpenRegions.head == (region, regionArgs, preOpenLabel))
+    assert(currentlyOpenRegions.head == (region, inArgs, preOpenLabel))
     currentlyOpenRegions = currentlyOpenRegions.tail
 
     val foldRegionPredicate =
-      vpr.Fold(regionPredicateAccess(region, vprRegionArgs))()
+      vpr.Fold(regionPredicateAccess(region, vprInArgs))()
 
     val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
     errorBacktranslator.addErrorTransformer {
@@ -398,7 +419,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val currentState =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprRegionArgs
+        vprInArgs
       )()
 
     val oldState =

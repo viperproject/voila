@@ -1,0 +1,32 @@
+region Pair(id r, pair x; int v, int w)
+  guards { unique G; }
+  interpretation { x.fst |-> ?v && x.snd |-> ?w }
+  state { v + w }
+  actions {}
+
+procedure makePair() returns (id r, pair x)
+  ensures Pair(r, x);
+
+procedure test01() {
+  id r;
+  pair x;
+
+  r, x := makePair();
+
+  assert Pair(r, x, ?v1, ?w1, ?abs1);
+  havoc x;
+  assert abs1 == v1 + w1;
+}
+
+procedure test02(id r, pair x) {
+  inhale Pair(r, x, ?v1, ?w1, ?abs1) && v1 < w1;
+  assert abs1 < 2*w1;
+
+  exhale Pair(r, x, ?v2, ?w2, ?abs2) && v2 < w2;
+  assert v1 == v2 && w1 == w2 && abs1 == abs2;
+}
+
+struct pair {
+  int fst;
+  int snd;
+}

@@ -1,0 +1,37 @@
+region Triple(id r, triple x; int u, int v)
+  guards { unique G; }
+  interpretation { x.fst |-> ?u && x.snd |-> ?v && x.thd |-> ?w && 0 < w }
+  state { w <= u + v + w }
+  actions {}
+
+procedure test01(id r, triple x)
+  requires Triple(r, x, ?u, 0, ?abs);
+  requires 0 < u;
+  ensures  abs;
+{
+  skip;
+}
+
+procedure test03(id r, triple x)
+  requires Triple(r, x, ?u, _, ?abs);
+  requires 0 < u;
+  //:: ExpectedOutput(postcondition_error:assertion_error)
+  ensures  abs;
+{
+  skip;
+}
+
+procedure test02(id r, triple x)
+  requires Triple(r, x);
+{
+  assert Triple(r, x);
+  assert Triple(r, x, _);
+  assert Triple(r, x, _, _);
+  assert Triple(r, x, _, _, _);
+}
+
+struct triple {
+  int fst;
+  int snd;
+  int thd;
+}

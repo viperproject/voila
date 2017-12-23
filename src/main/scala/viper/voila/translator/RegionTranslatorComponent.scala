@@ -7,6 +7,7 @@
 package viper.voila.translator
 
 import scala.collection.mutable
+import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.voila.frontend._
 import viper.voila.reporting.{InsufficientGuardPermissionError, InsufficientRegionPermissionError, RegionStateError}
 import viper.silver.{ast => vpr}
@@ -39,6 +40,62 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
+  /* TODO: Unify/share code between regionOutArgumentXXX and regionStateFunction */
+
+  def regionOutArgumentFunctionName(region: PRegion, index: Int): String =
+    s"${region.id.name}_out$index"
+
+  def regionOutArgumentFunction(region: PRegion, index: Int): vpr.Function = {
+    assert(
+      0 <= index && index < region.formalOutArgs.length + 1,
+      s"Expected 0 <= index < ${region.formalOutArgs.length}, but got $index")
+
+    if (index == region.formalOutArgs.length) {
+      regionStateFunction(region)
+    } else {
+      val outArg = region.formalOutArgs(index)
+      val formalRegionArgs = region.formalInArgs map translate
+      val outType = translate(outArg.typ)
+
+      /* acc(region(inArgs)) */
+      val predicateAccess =
+        regionPredicateAccess(
+          region,
+          formalRegionArgs.map(_.localVar))
+
+      val collectOutArgumentBinders =
+        collect[Vector, PLogicalVariableBinder] {
+          case binder: PLogicalVariableBinder if binder.id == outArg.id => binder
+        }
+
+      val outArgBinder =
+        collectOutArgumentBinders(region.interpretation) match {
+          case Seq() =>
+            sys.error(s"Region out-argument ${outArg.id.name} isn't bound in the region interpretation")
+          case Seq(binder) =>
+            binder
+          case other =>
+            sys.error(s"Region out-argument ${outArg.id.name} is bound multiple times in the region interpretation")
+        }
+
+      val body =
+        vpr.Unfolding(
+          acc = predicateAccess,
+          body = translateUseOf(outArgBinder.id)
+        )()
+
+      vpr.Function(
+        name = regionOutArgumentFunctionName(region, index),
+        formalArgs = formalRegionArgs,
+        typ = outType,
+        pres = Vector(predicateAccess),
+        posts = Vector.empty,
+        decs = None,
+        body = Some(body)
+      )()
+    }
+  }
+
   def regionStateFunctionName(region: PRegion): String =
     s"${region.id.name}_state"
 
@@ -53,18 +110,14 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     regionStateFunctionCache.getOrElseUpdate(
       region,
       {
-        val formalRegionArg = translate(region.regionId)
-        val formalRegularArgs = region.formalArgs map translate
+        val formalRegionArgs = region.formalInArgs map translate
         val regionStateType = translate(semanticAnalyser.typ(region.state))
 
-        /* acc(region(id, args)) */
+        /* acc(region(inArgs)) */
         val predicateAccess =
           regionPredicateAccess(
             region,
-            formalRegionArg.localVar +: formalRegularArgs.map(_.localVar))
-
-        val formalArgs =
-          formalRegionArg +: formalRegularArgs
+            formalRegionArgs.map(_.localVar))
 
         val body =
           vpr.Unfolding(
@@ -82,12 +135,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
              */
             vpr.DomainFuncApp(
               funcname = regionStateTriggerFunctionName(region),
-              args = formalArgs map (_.localVar),
+              args = formalRegionArgs map (_.localVar),
               typVarMap = Map.empty
             )(pos = vpr.NoPosition,
               info = vpr.NoInfo,
               typPassed = vpr.Bool,
-              formalArgsPassed = formalArgs,
+              formalArgsPassed = formalRegionArgs,
               domainName = regionStateTriggerFunctionsDomainName,
               errT = vpr.NoTrafos),
             vpr.TrueLit()()
@@ -95,7 +148,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
         vpr.Function(
           name = regionStateFunctionName(region),
-          formalArgs = formalArgs,
+          formalArgs = formalRegionArgs,
           typ = regionStateType,
           pres = Vector(predicateAccess),
           posts = Vector(mentionTriggerFunction),
@@ -269,14 +322,14 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(region: PRegion): Vector[vpr.Declaration] = {
     val regionPredicateName = region.id.name
 
-    val formalRegionArg = translate(region.regionId)
-    val formalRegularArgs = region.formalArgs map translate
+    val formalRegionArgs = region.formalInArgs map translate
+    val formalRegionId = formalRegionArgs.head
 
     /* predicate region(id, args) { interpretation } */
     val regionPredicate =
       vpr.Predicate(
         name = regionPredicateName,
-        formalArgs = formalRegionArg +: formalRegularArgs,
+        formalArgs = formalRegionArgs,
         body = Some(translate(region.interpretation))
       )()
 
@@ -297,6 +350,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     (   guardPredicates
      ++ potentiallyHeldFunctions
      ++ transitiveClosureFunctions
+     ++ region.formalOutArgs.indices.map(regionOutArgumentFunction(region, _))
      ++ Vector(
           regionPredicate,
           regionStateFunction(region),
@@ -304,35 +358,37 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translateUseOf(regionPredicate: PPredicateExp): (vpr.PredicateAccessPredicate, vpr.Exp) = {
-    val (region, vprRegionArguments, vprRegionStateArgument) =
+    val (region, vprInArgs, vprOutArgConstraints) =
       getAndTranslateRegionPredicateDetails(regionPredicate)
 
-    val vprStateConstraint =
-      vprRegionStateArgument match {
-        case None | Some(Left(_: PLogicalVariableBinder)) => vpr.TrueLit()()
-        case Some(Right(vprStateArgument)) =>
-          val vprStateFunction = regionStateFunction(region)
+//    val vprStateConstraint =
+//      vprRegionStateArgument match {
+//        case None | Some(Left(_: PLogicalVariableBinder)) => vpr.TrueLit()()
+//        case Some(Right(vprStateArgument)) =>
+//          val vprStateFunction = regionStateFunction(region)
+//
+//          vprStateArgument match {
+//            case app: vpr.FuncApp if app.funcname == vprStateFunction.name =>
+//              /* Avoid generation of redundant constraints of the shape state(a, x) == state(a, x).
+//               * Should not be necessary in the long run.
+//               */
+//              vpr.TrueLit()()
+//            case _ =>
+//              vpr.EqCmp(
+//                vpr.FuncApp(
+//                  func = vprStateFunction,
+//                  args = vprInArgs
+//                )(),
+//                vprStateArgument
+//              )()
+//          }
+//      }
 
-          vprStateArgument match {
-            case app: vpr.FuncApp if app.funcname == vprStateFunction.name =>
-              /* Avoid generation of redundant constraints of the shape state(a, x) == state(a, x).
-               * Should not be necessary in the long run.
-               */
-              vpr.TrueLit()()
-            case _ =>
-              vpr.EqCmp(
-                vpr.FuncApp(
-                  func = vprStateFunction,
-                  args = vprRegionArguments
-                )(),
-                vprStateArgument
-              )()
-          }
-      }
+    val vprStateConstraint = viper.silicon.utils.ast.BigAnd(vprOutArgConstraints)
 
     val vprRegionPredicate =
       vpr.PredicateAccess(
-        args = vprRegionArguments,
+        args = vprInArgs,
         predicateName = region.id.name
       )().withSource(regionPredicate)
 
@@ -353,31 +409,54 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def getRegionPredicateDetails(predicateExp: PPredicateExp)
-                               : (PRegion, Vector[PExpression], Option[Either[PLogicalVariableBinder, PExpression]]) = {
+                               : (PRegion, Vector[PExpression], Vector[PExpression]) = {
 
     val region =
       semanticAnalyser.entity(predicateExp.predicate)
                       .asInstanceOf[RegionEntity]
                       .declaration
 
-    val (regionArguments, regionStateArgument) =
-      predicateExp.arguments.splitAt(region.formalArgs.length + 1) match {
-        case (args, Seq()) => (args, None)
-        case (args, Seq(binder: PLogicalVariableBinder)) => (args, Some(Left(binder)))
-        case (args, Seq(arg)) => (args, Some(Right(arg)))
-        case _ => sys.error(s"Unexpectedly many arguments: $predicateExp")
-      }
+//    val (regionArguments, regionStateArgument) =
+//      predicateExp.arguments.splitAt(region.formalInArgs.length) match {
+//        case (args, Seq()) => (args, None)
+//        case (args, Seq(binder: PLogicalVariableBinder)) => (args, Some(Left(binder)))
+//        case (args, Seq(arg)) => (args, Some(Right(arg)))
+//        case _ => sys.error(s"Unexpectedly many arguments: $predicateExp")
+//      }
+    val (inArgs, outArgsAndState) =
+      predicateExp.arguments.splitAt(region.formalInArgs.length)
 
-    (region, regionArguments, regionStateArgument)
+    (region, inArgs, outArgsAndState)
   }
 
   def getAndTranslateRegionPredicateDetails(predicateExp: PPredicateExp)
-                                           : (PRegion, Vector[vpr.Exp], Option[Either[PLogicalVariableBinder, vpr.Exp]]) = {
+                                           : (PRegion, Vector[vpr.Exp], Vector[vpr.EqCmp]) = {
 
-    val (region, regionArguments, regionStateArgument) = getRegionPredicateDetails(predicateExp)
-    val vprRegionStateArgument = regionStateArgument.map(_.right.map(translate))
+    val (region, inArgs, outArgsAndState) = getRegionPredicateDetails(predicateExp)
 
-    (region, regionArguments map translate, vprRegionStateArgument)
+    val vprInArgs = inArgs map translate
+
+    val vprOutConstraints =
+      outArgsAndState.zipWithIndex.flatMap {
+        case (_: PLogicalVariableBinder, _) => None
+        case (_: PIrrelevantValue, _) => None
+        case (exp, idx) =>
+          val vprOutValue =
+            vpr.FuncApp(
+              regionOutArgumentFunction(region, idx),
+              vprInArgs
+            )()
+
+          val constraint =
+            vpr.EqCmp(
+              vprOutValue,
+              translate(exp)
+            )()
+
+          Some(constraint)
+      }
+
+    (region, vprInArgs, vprOutConstraints)
   }
 
   def regionState(predicateExp: PPredicateExp): vpr.FuncApp = {
@@ -458,10 +537,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       specificInstance match {
         case Some(args) =>
           (args.head, args)
+
         case None =>
-          val idArg = vpr.LocalVar(s"$$${region.regionId.id.name}")(typ = translate(region.regionId.typ))
-          val furtherArgs = region.formalArgs map (a => vpr.LocalVar(s"$$${a.id.name}")(typ = translate(a.typ)))
-          (idArg, idArg +: furtherArgs)
+          val args = region.formalInArgs map (a => vpr.LocalVar(s"$$${a.id.name}")(typ = translate(a.typ)))
+          val id = args.head
+
+          (id, args)
       }
 
     def potentiallyQuantify(body: vpr.Exp, trigger: Option[vpr.Exp]): vpr.Exp = {

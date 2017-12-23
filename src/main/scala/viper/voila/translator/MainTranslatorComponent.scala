@@ -96,7 +96,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     vpr.DomainFunc(
       name = atomicityContextFunctionName(region.id.name),
-      formalArgs = translate(region.regionId) +: (region.formalArgs map translate),
+      formalArgs = region.formalInArgs map translate,
       typ = vprType
     )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
   }
@@ -163,11 +163,35 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           Vector(vpr.LocalVarAssign(vprVar, vprValue)())
 
-        case predicateExp @ PPredicateExp(_, _ :+ (binder: PLogicalVariableBinder)) =>
-          val vprVar = localVariableDeclaration(binder).localVar
-          val vprValue = regionState(predicateExp)
+        case predicateExp @ PPredicateExp(_, arguments) =>
+          semanticAnalyser.entity(predicateExp.predicate) match {
+            case _: RegionEntity =>
+              val (region, inArgs, outArgsAndState) = getRegionPredicateDetails(predicateExp)
+              val vprInArgs = inArgs map translate
 
-          Vector(vpr.LocalVarAssign(vprVar, vprValue)())
+              outArgsAndState.zipWithIndex.flatMap {
+                case (binder: PLogicalVariableBinder, index) =>
+                  val vprVar = localVariableDeclaration(binder).localVar
+
+                  val vprValue =
+                    vpr.FuncApp(
+                      regionOutArgumentFunction(region, index),
+                      vprInArgs
+                    )()
+
+                  val vprAssignment =
+                    vpr.LocalVarAssign(
+                      vprVar,
+                      vprValue
+                    )()
+
+                  Vector(vprAssignment)
+
+                case _ =>  Vector.empty
+              }
+
+            case _ => Vector.empty
+          }
       }
 
     collectBindings(assertion)
@@ -281,7 +305,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
     }
 
-    /* TODO: Related to code inside 'def directlyTranslate(PStatement)', case 'PAssert' --- unify */
+    /* TODO: Related to extractLogicalVariableBindings --- unify */
 
     val procedureWideBoundLogicalVariableDeclarations = {
       val collectBinders = collect[Vector, PLogicalVariableBinder] {
@@ -648,11 +672,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         surroundWithSectionComments(statement.statementName, vprStatement)
 
       case PUseRegionInterpretation(regionPredicate) =>
-        val (region, regionArguments, None) = getRegionPredicateDetails(regionPredicate)
-        val regionFormalArguments = region.regionId +: region.formalArgs
-        val vprRegionArguments = regionArguments map translate
-        val vprRegionId = vprRegionArguments.head
-        val vprRegionPredicateAccess = regionPredicateAccess(region, vprRegionArguments)
+        val (region, vprInArgs, Seq()) = getAndTranslateRegionPredicateDetails(regionPredicate)
+//        val (region, regionArguments, None) = getRegionPredicateDetails(regionPredicate)
+//        val regionFormalArguments = region.formalInArgs
+//        val vprRegionArguments = regionArguments map translate
+//        val vprRegionId = vprRegionArguments.head
+        val vprRegionId = vprInArgs.head
+        val vprRegionPredicateAccess = regionPredicateAccess(region, vprInArgs)
 
         val vprUnfoldRegion = vpr.Unfold(vprRegionPredicateAccess)()
 
@@ -664,7 +690,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val vprGuardPredicateAccesses = {
           guardExps foreach (guardExp => {
             assert(
-              regionFormalArguments.exists(_.id.name == guardExp.regionId.name),
+              region.formalInArgs.exists(_.id.name == guardExp.regionId.name),
               "Not yet supported: applying the use-region-interpretation statement to " +
               "a region whose interpretation includes guards whose arguments are not " +
               "directly formal region arguments. " +
@@ -932,6 +958,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PAtLeast(left, right) => vpr.GeCmp(go(left), go(right))().withSource(expression)
       case PAdd(left, right) => vpr.Add(go(left), go(right))().withSource(expression)
       case PSub(left, right) => vpr.Sub(go(left), go(right))().withSource(expression)
+      case PMul(left, right) => vpr.Mul(go(left), go(right))().withSource(expression)
       case PMod(left, right) => vpr.Mod(go(left), go(right))().withSource(expression)
       case PDiv(left, right) => vpr.Div(go(left), go(right))().withSource(expression)
       case PConditional(cond, thn, els) => vpr.CondExp(go(cond), go(thn), go(els))().withSource(expression)

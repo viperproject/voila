@@ -122,8 +122,13 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
         "struct" <+> toDoc(id) <>
         nest(braces(ssep(fields map toDoc, semi <> line)))
 
-      case PRegion(id, regionId, formalArgs, guards, interpretation, state, actions) =>
-        (   "region" <+> toDoc(id) <> asFormalArguments(formalArgs)
+      case PRegion(id, formalInArgs, formalOutArgs, guards, interpretation, state, actions) =>
+        (   "region" <+> toDoc(id)
+                     <> asFormalArguments(formalInArgs)
+                     <> (formalOutArgs match {
+                          case Seq() => emptyDoc
+                          case args => semi <+> ssep(args map toDoc, comma)
+                        })
          <> nest("guards" <+> braces(ssep(guards map toDoc, semi <> line)))
          <> nest("interpretation" <+> braces(toDoc(interpretation)))
          <> nest("state" <+> braces(toDoc(state)))
@@ -266,6 +271,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PAtLeast(left, right) => parens(toDoc(left) <+> ">=" <+> toDoc(right))
       case PAdd(left, right) => parens(toDoc(left) <+> "+" <+> toDoc(right))
       case PSub(left, right) => parens(toDoc(left) <+> "-" <+> toDoc(right))
+      case PMul(left, right) => parens(toDoc(left) <+> "*" <+> toDoc(right))
       case PMod(left, right) => parens(toDoc(left) <+> "%" <+> toDoc(right))
       case PDiv(left, right) => parens(toDoc(left) <+> "/" <+> toDoc(right))
       case PSetContains(element, set) => parens(toDoc(element) <+> "in" <+> toDoc(set))

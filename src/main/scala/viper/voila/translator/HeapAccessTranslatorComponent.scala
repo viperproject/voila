@@ -75,7 +75,15 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
           translate(location)
 
         case predicateExp: PPredicateExp =>
-          regionState(predicateExp)
+          val (region, inArgs, outArgs) = getRegionPredicateDetails(predicateExp)
+          val idx = outArgs.indexOf(declaration)
+
+          assert(idx != -1)
+
+          vpr.FuncApp(
+            regionOutArgumentFunction(region, idx),
+            inArgs map translate
+          )()
 
         case PInterferenceClause(`declaration`, _, regionId) =>
           regionState(semanticAnalyser.usedWithRegionPredicate(regionId))
@@ -101,7 +109,13 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.Old(vprHeapRead)()
 
       case (LogicalVariableContext.Procedure, _) =>
-        vpr.LocalVar(declaration.id.name)(translate(semanticAnalyser.typeOfIdn(declaration.id)))
+        val declAss = semanticAnalyser.enclosingAssertion(declaration)
+        val idAss = semanticAnalyser.enclosingAssertion(id)
+
+        if (declAss eq idAss)
+          vprHeapRead
+        else
+          vpr.LocalVar(declaration.id.name)(translate(semanticAnalyser.typeOfIdn(declaration.id)))
 
       case _ =>
         sys.error(

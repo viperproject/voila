@@ -41,6 +41,7 @@ sealed trait VerificationError extends VoilaError {
   def localMessage: String
   def detail: Option[VerificationError]
   def dueTo(detailToAppend: VerificationError): VerificationError
+  def dueTo(detailToAppend: Option[VerificationError]): VerificationError
 
 //  def message(positions: Positions): String = {
 //    val formattedPosition: String =
@@ -63,6 +64,12 @@ sealed abstract class AbstractVerificationError extends VerificationError {
     detail match {
       case None => dup(offendingNode, Some(detailToAppend))
       case Some(det) => dup(offendingNode, Some(det dueTo detailToAppend))
+    }
+
+  def dueTo(detailToAppend: Option[VerificationError]): VerificationError =
+    detailToAppend match {
+      case Some(det) => dueTo(det)
+      case None => this
     }
 
   def id: String =

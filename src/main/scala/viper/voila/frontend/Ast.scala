@@ -136,13 +136,16 @@ sealed trait PMember extends PDeclaration with PScope
 case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMember
 
 case class PRegion(id: PIdnDef,
-                   regionId: PFormalArgumentDecl,
-                   formalArgs: Vector[PFormalArgumentDecl],
+                   formalInArgs: Vector[PFormalArgumentDecl],
+                   formalOutArgs: Vector[PFormalArgumentDecl],
                    guards: Vector[PGuardDecl],
                    interpretation: PExpression,
                    state: PExpression,
                    actions: Vector[PAction])
-    extends PMember
+    extends PMember {
+
+  val regionId: PFormalArgumentDecl = formalInArgs.head
+}
 
 case class PProcedure(id: PIdnDef,
                       formalArgs: Vector[PFormalArgumentDecl],
@@ -310,6 +313,7 @@ case class PAtLeast(left: PExpression, right: PExpression) extends PBinOp
 
 case class PAdd(left: PExpression, right: PExpression) extends PBinOp
 case class PSub(left: PExpression, right: PExpression) extends PBinOp
+case class PMul(left: PExpression, right: PExpression) extends PBinOp
 case class PMod(left: PExpression, right: PExpression) extends PBinOp
 case class PDiv(left: PExpression, right: PExpression) extends PBinOp
 
