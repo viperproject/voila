@@ -1,0 +1,14 @@
+struct cell {
+  int val;
+}
+
+procedure test(cell c) {
+  inhale c.val |-> ?v0;
+
+  do
+    invariant c.val |-> ?vi;
+  {
+    //:: UnexpectedOutput(typechecker_error, /voila/issue/39/)
+    assert c.val |-> ?v;
+  } while (true);
+}
