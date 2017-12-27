@@ -645,13 +645,16 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val atomicity: PStatement => AtomicityKind =
     attr {
       case _: PAssign => AtomicityKind.Nonatomic
-      case _: PIf => AtomicityKind.Nonatomic
-      case _: PWhile => AtomicityKind.Nonatomic
 
-      case PSeqComp(first, second) =>
-        if (isGhost(first)) atomicity(second)
-        else if (isGhost(second)) atomicity(first)
-        else AtomicityKind.Nonatomic
+      case compound @ (_: PIf | _: PWhile | _: PSeqComp) =>
+        // TODO: Cast shouldn't be necessary, but Scala fails to type 'compound' as 'PCompoundStatement'
+        val components = compound.asInstanceOf[PCompoundStatement].components
+
+        components.foldLeft(AtomicityKind.Atomic: AtomicityKind) { case (atom, comp) =>
+          if (atom == AtomicityKind.Nonatomic) atom /* Nonatomicity prevails */
+          else if (isGhost(comp)) atom /* Ghost statements don't affect atomicity */
+          else atomicity(comp) /* Otherwise, take the current component's atomicity */
+        }
 
       case _: PSkip => AtomicityKind.Atomic
       case _: PHeapWrite => AtomicityKind.Atomic
