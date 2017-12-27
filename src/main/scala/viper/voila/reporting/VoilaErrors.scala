@@ -130,6 +130,28 @@ case class AssertError(offendingNode: PAssert, detail: Option[VerificationError]
     copy(offendingNode, detail)
 }
 
+case class FoldError(offendingNode: PFold, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PFold
+  def localId: String = "fold_error"
+  val localMessage: String = "Fold might fail"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class UnfoldError(offendingNode: PUnfold, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PUnfold
+  def localId: String = "unfold_error"
+  val localMessage: String = "Unfold might fail"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class LoopInvariantPreservationError(offendingNode: PInvariantClause, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
@@ -229,10 +251,10 @@ case class InterferenceError(offendingNode: PInterferenceClause, detail: Option[
     copy(offendingNode, detail)
 }
 
-case class InsufficientRegionPermissionError(offendingNode: PExpression, detail: Option[VerificationError] = None)
+case class InsufficientRegionPermissionError(offendingNode: PPredicateAccess, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
-  type OffendingNode = PExpression
+  type OffendingNode = PPredicateAccess
   def localId: String = "region_permission_error"
   val localMessage: String = s"Region $offendingNode might not be accessible"
 
@@ -240,10 +262,10 @@ case class InsufficientRegionPermissionError(offendingNode: PExpression, detail:
     copy(offendingNode, detail)
 }
 
-case class RegionStateError(offendingNode: PExpression, detail: Option[VerificationError] = None)
+case class RegionStateError(offendingNode: PPredicateAccess, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
-  type OffendingNode = PExpression
+  type OffendingNode = PPredicateAccess
   def localId: String = "region_state_error"
   val localMessage: String = s"Region $offendingNode might not be in the expected state"
 

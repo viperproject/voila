@@ -33,6 +33,10 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
         PreconditionError(sourceNode, translate(reason))
       case vprerr.AssertFailed(Source(sourceNode: PAssert), reason, _) =>
         AssertError(sourceNode, translate(reason))
+      case vprerr.FoldFailed(Source(sourceNode: PFold), reason, _) =>
+        FoldError(sourceNode, translate(reason))
+      case vprerr.UnfoldFailed(Source(sourceNode: PUnfold), reason, _) =>
+        UnfoldError(sourceNode, translate(reason))
       case vprerr.LoopInvariantNotEstablished(Source(sourceNode: PInvariantClause), reason, _) =>
         LoopInvariantEstablishmentError(sourceNode, translate(reason))
       case vprerr.LoopInvariantNotPreserved(Source(sourceNode: PInvariantClause), reason, _) =>

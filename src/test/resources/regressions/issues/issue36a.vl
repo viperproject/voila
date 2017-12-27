@@ -1,4 +1,4 @@
-//:: IgnoreFile(/voila/issue/36/)
+// :: IgnoreFile(/voila/issue/36/)
 
 region R(id s, int x)
   guards { duplicable G; }
@@ -6,10 +6,56 @@ region R(id s, int x)
   state { 0 }
   actions {}
 
-procedure test(id s) returns (int ret)
+procedure test01(id s) returns (int ret)
   requires true;
   ensures R(s, ret);
 {
   ret := 0;
   fold R(s, ret);
+}
+
+procedure test02(id s) returns (int ret)
+  requires true;
+  ensures R(s, ret);
+{
+  ret := 0;
+  fold R(s, ret, 0);
+}
+
+procedure test03(id s) returns (int ret)
+  requires true;
+  ensures R(s, ret);
+{
+  ret := 0;
+  //:: ExpectedOutput(fold_error:region_state_error)
+  fold R(s, ret, 123456);
+}
+
+procedure test04(id s, int ret)
+  requires R(s, ret, 0);
+{
+  unfold R(s, ret);
+}
+
+procedure test05(id s, int ret)
+  requires R(s, ret, 0);
+{
+  unfold R(s, ret, 0);
+}
+
+procedure test06(id s, int ret)
+  requires R(s, ret, 0);
+{
+  //:: ExpectedOutput(unfold_error:region_state_error)
+  unfold R(s, ret, 123456);
+}
+
+
+predicate P(int x) { x == 0 }
+
+procedure test20(int x)
+  requires P(x);
+  ensures  x == 0;
+{
+  unfold P(x);
 }

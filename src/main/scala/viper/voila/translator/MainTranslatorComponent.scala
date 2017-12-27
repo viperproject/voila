@@ -11,7 +11,7 @@ import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
-import viper.voila.reporting.{InsufficientRegionPermissionError, InterferenceError, PreconditionError}
+import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, UnfoldError}
 import viper.silver.ast.LocalVarDecl
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
@@ -163,7 +163,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           Vector(vpr.LocalVarAssign(vprVar, vprValue)())
 
-        case predicateExp @ PPredicateExp(_, arguments) =>
+        case predicateExp: PPredicateExp =>
           semanticAnalyser.entity(predicateExp.predicate) match {
             case _: RegionEntity =>
               val (region, inArgs, outArgsAndState) = getRegionPredicateDetails(predicateExp)
@@ -573,29 +573,46 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, vprWrite)
 
-      case stmt @ PPredicateAccess(predicate, arguments) =>
-        val vprArguments =
-          semanticAnalyser.entity(predicate) match {
-            case _: PredicateEntity => arguments map translate
-            case _: RegionEntity => arguments.init map translate
+      case predicateAccess: PPredicateAccess =>
+        val (vprPredicateAccess, optConstraints) = translateUseOf(predicateAccess)
+
+        val optVprCheckConstraints =
+          optConstraints.map(vpr.Assert(_)().withSource(statement))
+
+        val vprResult =
+          predicateAccess match {
+            case _: PFold =>
+              val vprFold = vpr.Fold(vprPredicateAccess)().withSource(statement)
+
+              optVprCheckConstraints.fold(vprFold: vpr.Stmt)(vprCheck =>
+                vpr.Seqn(
+                  Vector(vprFold, vprCheck),
+                  Vector.empty
+                )()
+              )
+
+            case _: PUnfold =>
+              val vprUnfold = vpr.Unfold(vprPredicateAccess)().withSource(statement)
+
+              optVprCheckConstraints.fold(vprUnfold: vpr.Stmt)(vprCheck =>
+                vpr.Seqn(
+                  Vector(vprCheck, vprUnfold),
+                  Vector.empty
+                )()
+              )
           }
 
-        val loc =
-          vpr.PredicateAccess(
-            args = vprArguments,
-            predicateName = predicate.name
-          )()
+        val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
+        optVprCheckConstraints.foreach(vprCheck =>
+          errorBacktranslator.addErrorTransformer {
+            case err: vprerr.AssertFailed if err causedBy vprCheck =>
+              predicateAccess match {
+                case fold: PFold => FoldError(fold, ebt.translate(err.reason))
+                case unfold: PUnfold => UnfoldError(unfold, ebt.translate(err.reason))
+              }
+          })
 
-        val acc =
-          vpr.PredicateAccessPredicate(
-            loc = loc,
-            perm = vpr.FullPerm()()
-          )()
-
-        stmt match {
-          case _: PFold => vpr.Fold(acc)()
-          case _: PUnfold => vpr.Unfold(acc)()
-        }
+        surroundWithSectionComments(statement.statementName, vprResult)
 
       case PInhale(assertion) =>
         val vprInhale =
@@ -673,10 +690,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       case PUseRegionInterpretation(regionPredicate) =>
         val (region, vprInArgs, Seq()) = getAndTranslateRegionPredicateDetails(regionPredicate)
-//        val (region, regionArguments, None) = getRegionPredicateDetails(regionPredicate)
-//        val regionFormalArguments = region.formalInArgs
-//        val vprRegionArguments = regionArguments map translate
-//        val vprRegionId = vprRegionArguments.head
         val vprRegionId = vprInArgs.head
         val vprRegionPredicateAccess = regionPredicateAccess(region, vprInArgs)
 
@@ -1002,20 +1015,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.Unfolding(vprPredicate, vprBody)().withSource(expression)
 
       case predicateExp @ PPredicateExp(id, args) =>
-        semanticAnalyser.entity(id) match {
-          case _: PredicateEntity =>
-            vpr.PredicateAccessPredicate(
-              vpr.PredicateAccess(args map translate, id.name)().withSource(expression),
-              vpr.FullPerm()().withSource(expression)
-            )().withSource(predicateExp)
+        val (vprPredicateAccess, optVprConstraints) = translateUseOf(predicateExp)
 
-          case _: RegionEntity =>
-            val (vprRegionAccess, vprRegionStateConstraint) = translateUseOf(predicateExp)
-
-            vpr.And(vprRegionAccess, vprRegionStateConstraint)().withSource(predicateExp)
-
-          case other =>
-            sys.error(s"Not yet supported: $other")
+        optVprConstraints match {
+          case Some(vprConstraint) =>
+            vpr.And(vprPredicateAccess, vprConstraint)().withSource(predicateExp)
+          case None =>
+            vprPredicateAccess
         }
 
       case PDiamond(regionId) =>

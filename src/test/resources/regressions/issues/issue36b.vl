@@ -1,6 +1,4 @@
-//:: IgnoreFile(/voila/issue/36/)
-
-struct head {
+struct hd {
   node ptr;
 }
 
@@ -10,7 +8,7 @@ struct node {
 }
 
 
-region Qu(id s, head h)
+region Qu(id s, hd h)
   guards {
     duplicable G;
   }
@@ -22,12 +20,12 @@ region Qu(id s, head h)
 
 
 
-procedure makeQueue(id r) returns (head ret)
+procedure makeQueue(id r) returns (hd ret)
   requires true;
   ensures Qu(r, ret);
 {
   node y;
-  head x;
+  hd x;
 
   inhale (y.val |-> ?v);
   inhale (y.next |-> ?n);
@@ -39,5 +37,5 @@ procedure makeQueue(id r) returns (head ret)
   x.ptr := y;
 
   ret := x;
-  fold Qu(r, ret/*, 0*/);  // BUG: produces incorrect Viper program if we remove the last argument
+  fold Qu(r, ret);
 }
