@@ -1,5 +1,3 @@
-//:: IgnoreFile(/voila/issue/00000000000000000000/)
-
 // Corresponds to:
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/BagStack.t
 //
@@ -53,126 +51,140 @@ region BagList(id r, node y; int v, node z)
 procedure push(id r, bag x, int v)
   requires Bag(r, x, 0) && Inv(v);
   ensures  Bag(r, x, 0);
-//{
-//  node y;
-//  bool b;
-//  node t;
-//  id y_r; // ghost
-//
-////  y := alloc(2);
-//  inhale y.value |-> ?u1;
-//  inhale y.next |-> ?u2;
-//  inhale y._absstate |-> 0;
-//  inhale y._nextid |-> ?u4;
-//  inhale OWN@y_r; // TODO: Using u4 here crashes Voila (but would be wrong anyway)
-//
-////  [y] := v;
-//  y.value := v;
-//  y.next := null;
-//
-//  b := false;
-//
-//  while (!b)
-////    invariant Bag(r,x,0) &*& (cr = 0 ? y |-> v &*& y+1 |-> _ &*& bagInvariant(v) : true);
-//    invariant Bag(r, x, 0);
-//    invariant !b ==> y.value |-> v && y.next |-> ?u30 && Inv(v) && OWN@y_r;
-//    invariant !b ==> y._absstate |-> 0 && y._nextid |-> u4; // ghost
-//  {
-////	  t := [x];
-//    open_region
-//      using Bag(r, x);
-//    {
-//      t := x.hd;
-//    }
-//
-////    [y + 1] := t;
-//    y.next := t;
-//
-////    cr := CAS(x,t,y);
-//    use_atomic
-//      using Bag(r, x) with Z@r;
-//    {
-//      assert x._nextid |-> ?t_r; // ghost: Bind region id t_r of current head node t
-//      b := CAS(x, t, y);
-//      // ghost: If push succeeded, perform various ghost operations
-//      if (b) {
-//        exhale y._nextid |-> ?u10; // Update y._nextid to reflect that the old head t ...
-//        inhale y._nextid |-> t_r;  // ... (whose region id is t_r) follows the new head y
-//        fold BagList(y_r, y, 999); // Close the new head's region
-//        exhale x._nextid |-> ?u20; // Update x._nextid to reflect that the new head ...
-//        inhale x._nextid |-> y_r;  // ... of the bag is y, whose region id is y_r
-//      }
-//    }
-//  }
-//}
+{
+  node y;
+  int b;
+  node t;
+  id y_r; // ghost
 
-procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (bool popped)
+//  y := alloc(2);
+  inhale y.value |-> ?u1;
+  inhale y.next |-> ?u2;
+  inhale y._absstate |-> 0;
+  inhale y._nextid |-> ?u4;
+  inhale OWN@y_r; // TODO: Using u4 here crashes Voila (but would be wrong anyway)
+
+//  [y] := v;
+  y.value := v;
+  y.next := null;
+
+  b := 0;
+
+  while (b == 0)
+//    invariant Bag(r,x,0) &*& (cr = 0 ? y |-> v &*& y+1 |-> _ &*& bagInvariant(v) : true);
+    invariant Bag(r, x, 0);
+    invariant b == 0 ==> y.value |-> v && y.next |-> ?u30 && Inv(v) && OWN@y_r;
+    invariant b == 0 ==> y._absstate |-> 0 && y._nextid |-> u4; // ghost
+  {
+//	  t := [x];
+    open_region
+      using Bag(r, x);
+    {
+      t := x.hd;
+    }
+
+//    [y + 1] := t;
+    y.next := t;
+
+//    cr := CAS(x,t,y);
+    use_atomic
+      using Bag(r, x) with Z@r;
+    {
+      assert x._nextid |-> ?t_r; // ghost: Bind region id t_r of current head node t
+      b := CAS(x, t, y);
+      // ghost: If push succeeded, perform various ghost operations
+      if (b == 1) {
+        exhale y._nextid |-> ?u10; // Update y._nextid to reflect that the old head t ...
+        inhale y._nextid |-> t_r;  // ... (whose region id is t_r) follows the new head y
+        fold BagList(y_r, y); // Close the new head's region
+        exhale x._nextid |-> ?u20; // Update x._nextid to reflect that the new head ...
+        inhale x._nextid |-> y_r;  // ... of the bag is y, whose region id is y_r
+      }
+    }
+  }
+}
+
+procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int success)
   requires Bag(r, x, 0) && BagList(t_r, t, ?v, t2) && BagList(t2_r, t2) && t != null;
-  ensures popped ==> Inv(v);
-//{
-//  use_atomic
-//    using Bag(r, x) with Z@r;
-//  {
-//    popped := CAS(x, t, t2);
-//
-//    // ghost: If pop succeeded, perform various ghost operations
-//    if (popped) {
-//      exhale x._nextid |-> ?t_r0; // Update x._nextid to reflect that the new head ...
-//      inhale x._nextid |-> t2_r;  // ... of the bag is t2, whose region id is t2_r
-//
-//      assume t_r0 == t_r; // Provable in Caper (but not by Voila). Probably implied by x.hd |-> t
-//                          // from (before) the successful CAS.
-//
-//      assert BagList(t_r, t, v, t2, 0); // Knowing that the region's state is 0 requires
-//                                        // knowing that t_r0 == t_r.
-//
-//      unfold BagList(t_r, t, 999999999);
-//      exhale BagList(t_r, t); // TODO: We hold two copies of region BagList(t_r, t), the first of
-//                              //       we just unfolded. In order to avoid contradictions between
-//                              //       the two copies (further down, after updating t._absstate),
-//                              //       we exhale one copy here.
-//      assert t._nextid |-> ?t2_r0;
-//      assume t2_r0 == t2_r; // See above
-//      exhale t._absstate |-> 0; // Update abstract state of region t_r in order ...
-//      inhale t._absstate |-> 1; // ... to free OWN@t2_r and Inv(v)
-//      fold BagList(t_r, t, 999999999);
-//
-//      assert BagList(t2_r, t2, _, _, 0); // See above
-//    }
-//  }
-//}
+  ensures success == 0 || success == 1;
+  ensures success == 1 ==> Inv(v);
+{
+  use_atomic
+    using Bag(r, x) with Z@r;
+  {
+    success := CAS(x, t, t2);
 
-procedure pop(id x_r, bag x) returns (bool popped, int v)
+    // ghost: If pop succeeded, perform various ghost operations
+    if (success == 1) {
+      exhale x._nextid |-> ?t_r0; // Update x._nextid to reflect that the new head ...
+      inhale x._nextid |-> t2_r;  // ... of the bag is t2, whose region id is t2_r
+
+      assume t_r0 == t_r; // Provable in Caper (but not by Voila). Probably implied by x.hd |-> t
+                          // from (before) the successful CAS.
+
+      assert BagList(t_r, t, v, t2, 0); // Knowing that the region's state is 0 requires
+                                        // knowing that t_r0 == t_r.
+
+      unfold BagList(t_r, t);
+      exhale BagList(t_r, t); // TODO: We hold two copies of region BagList(t_r, t), the first of
+                              //       we just unfolded. In order to avoid contradictions between
+                              //       the two copies (further down, after updating t._absstate),
+                              //       we exhale one copy here.
+      assert t._nextid |-> ?t2_r0;
+      assume t2_r0 == t2_r; // See above
+      exhale t._absstate |-> 0; // Update abstract state of region t_r in order ...
+      inhale t._absstate |-> 1; // ... to free OWN@t2_r and Inv(v)
+      fold BagList(t_r, t);
+
+      assert BagList(t2_r, t2, _, _, 0); // See above
+    }
+  }
+}
+
+procedure pop(id x_r, bag x) returns (int status, int ret)
   requires Bag(x_r, x, 0);
 //  ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
-  ensures  popped ? Bag(x_r, x, 0) && Inv(v) : Bag(x_r, x, 0);
+  ensures  status == 1 ? Bag(x_r, x, 0) && Inv(ret) : Bag(x_r, x, 0);
 {
-  bool done;
   node t;
   node t2;
   id t_r; // ghost
   id t2_r; // ghost
+  int v; // ghost
 
-  popped := false;
-  done := false;
+  status := 0;
+    //  0: Keep trying
+    // -1: Bag was empty
+    //  1: Pop succeeded
 
-  while (!done)
+  exhale status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v); // Loop invariant, see below
+  while (status == 0)
+    invariant -1 <= status <= 1;
 //    invariant Bag(r,x,0) &*& (cr = 0 ? true : BagList(rt,t,v,t2,_) &*& t != 0 &*& bagInvariant(v));
     invariant Bag(x_r, x, 0);
-    invariant popped ==> BagList(t_r, t, v, _, _) && t != null && Inv(v);
+    // TODO: Cannot yet use these invariants: they require modelling Caper's immutable
+    //       memory, which is done via ghost code, but the ghost code comes at the end
+    //       of the loop body, after which regions are havocked once more.
+    //       We therefore model the invariant via in- and exhales.
+//    invariant status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v);
   {
+    inhale status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v); // Loop invariant
+
 //    t := [x];
     open_region
       using Bag(x_r, x);
     {
       t := x.hd;
-      // Update t_r to be the region id of the bag's head t
+      // Update t_r to be the region id of the bag's head node t
       assert x._nextid |-> ?u1;
       havoc t_r;
       assume t_r == u1;
       // Duplicate the head region
-      assert BagList(t_r, t);
+      assert BagList(t_r, t, ?u2);
       inhale BagList(t_r, t);
+      // Update v to be the value of the head node
+      havoc v;
+      assume v == u2;
     }
 
 //    if (t = 0) {
@@ -185,26 +197,54 @@ procedure pop(id x_r, bag x) returns (bool popped, int v)
       using BagList(t_r, t);
     {
       t2 := t.next;
+      // Bind t2's region identifier as t2_r
       assert t._nextid |-> ?u20;
       havoc t2_r;
       assume t2_r == u20;
+      // Duplicate the region
+      assert BagList(t2_r, t2);
+      inhale BagList(t2_r, t2);
     }
 
 //procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (bool popped)
 //  requires Bag(r, x, 0) && BagList(t_r, t, ?v, t2) && BagList(t2_r, t2) && t != null;
 //  ensures popped ==> Inv(v);
 
-    assert Bag(x_r, x, 0);
-    assert BagList(t_r, t, _, t2);
-    popped := popCAS(x_r, x, t_r, t, t2_r, t2);
-  }
+    // TODO: In Caper, BagList(t_r, t, v, t2) is stable because the memory underlying
+    //       v and t2 is immutable. This isn't supported in Voila. For now, we'll
+    //       simply assume that the values haven't changed.
+    assert BagList(t_r, t, ?v_1, ?t2_1);
+    assume v_1 == v && t2_1 == t2;
+    // Duplicate the regions (since popCAS consumes them)
+    assert Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
+    inhale Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
 
-//  ret := [t];
-//  return ret;
+    // TODO: Wrap in use-atomic block?
+    status := popCAS(x_r, x, t_r, t, t2_r, t2);
+
+    // Model memory immutability (as before)
+    assert BagList(t_r, t, ?v_2, ?t2_2);
+    assume v_2 == v && t2_2 == t2;
+    assert BagList(t_r, t, v, t2);
+
+    exhale status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v); // Loop invariant
+  }
+  inhale status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v); // Loop invariant
+
+  if (status == 1) {
+//    ret := [t];
+//    return ret;
+    open_region
+      using BagList(t_r, t);
+    {
+      ret := t.value;
+    }
+  }
 }
 
-primitive_atomic procedure CAS(bag x, node now, node thn) returns (bool ret)
+primitive_atomic procedure CAS(bag x, node now, node thn) returns (int success)
   requires x.hd |-> ?v;
+  ensures  success == 0 || success == 1;
   ensures  v == now
-              ? ret && x.hd |-> thn
-              : !ret && x.hd |-> v;
+              ? success == 1 && x.hd |-> thn
+              : success == 0 && x.hd |-> v;
