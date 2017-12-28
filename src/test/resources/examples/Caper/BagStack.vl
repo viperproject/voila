@@ -145,6 +145,7 @@ procedure pop(id x_r, bag x) returns (int status, int ret)
   requires Bag(x_r, x, 0);
 //  ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
   ensures  status == 1 ? Bag(x_r, x, 0) && Inv(ret) : Bag(x_r, x, 0);
+  ensures  status == -1 || status == 1;
 {
   node t;
   node t2;
@@ -190,44 +191,42 @@ procedure pop(id x_r, bag x) returns (int status, int ret)
 //    if (t = 0) {
 //      return 0;
 //    }
-    assume t != null; // TODO: Remove assume and encode preceding if-statement [!!!!!!!!!!!!!!!!]
+    if (t == null) {
+      status := -1;
+    } else {
+//      t2 := [t + 1];
+      open_region
+        using BagList(t_r, t);
+      {
+        t2 := t.next;
+        // Bind t2's region identifier as t2_r
+        assert t._nextid |-> ?u20;
+        havoc t2_r;
+        assume t2_r == u20;
+        // Duplicate the region
+        assert BagList(t2_r, t2);
+        inhale BagList(t2_r, t2);
+      }
 
-//    t2 := [t + 1];
-    open_region
-      using BagList(t_r, t);
-    {
-      t2 := t.next;
-      // Bind t2's region identifier as t2_r
-      assert t._nextid |-> ?u20;
-      havoc t2_r;
-      assume t2_r == u20;
-      // Duplicate the region
-      assert BagList(t2_r, t2);
-      inhale BagList(t2_r, t2);
+
+//      cr := popCAS(x,t,t2);
+      // TODO: In Caper, BagList(t_r, t, v, t2) is stable because the memory underlying
+      //       v and t2 is immutable. This isn't supported in Voila. For now, we'll
+      //       simply assume that the values haven't changed.
+      assert BagList(t_r, t, ?v_1, ?t2_1);
+      assume v_1 == v && t2_1 == t2;
+      // Duplicate the regions (since popCAS consumes them)
+      assert Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
+      inhale Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
+      // TODO: Wrap in use-atomic block?
+      status := popCAS(x_r, x, t_r, t, t2_r, t2);
+      // Model memory immutability (as before)
+      assert BagList(t_r, t, ?v_2, ?t2_2);
+      assume v_2 == v && t2_2 == t2;
+      assert BagList(t_r, t, v, t2);
+
+      exhale status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v); // Loop invariant
     }
-
-//procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (bool popped)
-//  requires Bag(r, x, 0) && BagList(t_r, t, ?v, t2) && BagList(t2_r, t2) && t != null;
-//  ensures popped ==> Inv(v);
-
-    // TODO: In Caper, BagList(t_r, t, v, t2) is stable because the memory underlying
-    //       v and t2 is immutable. This isn't supported in Voila. For now, we'll
-    //       simply assume that the values haven't changed.
-    assert BagList(t_r, t, ?v_1, ?t2_1);
-    assume v_1 == v && t2_1 == t2;
-    // Duplicate the regions (since popCAS consumes them)
-    assert Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
-    inhale Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
-
-    // TODO: Wrap in use-atomic block?
-    status := popCAS(x_r, x, t_r, t, t2_r, t2);
-
-    // Model memory immutability (as before)
-    assert BagList(t_r, t, ?v_2, ?t2_2);
-    assume v_2 == v && t2_2 == t2;
-    assert BagList(t_r, t, v, t2);
-
-    exhale status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v); // Loop invariant
   }
   inhale status == 1 ==> BagList(t_r, t, v, t2, _) && t != null && Inv(v); // Loop invariant
 
