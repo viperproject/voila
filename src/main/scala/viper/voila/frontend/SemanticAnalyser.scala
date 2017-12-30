@@ -7,6 +7,7 @@
 package viper.voila.frontend
 
 import scala.collection.immutable.ListSet
+import scala.collection.mutable
 import scala.language.{higherKinds, implicitConversions}
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
@@ -322,43 +323,67 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         lookup(env(n), n.name, UnknownEntity())
     }
 
-
   lazy val usedWithRegion: PIdnNode => PRegion =
     attr(regionIdUsedWith(_)._1)
 
-  lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp =
-    attr(regionIdUsedWith(_)._2.get.asInstanceOf[PPredicateExp])
+  lazy val usedWithRegionPredicate: PIdnNode => PPredicateAccess =
+    attr(id => regionIdUsedWith(id) match { case (region, regionAssertions) =>
+      val regionArguments =
+        regionAssertions
+          .map(_.arguments.take(region.formalInArgs.length))
+          .distinct
 
-  lazy val regionIdUsedWith: PIdnNode => (PRegion, Option[PPredicateAccess]) =
+      regionArguments match {
+        case Seq() =>
+          sys.error(s"Could not associate region identifier $id with a region assertion (such as R($id, ...)).")
+        case Seq(_) =>
+          regionAssertions.head
+        case predicateAccesses =>
+          sys.error(
+            s"The in-arguments of a region assertion are not expected to change (in the scope " +
+              s"of a single program member), but the following region assertions were found: " +
+              s"${predicateAccesses.mkString(", ")}")
+      }
+    })
+
+  private lazy val regionIdUsedWith: PIdnNode => (PRegion, Vector[PPredicateAccess]) =
     attr(id => enclosingMember(id) match {
-      case Some(scope) =>
-        val collectRegionAccesses =
-          collect[Vector, Option[(PRegion, Option[PPredicateAccess])]] {
-            case exp @ PPredicateAccess(predicate, PIdnExp(`id`) +: _) =>
-              entity(predicate) match {
-                case RegionEntity(decl) => Some((decl, Some(exp)))
-                case _ => None
-              }
+      case Some(member) =>
+        val usages =
+          new  mutable.HashMap[PRegion, mutable.Set[Option[PPredicateAccess]]]
+          with mutable.MultiMap[PRegion, Option[PPredicateAccess]]
 
-            case region: PRegion if region.regionId.id.name == id.name =>
-              Some(region, None)
-          }
+        everywhere(query[PAstNode] {
+          case region: PRegion if region.regionId.id.name == id.name =>
+            usages.addBinding(region, None)
 
-        val regions = collectRegionAccesses(scope).flatten
+          case exp @ PPredicateAccess(predicate, PIdnExp(`id`) +: _) =>
+            entity(predicate) match {
+              case RegionEntity(declaration) => usages.addBinding(declaration, Some(exp))
+              case _ => /* Do nothing */
+            }
+        })(member)
 
-        /* TODO: Reconsider what this method does and what it's supposed to do.
-         *       In general, a region id can be used with multiple region
-         *       assertions in which the other region arguments differ.
-         *       Which region predicate access should be returned in such cases?
-         */
-//        assert( // Fails all the time ...
-//          regions.length == 1,
-//          s"Expected exactly one match, but found ${regions.length}: $regions")
+      if (usages.isEmpty) {
+        sys.error(
+          s"Could not associate region identifier $id with a region assertion. " +
+            "This can, for example, happen if a guard is used (such as G@r), but the region " +
+            "identifier (such as r) it is used with isn't used in a region assertion " +
+            "(such as R(r, ...)). This is currently not supported.")
+      } else if (usages.size == 1) {
+        val (region, regionAssertions) = usages.head
 
-        regions.head
+        (region, regionAssertions.flatten.toVector)
+      } else {
+        sys.error(
+          s"Identifier $id is used as the region identifier of different region types:" +
+          s"${usages.keySet.mkString(", ")}. This is currently not supported.")
+      }
 
       case None =>
-        ???
+        sys.error(
+          s"It appears that identifier $id is used as a region identifier, but in a scope/at a " +
+           "program point where region identifiers are not expected.")
     })
 
   def enclosingMember(of: PAstNode): Option[PMember] =

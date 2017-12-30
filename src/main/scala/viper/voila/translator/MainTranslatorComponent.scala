@@ -358,7 +358,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         }
 
-        regionId -> Entry(inter, regionPredicate, vprAtomicityContext)
+        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicityContext)
       }).toMap
 
     val vprLocals = procedure.locals.map(translate)
@@ -1014,7 +1014,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         vpr.Unfolding(vprPredicate, vprBody)().withSource(expression)
 
-      case predicateExp @ PPredicateExp(id, args) =>
+      case predicateExp: PPredicateExp =>
         val (vprPredicateAccess, optVprConstraints) = translateUseOf(predicateExp)
 
         optVprConstraints match {

@@ -456,7 +456,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     (region, vprInArgs, vprOutConstraints)
   }
 
-  def regionState(predicateExp: PPredicateExp): vpr.FuncApp = {
+  def regionState(predicateExp: PPredicateAccess): vpr.FuncApp = {
     val (region, regionArguments, _) = getRegionPredicateDetails(predicateExp)
 
     regionState(region, regionArguments)
