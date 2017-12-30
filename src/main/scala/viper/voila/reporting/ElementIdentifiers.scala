@@ -54,7 +54,7 @@ object EntityIdentifier {
       case ProcedureEntity(declaration) => ("procedure", Some(declaration.id.name))
       case PredicateEntity(declaration) => ("predicate", Some(declaration.id.name))
       case RegionEntity(declaration) => ("region", Some(declaration.id.name))
-      case GuardEntity(declaration, region) => ("guard", Some(declaration.id.name))
+      case GuardEntity(declaration, _) => ("guard", Some(declaration.id.name))
       case FormalArgumentEntity(declaration) => ("formal argument", Some(declaration.id.name))
       case LogicalVariableEntity(declaration) => ("logical variable", Some(declaration.id.name))
     }

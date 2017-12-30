@@ -272,7 +272,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         defineIfNew(enter(in(bindingContext)), binder.id.name, definedEntity(binder.id))
 
       bindingContext match {
-        case PAction2(_, from, to) => add(from)
+        case PAction2(_, from, _) => add(from)
         case PAction3(_, from, _, _) => add(from)
         case PSetComprehension(qvar, _, _) => add(qvar)
       }
@@ -468,7 +468,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case FormalArgumentEntity(decl) => decl.typ
       case FormalReturnEntity(decl) => decl.typ
       case LocalVariableEntity(decl) => decl.typ
-      case ProcedureEntity(decl) => ???
+      case ProcedureEntity(_) => ???
       case LogicalVariableEntity(decl) => typeOfLogicalVariable(decl)
       case _ => PUnknownType()
     })

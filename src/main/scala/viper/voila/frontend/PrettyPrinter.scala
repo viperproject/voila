@@ -143,7 +143,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
             space <> "returns" <+> asFormalReturns(formalReturns)
         ) <> line <>
         nest(ssep(inters map toDoc, semi <> line)) <> line <>
-        nest(ssep(pres map toDoc, semi <> line)) <> line <> (
+        nest(ssep(pres map toDoc, semi <> line)) <> line <>
+        nest(ssep(posts map toDoc, semi <> line)) <> line <> (
         optBody match {
           case None =>
             require(locals.isEmpty)
@@ -171,7 +172,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location)
       case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs)
 
-      case PIf(cond, thn, els) => ???
+      case _: PIf => ???
 
       case PWhile(cond, invariants, body) =>
         (   "while" <> parens(toDoc(cond)) <> line

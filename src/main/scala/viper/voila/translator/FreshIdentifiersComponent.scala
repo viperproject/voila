@@ -10,7 +10,7 @@ import scala.collection.mutable
 import viper.silver.{ast => vpr}
 
 trait FreshIdentifiersComponent { this: PProgramToViperTranslator =>
-  protected var identifierCounters: mutable.Map[String, Int] = mutable.Map.empty.withDefaultValue(0)
+  protected val identifierCounters: mutable.Map[String, Int] = mutable.Map.empty.withDefaultValue(0)
 
   def freshIdentifier(baseId: String): String = {
     val counter = identifierCounters(baseId)

@@ -74,7 +74,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             sys.error(s"Region out-argument ${outArg.id.name} isn't bound in the region interpretation")
           case Seq(binder) =>
             binder
-          case other =>
+          case _=>
             sys.error(s"Region out-argument ${outArg.id.name} is bound multiple times in the region interpretation")
         }
 
@@ -323,7 +323,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val regionPredicateName = region.id.name
 
     val formalRegionArgs = region.formalInArgs map translate
-    val formalRegionId = formalRegionArgs.head
 
     /* predicate region(id, args) { interpretation } */
     val regionPredicate =

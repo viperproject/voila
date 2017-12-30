@@ -60,7 +60,7 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
             vpr.Result()(typ = vprSetType)
           )(),
           translateWith(comprehension.filter) {
-            case exp @ PIdnExp(id) if freeVariables.contains(id) =>
+            case PIdnExp(id) if freeVariables.contains(id) =>
               freeVariablesToDecls(id).localVar
           }
         )()

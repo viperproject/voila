@@ -112,7 +112,7 @@ class Voila extends StrictLogging {
         var stop = false
         tree.nodes foreach (n => {
           frontend.positions.getStart(n) match {
-            case Some(x) =>
+            case Some(_) => /* OK, nothing to do */
             case None =>
               stop = true
               logger.error(s"### NO POSITION FOR ${n.getClass.getSimpleName}:\n  $n")

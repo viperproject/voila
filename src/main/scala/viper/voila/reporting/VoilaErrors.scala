@@ -75,7 +75,7 @@ sealed abstract class AbstractVerificationError extends VerificationError {
   def id: String =
     detail match {
       case None => localId
-      case Some(_detail: AdditionalErrorClarification) => localId
+      case Some(_: AdditionalErrorClarification) => localId
       case Some(_detail) => s"$localId:${_detail.id}"
     }
 
