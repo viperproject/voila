@@ -17,11 +17,11 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(location: PLocation): vpr.FieldAccess = {
-    val recevierType =
+    val receiverType =
       semanticAnalyser.typeOfIdn(location.receiver).asInstanceOf[PRefType]
 
     val receiverStruct =
-      semanticAnalyser.entity(recevierType.id).asInstanceOf[StructEntity].declaration
+      semanticAnalyser.entity(receiverType.id).asInstanceOf[StructEntity].declaration
 
     vpr.FieldAccess(
       translateUseOf(location.receiver),
