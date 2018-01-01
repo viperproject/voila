@@ -52,7 +52,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprFieldValueConstraint =
       pointsTo.value match {
-        case _: PLogicalVariableBinder => vpr.TrueLit()()
+        case _: PLogicalVariableBinder | _: PIrrelevantValue => vpr.TrueLit()()
         case exp => vpr.EqCmp(vprFieldAccess, translate(exp))()
       }
 

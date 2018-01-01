@@ -1051,11 +1051,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         )()
 
-      case PIrrelevantValue() =>
-        sys.error("Wildcard arguments \"_\" are not yet supported in this position.")
+      case irrelevantValue: PIrrelevantValue =>
+        sys.error(
+          s"Wildcard arguments ($irrelevantValue) are not yet supported in this position: " +
+          s"${irrelevantValue.position}. In particular, wildcards are not supported in in-argument position, e.g. " +
+           "of region assertions.")
 
-      case _: PLogicalVariableBinder =>
-        sys.error("Logical variable binders are not yet supported in this position.")
+      case binder: PLogicalVariableBinder =>
+        sys.error(
+          s"Logical variable binders ($binder) are not yet supported in this position: ${binder.position}. " +
+          "In particular, wildcards are not supported in in-argument position, e.g. of region assertions.")
     }
 
     customTranslationScheme.applyOrElse(expression, defaultTranslationScheme)
