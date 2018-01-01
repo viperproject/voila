@@ -75,20 +75,27 @@ region QL(id r, node x/*, int v */)
   }
   state { a }
   actions {
-////    n > 0  |     : 0 ~> 3*n;
-    Z: 0 ~> Set(?n | n == 0 || n > 0 && n % 3 == 0);
-////    n > 0  |     : 1 ~> 3*n+1;
-    Z: 1 ~> Set(?n | n == 1 || n > 0 && n % 3 == 1);
-////    n >= 0 | OWN : 3*n ~> 3*n+1;
-    OWN: ?n if n >=0 && n % 3 == 0 ~> Set(n, n + 1);
-////    n > 0  | OWN : 3*n+1 ~> 3*n+2;
-    OWN: ?n if n > 0 && n % 3 == 1 ~> Set(n, n + 2);
-////    n > 0  | OWN : 3*n ~> 3*n+2;
-    OWN: ?n if n > 0 && n % 3 == 0 ~> Set(n, n + 2);
+/* TODO: Overlapping actions are not yet supported (issue #27).
+ *       Currently, the actions are turned into a cascade of ite-expressions,
+ *       starting with the last one.
+ *       Note: The current order is crucial for verifying the example!
+ */
 ////    n >= 3 | OWN : 0 ~> n;
     OWN: 0 ~> Set(?n | n == 0 || n >= 3);
 ////    n > 0  | OWN : 1 ~> 3*n+2;
     OWN: 1 ~> Set(?n | n == 1 || n > 0 && n % 3 == 2);
+
+////    n > 0  |     : 0 ~> 3*n;
+    Z: 0 ~> Set(?n | n == 0 || n > 0 && n % 3 == 0);
+////    n > 0  |     : 1 ~> 3*n+1;
+    Z: 1 ~> Set(?n | n == 1 || n > 0 && n % 3 == 1);
+
+////    n >= 0 | OWN : 3*n ~> 3*n+1;
+    OWN: ?n if n >=0 && n % 3 == 0 ~> Set(n, n + 1);
+////    n > 0  | OWN : 3*n+1 ~> 3*n+2;
+    OWN: ?n if n > 0 && n % 3 == 1 ~> Set(n, n + 1);
+////    n > 0  | OWN : 3*n ~> 3*n+2;
+    OWN: ?n if n > 0 && n % 3 == 0 ~> Set(n, n + 2);
   }
 
 procedure makeQueue() returns (id r, queue ret)
@@ -242,120 +249,140 @@ procedure enqueue(id s, queue x, int v)
 procedure dequeue(id q_r, queue q) returns (bool success, int v)
   requires Qu(q_r, q, 0);
   ensures  success ==> Inv(v);
-//{
-//  node sl;
-//  node hd;
-//  bool done;
-//
-//  done := false;
-//  success := false;
-//
-//  while (!done)
-//    invariant Qu(q_r, q, 0);
-//    invariant success ==> Inv(v);
-//  {
-////    sentinel := [q];
-//    open_region
-//      using Qu(q_r, q);
-//    {
-//      sl := q.sentinel;
-//      // ghost: Duplicate sentinel's region assertion
-//      assert q._nextrid |-> ?sl_r0;
-//      assert QL(sl_r0, sl, ?sl_a0);
-//      inhale QL(sl_r0, sl);
-//      assert sl_a0 >= 0;     // REMOVE
-//      assert sl_a0 % 3 == 1; // REMOVE
-//    }
-//
-////    head := [sentinel + 1];
-//    open_region
-//      using QL(sl_r0, sl);
-//    {
-//      hd := sl.next;
-//      // ghost: If head present, duplicate its region assertion
-//      if (hd != null) {
-//        assert sl._nextrid |-> ?hd_r0;
-//        assert QL(hd_r0, hd, ?hd_a0);
-//        inhale QL(hd_r0, hd);
-//
-////        unfold QL(hd_r0, hd, hd_a0); // Peek into region ...
-////        fold   QL(hd_r0, hd, hd_a0); // .. to learn more about hd_a0
-////        assert hd_a0 >= 0;           // REMOVE
-////        assert hd_a0 % 3 == 0;       // REMOVE
-//      }
-//    }
-//
-////assume false;
-//
-//    if (hd == null) {
-////      return 0;
-//      done := true;
-//      success := false;
-//    } else {
-////      r := CAS(q, sentinel, hd);
-//      use_atomic
-//        using Qu(q_r, q) with G@q_r;
-//      {
-//        assert q._nextrid |-> ?sl_r1;
-//        assert q.sentinel |-> ?sl1;
-//        assert QL(sl_r1, sl1, ?sl_a1);
-//
-//        success := CAS_sentinel(q, sl, hd);
-//
-//        // If dequeue succeeded, perform various ghost operations
-//        if (success) {
-//          // Since the CAS succeeded, q.sentinel was sl before the CAS.
-//          assert sl1 == sl;
-//          // assert sl_r1 == sl_r0; // TODO: Should this hold? Implied by sl1 == sl?
-//          assert sl_a1 >= 0;
-//          assert sl_a1 % 3 == 1;
-//
-//          exhale q._nextrid |-> ?_u30;
-//          inhale q._nextrid |-> hd_r0;
-//
-//          open_region
-//            using QL(sl_r1, sl);
-//          {
-//            assert sl.next |-> ?hd1;
-//            if (hd1 != hd) {
-//              assume false; // TODO: Provable in Caper (i.e. unreachable), but not here
-//            }
-//
-//            assert sl._nextrid |-> ?hd_r1;
-////            assert hd_r1 == hd_r0; // TODO: Should this follow from hd1 == hd?
-//
-//            assert OWN@hd_r1;
-//
-//            use_atomic
-//              using QL(hd_r1, hd) with OWN@hd_r1;
-//            {
-//              assert hd.value |-> ?v0;
-//              assert hd._absstate |-> ?u40;
-//              assert u40 % 3 == 0;
-//              assert u40 == 0 || u40 >= 3;
-//              assert Inv(v0);
-//              assume u40 == 0; // TODO: Get rid of (case split?)
-//              exhale hd._absstate |-> u40;
-//              inhale hd._absstate |-> u40 + 1;
-//            }
-//          }
-//        }
-//      }
-////
-////      if (success) {
-//////        res := [head];
-//////        return res;
-////        open_region
-////          using QL(hd_r, hd);
-////        {
-////          v := hd.value;
-////        }
-////
-////        done := true;
-////      }
-//    }
-//  }
-//}
+{
+  node sl;
+  node hd;
+  bool done;
+
+  done := false;
+  success := false;
+
+  while (!done)
+    invariant Qu(q_r, q, 0);
+    invariant success ==> Inv(v);
+//    invariant success ==> false;
+  {
+//    sentinel := [q];
+    open_region
+      using Qu(q_r, q);
+    {
+      sl := q.sentinel;
+      // ghost: Duplicate sentinel's region assertion
+      assert q._nextrid |-> ?sl_r0;
+      assert QL(sl_r0, sl, ?sl_a0);
+      inhale QL(sl_r0, sl);
+      assert sl_a0 >= 0;     // REMOVE
+      assert sl_a0 % 3 == 1; // REMOVE
+    }
+
+//    head := [sentinel + 1];
+    open_region
+      using QL(sl_r0, sl);
+    {
+      hd := sl.next;
+      // ghost: If head present, duplicate its region assertion
+      if (hd != null) {
+        assert sl._nextrid |-> ?hd_r0;
+        assert QL(hd_r0, hd, ?hd_a0);
+        inhale QL(hd_r0, hd);
+      }
+    }
+
+    if (hd == null) {
+//      return 0;
+      done := true;
+      success := false;
+    } else {
+//      r := CAS(q, sentinel, hd);
+      use_atomic
+        using Qu(q_r, q) with G@q_r;
+      {
+        assert q._nextrid |-> ?sl_r1;
+        assert q.sentinel |-> ?sl1;
+        assert QL(sl_r1, sl1, ?sl_a1);
+
+        (
+          success := CAS_sentinel(q, sl, hd);
+          // If dequeue succeeded, perform various ghost operations
+          if (success) {
+            // Since the CAS succeeded, q.sentinel was sl before the CAS.
+            assert sl1 == sl;
+            assume sl_r1 == sl_r0; // TODO: Implied by sl1 == sl
+            assert sl_a1 >= 0;
+            assert sl_a1 % 3 == 1;
+
+            exhale q._nextrid |-> _;
+            inhale q._nextrid |-> hd_r0;
+
+            exhale QL(sl_r0, sl); // TODO: We hold two copies of QL(sl_r0, sl). In order to
+                                  //       prevent contradictions between the two ...
+
+            use_atomic
+              using QL(sl_r0, sl) with OWN@sl_r0;
+            {
+              assert sl.next |-> ?hd1;
+              if (hd1 != hd) {
+                // TODO: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+                assume false;
+                  // TODO: Provable in Caper (i.e. unreachable), but not in Voila.
+                  //
+                  //       Without knowing that sentinel still precedes head we won't get
+                  //       OWN for head out of the sentinel (we would get it for some other
+                  //       node), which in turn would prevent us from changing the abstract
+                  //       state of the head, which we need in order to take the invariant out
+                  //       of the head.
+                  //
+                  //       However, I have no idea how Caper can prove that the sentinel's
+                  //       successor cannot have changed in the meantime.
+              }
+
+              assert sl._nextrid |-> ?hd_r1;
+              assume hd_r1 == hd_r0; // TODO: Implied by hd1 == hd
+
+              assert sl_a1 % 3 == 1;
+              assert sl_a1 >= 4;
+              exhale sl._absstate |-> sl_a1;
+              inhale sl._absstate |-> sl_a1 + 1;
+              assert (sl_a1 + 1) >= 5;
+              assert (sl_a1 + 1) % 3 == 2;
+
+              exhale QL(hd_r0, hd); // TODO: We hold two copies of QL(hd_r0, hd) ...
+
+              use_atomic
+                using QL(hd_r0, hd) with OWN@hd_r0;
+              {
+                assert hd.value |-> ?v0;
+                assert hd._absstate |-> ?u40;
+                assert u40 % 3 == 0;
+                assert u40 == 0 || u40 >= 3;
+                assert Inv(v0);
+                assume u40 == 0; // TODO: Get rid of (case split?) Could also be a non-issue once overlapping actions are supported.
+                exhale hd._absstate |-> u40;
+                inhale hd._absstate |-> u40 + 1;
+              }
+
+              // Duplicate region assertion
+              assert QL(hd_r0, hd);
+              inhale QL(hd_r0, hd);
+            }
+          }
+        );
+
+//        if (r != 0)
+        if (success) {
+//          res := [head];
+//          return res;
+          open_region
+            using QL(hd_r0, hd);
+          {
+            v := hd.value;
+            assume v == v0; // TODO: Holds in Caper because hd.value is immutable
+          }
+        }
+      }
+    }
+  }
+}
 
 
 
