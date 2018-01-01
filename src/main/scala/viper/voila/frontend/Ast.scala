@@ -222,17 +222,15 @@ case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rh
 
 sealed trait PGhostStatement extends PStatement
 
-/* TODO: Consider changing PFold and PUnfold to take a PPredicateExp as their single argument */
+sealed trait PFoldUnfold extends PAstNode{
+  def predicateExp: PPredicateExp
+}
 
-case class PFold(predicate: PIdnUse, arguments: Vector[PExpression])
-    extends PGhostStatement with PPredicateAccess
-{
+case class PFold(predicateExp: PPredicateExp) extends PFoldUnfold with PGhostStatement {
   val statementName = "fold"
 }
 
-case class PUnfold(predicate: PIdnUse, arguments: Vector[PExpression])
-    extends PGhostStatement with PPredicateAccess
-{
+case class PUnfold(predicateExp: PPredicateExp) extends PFoldUnfold with PGhostStatement {
   val statementName = "unfold"
 }
 
@@ -320,9 +318,10 @@ case class PDiv(left: PExpression, right: PExpression) extends PBinOp
 case class PIdnExp(id: PIdnUse) extends PExpression
 
 case class PPredicateExp(predicate: PIdnUse, arguments: Vector[PExpression])
-    extends PExpression with PPredicateAccess with PBindingContext
+    extends PExpression with PBindingContext
 
-case class PUnfolding(predicate: PPredicateExp, body: PExpression) extends PExpression
+case class PUnfolding(predicateExp: PPredicateExp, body: PExpression)
+    extends PFoldUnfold with PExpression
 
 /*
  * Collection expressions
@@ -405,20 +404,8 @@ sealed trait PCollectionType extends PType {
 case class PSetType(elementType: PType) extends PCollectionType
 case class PSeqType(elementType: PType) extends PCollectionType
 
-
-
 /*
  * Miscellaneous
  */
-
-sealed trait PPredicateAccess extends PAstNode {
-  def predicate: PIdnUse
-  def arguments: Vector[PExpression]
-}
-
-object PPredicateAccess {
-  def unapply(acc: PPredicateAccess): Option[(PIdnUse, Vector[PExpression])] =
-    Some((acc.predicate, acc.arguments))
-}
 
 case class PLocation(receiver: PIdnUse, field: PIdnUse) extends PAstNode

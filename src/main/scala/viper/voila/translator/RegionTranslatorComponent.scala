@@ -357,16 +357,16 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   /* TODO: Move to MainTranslatorComponent */
-  def translateUseOf(predicateAccess: PPredicateAccess): (vpr.PredicateAccessPredicate, Option[vpr.Exp]) = {
-    val predicateEntity = semanticAnalyser.entity(predicateAccess.predicate)
+  def translateUseOf(predicateExp: PPredicateExp): (vpr.PredicateAccessPredicate, Option[vpr.Exp]) = {
+    val predicateEntity = semanticAnalyser.entity(predicateExp.predicate)
 
     val (vprInArgs, optVprOutArgConstraints) =
       predicateEntity match {
         case _: PredicateEntity =>
-          (predicateAccess.arguments map translate, None)
+          (predicateExp.arguments map translate, None)
 
         case _: RegionEntity =>
-          val (_, vprInArgs, vprOutArgConstraints) = getAndTranslateRegionPredicateDetails(predicateAccess)
+          val (_, vprInArgs, vprOutArgConstraints) = getAndTranslateRegionPredicateDetails(predicateExp)
 
           (vprInArgs, Some(vprOutArgConstraints))
       }
@@ -374,14 +374,14 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val vprPredicate =
       vpr.PredicateAccess(
         args = vprInArgs,
-        predicateName = predicateAccess.predicate.name
-      )().withSource(predicateAccess)
+        predicateName = predicateExp.predicate.name
+      )().withSource(predicateExp)
 
     val vprPredicateAccess =
       vpr.PredicateAccessPredicate(
         vprPredicate,
         vpr.FullPerm()()
-      )().withSource(predicateAccess)
+      )().withSource(predicateExp)
 
     predicateEntity match {
       case _: PredicateEntity =>
@@ -391,24 +391,24 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
       case _: RegionEntity =>
         val vprStateConstraint =
-          viper.silicon.utils.ast.BigAnd(optVprOutArgConstraints.get).withSource(predicateAccess)
+          viper.silicon.utils.ast.BigAnd(optVprOutArgConstraints.get).withSource(predicateExp)
 
         errorBacktranslator.addReasonTransformer {
           case e: vprrea.InsufficientPermission if e causedBy vprPredicate =>
-            InsufficientRegionPermissionError(predicateAccess)
+            InsufficientRegionPermissionError(predicateExp)
           case e: vprrea.AssertionFalse if e causedBy vprStateConstraint => /* TODO: Fine-grained enough (per conjunct)? */
-            RegionStateError(predicateAccess)
+            RegionStateError(predicateExp)
         }
 
         (vprPredicateAccess, Some(vprStateConstraint))
     }
   }
 
-  def getRegionPredicateDetails(predicateAccess: PPredicateAccess)
+  def getRegionPredicateDetails(predicateExp: PPredicateExp)
                                : (PRegion, Vector[PExpression], Vector[PExpression]) = {
 
     val region =
-      semanticAnalyser.entity(predicateAccess.predicate)
+      semanticAnalyser.entity(predicateExp.predicate)
                       .asInstanceOf[RegionEntity]
                       .declaration
 
@@ -420,15 +420,15 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 //        case _ => sys.error(s"Unexpectedly many arguments: $predicateExp")
 //      }
     val (inArgs, outArgsAndState) =
-      predicateAccess.arguments.splitAt(region.formalInArgs.length)
+      predicateExp.arguments.splitAt(region.formalInArgs.length)
 
     (region, inArgs, outArgsAndState)
   }
 
-  def getAndTranslateRegionPredicateDetails(predicateAccess: PPredicateAccess)
+  def getAndTranslateRegionPredicateDetails(predicateExp: PPredicateExp)
                                            : (PRegion, Vector[vpr.Exp], Vector[vpr.EqCmp]) = {
 
-    val (region, inArgs, outArgsAndState) = getRegionPredicateDetails(predicateAccess)
+    val (region, inArgs, outArgsAndState) = getRegionPredicateDetails(predicateExp)
 
     val vprInArgs = inArgs map translate
 
@@ -455,7 +455,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     (region, vprInArgs, vprOutConstraints)
   }
 
-  def regionState(predicateExp: PPredicateAccess): vpr.FuncApp = {
+  def regionState(predicateExp: PPredicateExp): vpr.FuncApp = {
     val (region, regionArguments, _) = getRegionPredicateDetails(predicateExp)
 
     regionState(region, regionArguments)

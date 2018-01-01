@@ -251,10 +251,10 @@ case class InterferenceError(offendingNode: PInterferenceClause, detail: Option[
     copy(offendingNode, detail)
 }
 
-case class InsufficientRegionPermissionError(offendingNode: PPredicateAccess, detail: Option[VerificationError] = None)
+case class InsufficientRegionPermissionError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
-  type OffendingNode = PPredicateAccess
+  type OffendingNode = PPredicateExp
   def localId: String = "region_permission_error"
   val localMessage: String = s"Region $offendingNode might not be accessible"
 
@@ -262,10 +262,10 @@ case class InsufficientRegionPermissionError(offendingNode: PPredicateAccess, de
     copy(offendingNode, detail)
 }
 
-case class RegionStateError(offendingNode: PPredicateAccess, detail: Option[VerificationError] = None)
+case class RegionStateError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
-  type OffendingNode = PPredicateAccess
+  type OffendingNode = PPredicateExp
   def localId: String = "region_state_error"
   val localMessage: String = s"Region $offendingNode might not be in the expected state"
 

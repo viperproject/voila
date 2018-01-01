@@ -316,6 +316,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case PAssert(assertion) => collectBinders(assertion)
         case PExhale(assertion) => collectBinders(assertion)
         case PInhale(assertion) => collectBinders(assertion)
+        case foldUnfold: PFoldUnfold => collectBinders(foldUnfold.predicateExp)
       }
 
       collectRelevantBinders(procedure.body)
@@ -573,20 +574,22 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, vprWrite)
 
-      case predicateAccess: PPredicateAccess =>
-        val (vprPredicateAccess, optConstraints) = translateUseOf(predicateAccess)
+      case foldUnfold: PFoldUnfold with PStatement =>
+        val (vprPredicateAccess, optConstraints) = translateUseOf(foldUnfold.predicateExp)
 
         val optVprCheckConstraints =
           optConstraints.map(vpr.Assert(_)().withSource(statement))
 
+        val vprAssignments = extractLogicalVariableBindings(foldUnfold.predicateExp)
+
         val vprResult =
-          predicateAccess match {
+          foldUnfold match {
             case _: PFold =>
               val vprFold = vpr.Fold(vprPredicateAccess)().withSource(statement)
 
               optVprCheckConstraints.fold(vprFold: vpr.Stmt)(vprCheck =>
                 vpr.Seqn(
-                  Vector(vprFold, vprCheck),
+                  Vector(vprFold, vprCheck) ++ vprAssignments,
                   Vector.empty
                 )()
               )
@@ -596,7 +599,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
               optVprCheckConstraints.fold(vprUnfold: vpr.Stmt)(vprCheck =>
                 vpr.Seqn(
-                  Vector(vprCheck, vprUnfold),
+                  vprAssignments ++ Vector(vprCheck, vprUnfold),
                   Vector.empty
                 )()
               )
@@ -606,7 +609,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         optVprCheckConstraints.foreach(vprCheck =>
           errorBacktranslator.addErrorTransformer {
             case err: vprerr.AssertFailed if err causedBy vprCheck =>
-              predicateAccess match {
+              foldUnfold match {
                 case fold: PFold => FoldError(fold, ebt.translate(err.reason))
                 case unfold: PUnfold => UnfoldError(unfold, ebt.translate(err.reason))
               }

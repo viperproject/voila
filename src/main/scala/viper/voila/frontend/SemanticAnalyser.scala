@@ -326,7 +326,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val usedWithRegion: PIdnNode => PRegion =
     attr(regionIdUsedWith(_)._1)
 
-  lazy val usedWithRegionPredicate: PIdnNode => PPredicateAccess =
+  lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp =
     attr(id => regionIdUsedWith(id) match { case (region, regionAssertions) =>
       val regionArguments =
         regionAssertions
@@ -346,18 +346,18 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       }
     })
 
-  private lazy val regionIdUsedWith: PIdnNode => (PRegion, Vector[PPredicateAccess]) =
+  private lazy val regionIdUsedWith: PIdnNode => (PRegion, Vector[PPredicateExp]) =
     attr(id => enclosingMember(id) match {
       case Some(member) =>
         val usages =
-          new  mutable.HashMap[PRegion, mutable.Set[Option[PPredicateAccess]]]
-          with mutable.MultiMap[PRegion, Option[PPredicateAccess]]
+          new  mutable.HashMap[PRegion, mutable.Set[Option[PPredicateExp]]]
+          with mutable.MultiMap[PRegion, Option[PPredicateExp]]
 
         everywhere(query[PAstNode] {
           case region: PRegion if region.regionId.id.name == id.name =>
             usages.addBinding(region, None)
 
-          case exp @ PPredicateAccess(predicate, PIdnExp(`id`) +: _) =>
+          case exp @ PPredicateExp(predicate, PIdnExp(`id`) +: _) =>
             entity(predicate) match {
               case RegionEntity(declaration) => usages.addBinding(declaration, Some(exp))
               case _ => /* Do nothing */

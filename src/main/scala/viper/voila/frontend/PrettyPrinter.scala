@@ -26,7 +26,6 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case statement: PStatement => toDoc(statement)
       case expression: PExpression => toDoc(expression)
       case typ: PType => toDoc(typ)
-      case _: PPredicateAccess => ???
       case modifier: PModifier => toDoc(modifier)
       case id: PIdnNode => toDoc(id)
       case clause: PSpecificationClause => toDoc(clause)
@@ -188,8 +187,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
   def toDoc(statement: PGhostStatement): Doc = {
     statement match {
-      case PFold(predicate, arguments) => "fold" <+> toDoc(predicate) <> asArguments(arguments)
-      case PUnfold(predicate, arguments) => "unfold" <+> toDoc(predicate) <> asArguments(arguments)
+      case PFold(predicateExp) => "fold" <+> toDoc(predicateExp)
+      case PUnfold(predicateExp) => "unfold" <+> toDoc(predicateExp)
       case PInhale(assertion) => "inhale" <+> toDoc(assertion)
       case PExhale(assertion) => "exhale" <+> toDoc(assertion)
       case PAssume(assertion) => "assume" <+> toDoc(assertion)

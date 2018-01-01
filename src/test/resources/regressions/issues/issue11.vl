@@ -33,8 +33,10 @@ procedure test03(id r, cell c)
   requires R(r, c, _, ?a);
   ensures  R(r, c, _);
 {
-//  unfold R(r, c, ?v, _);
-//  fold R(r, c, _, _);
-//  unfold R(r, c, v, a);
-//  fold R(r, c);
+  unfold R(r, c, ?v, _);
+  fold R(r, c, _, _);
+  unfold R(r, c, v, a);
+  fold R(r, c);
+  //:: ExpectedOutput(unfold_error)
+  unfold R(r, c, a, v);
 }

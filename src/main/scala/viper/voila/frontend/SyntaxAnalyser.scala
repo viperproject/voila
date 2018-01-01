@@ -166,8 +166,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "if" ~> ("(" ~> expression <~ ")") ~ ("{" ~> statements <~ "}") ~ ("else" ~> "{" ~> statements <~ "}").? ^^ PIf |
     "while" ~> ("(" ~> expression <~ ")") ~ invariant.* ~ ("{" ~> statements <~ "}") ^^ PWhile |
     parseAndUnrollDoWhileLoop ^^ { case unrolled ~ loop => PSeqComp(unrolled, loop) } |
-    "fold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PFold |
-    "unfold" ~> idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ PUnfold |
+    "fold" ~> predicateExp <~ ";" ^^ PFold |
+    "unfold" ~> predicateExp <~ ";" ^^ PUnfold |
     "inhale" ~> expression <~ ";" ^^ PInhale |
     "exhale" ~> expression <~ ";" ^^ PExhale |
     "assume" ~> expression <~ ";" ^^ PAssume |
