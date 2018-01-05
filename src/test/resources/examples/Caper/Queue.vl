@@ -1,4 +1,6 @@
-//:: IgnoreFile(/voila/issue/00000000000000000000/)
+//:: IgnoreFile(/voila/issue/41/)
+
+// TODO: Currently (nondeterministically?) crashes Silicon - find out, why
 
 // Corresponds to:
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/Queue.t
@@ -31,7 +33,7 @@ region Qu(id q_r, queue q)
   state { 0 }
   actions {}
 
-region QL(id r, node x/*, int v */)
+region QL(id r, node x/*, int v */) // TODO: Add v as an out-argument
   guards {
     duplicable Z;
     unique OWN;
@@ -100,151 +102,153 @@ region QL(id r, node x/*, int v */)
 
 procedure makeQueue() returns (id r, queue ret)
   ensures Qu(r, ret, 0);
-//{
-//  queue x;
-//  node y;
-//
-//  // y := alloc(2);
-//  inhale y.value |-> _;
-//  inhale y.next |-> _;
-//  inhale y._nextrid |-> _;  // ghost
-//  inhale y._absstate |-> 1; // ghost
-//
-//  // [y + 1] := 0;
-//  y.next := null;
-//
-//  // x := alloc(1);
-//  inhale x.sentinel |-> _;
-//  inhale x._nextrid|-> ?rs;
-//
-//  // [x] := y;
-//  x.sentinel := y;
-//
-//  // return x;
-//  ret := x;
-//
-//  fold QL(rs, y);
-//  inhale OWN@rs;
-//  fold Qu(r, ret);
-//}
+{
+  queue x;
+  node y;
+  id rs; // ghost
+
+  // y := alloc(2);
+  inhale y.value |-> _;
+  inhale y.next |-> _;
+
+  // [y + 1] := 0;
+  y.next := null;
+
+  // x := alloc(1);
+  inhale x.sentinel |-> _;
+
+  // [x] := y;
+  x.sentinel := y;
+
+  // return x;
+  ret := x;
+
+  inhale y._nextrid |-> _; // ghost
+  inhale y._absstate |-> 1; // ghost
+  inhale OWN@rs; // ghost
+  fold QL(rs, y); // ghost: Close newly-allocated region
+
+  inhale x._nextrid|-> rs; // ghost
+  fold Qu(r, ret); // ghost: Close newly-allocated region
+}
 
 procedure getTail(id r, node x) returns (node y, id y_r) // y_r is ghost
   requires QL(r, x) && x != null;
   ensures  QL(y_r, y) && y != null;
-//{
-//  node n;
-//  bool cont;
-//
-//  y := x;
-//
-//  // ghost assignment to y_r
-//  havoc y_r;
-//  assume y_r == r;
-//
-//  cont := true;
-//
-//  while (cont)
-//    invariant QL(y_r, y) && y != null;
-//  {
-//    open_region
-//      using QL(y_r, y);
-//    {
-//      n := y.next;
-//
-//      // Ghost code
-//      assert y._nextrid |-> ?n_r; // Let n_r be the region id of the next node
-//      assert n != null ==> QL(n_r, n); // If next node exist, we should hold QL(n_r, n)
-//      inhale n != null ==> QL(n_r, n); // In this case, duplicate the region assertion
-//    }
-//
-//    if (n == null) {
-//      // return y;
-//      cont := false;
-//    } else {
-//      y := n;
-//
-//      // ghost assignment to y_r
-//      havoc y_r;
-//      assume y_r == n_r;
-//    }
-//  }
-//}
+{
+  node n;
+  bool cont;
+
+  y := x;
+
+  // ghost assignment to y_r
+  havoc y_r;
+  assume y_r == r;
+
+  cont := true;
+
+  while (cont)
+    invariant QL(y_r, y) && y != null;
+  {
+    open_region
+      using QL(y_r, y);
+    {
+      n := y.next;
+
+      // Ghost code
+      assert y._nextrid |-> ?n_r; // Let n_r be the region id of the next node
+      assert n != null ==> QL(n_r, n); // If next node exist, we should hold QL(n_r, n)
+      inhale n != null ==> QL(n_r, n); // In this case, duplicate the region assertion
+    }
+
+    if (n == null) {
+      // return y;
+      cont := false;
+    } else {
+      y := n;
+
+      // ghost assignment to y_r
+      havoc y_r;
+      assume y_r == n_r;
+    }
+  }
+}
 
 procedure enqueue(id s, queue x, int v)
   requires Qu(s, x, 0) && Inv(v);
   ensures  Qu(s, x, 0); // Caper's original specs, weak and trivial to satisfy
-//{
-//  node y;
-//  node h;
-//  node t;
-//  id y_r; // ghost
-//  id t_r; // ghost
-//  bool b;
-//  bool cont;
-//
-////  y := alloc(2);
-//  inhale y.value |-> _;
-//  inhale y.next |-> _;
-//
-////  [y] := v;
-////  [y + 1] := 0;
-//  y.value := v;
-//  y.next := null;
-//
-//  cont := true;
-//
-//  while (cont)
-//    invariant Qu(s, x, 0);
-//    invariant cont ==> y.value |-> v && y.next |-> null && Inv(v);
-//  {
-////    h := [x];
-//    open_region
-//      using Qu(s, x);
-//    {
-//      h := x.sentinel;
-//
-//      assert x._nextrid |-> ?h_r; // ghost: Bind first queue node's region id
-//      assert QL(h_r, h); // ghost: Show that QL(h_r, h) is accessible ...
-//      inhale QL(h_r, h); // ghost: ... and duplicate the region assertion
+{
+  node y;
+  node h;
+  node t;
+  id y_r; // ghost
+  id t_r; // ghost
+  bool b;
+  bool cont;
+
+//  y := alloc(2);
+  inhale y.value |-> _;
+  inhale y.next |-> _;
+
+//  [y] := v;
+//  [y + 1] := 0;
+  y.value := v;
+  y.next := null;
+
+  cont := true;
+
+  while (cont)
+    invariant Qu(s, x, 0);
+    invariant cont ==> y.value |-> v && y.next |-> null && Inv(v);
+  {
+//    h := [x];
+    open_region
+      using Qu(s, x);
+    {
+      h := x.sentinel;
+
+      assert x._nextrid |-> ?h_r; // ghost: Bind first queue node's region id
+      assert QL(h_r, h); // ghost: Show that QL(h_r, h) is accessible ...
+      inhale QL(h_r, h); // ghost: ... and duplicate the region assertion
+    }
+
+//    t := getTail(h);
+    t, t_r := getTail(h_r, h);
+
+//    cr := CAS(t + 1, 0, y);
+    use_atomic
+      using QL(t_r, t) with Z@t_r;
+    {
+      b := CAS_next(t, null, y); // Try to append new node to tail
+
+      // If append succeeded, perform various ghost operations
+      if (b) {
+        inhale y._nextrid |-> _;
+        inhale y._absstate |-> 0; // Choose abstract state of newly-allocated node region
+        havoc y_r;
+        inhale OWN@y_r; // Gain new node's guard
+        fold QL(y_r, y); // Close newly-allocated region
+
+        assert t._absstate |-> ?t_a0; // Bind previous tail's abstract state
+        assert t_a0 == 0 || t_a0 == 1; // State was in one of two states
+        exhale t._absstate |-> t_a0; // Havoc abstract state
+        inhale t._absstate |-> ?t_a1;
+        assume t_a1 >= 3;
+        assume t_a0 == 0 ==> t_a1 % 3 == 0; // Choose new abstract state ...
+        assume t_a0 == 1 ==> t_a1 % 3 == 1; // ... depending on previous state
+        exhale t._nextrid |-> _;   // Havoc next region's id ...
+        inhale t._nextrid |-> y_r; // ... and set to y_r
+      }
+    }
+
+//    if (cr != 0) {
+//      return;
 //    }
-//
-////    t := getTail(h);
-//    t, t_r := getTail(h_r, h);
-//
-////    cr := CAS(t + 1, 0, y);
-//    use_atomic
-//      using QL(t_r, t) with Z@t_r;
-//    {
-//      b := CAS_next(t, null, y); // Try to append new node to tail
-//
-//      // If append succeeded, perform various ghost operations
-//      if (b) {
-//        inhale y._nextrid |-> _;
-//        inhale y._absstate |-> 0; // Choose abstract state of newly-allocated node region
-//        havoc y_r;
-//        inhale OWN@y_r; // Gain new node's guard
-//        fold QL(y_r, y); // Close newly-allocated region
-//
-//        assert t._absstate |-> ?t_a0; // Bind previous tail's abstract state
-//        assert t_a0 == 0 || t_a0 == 1; // State was in one of two states
-//        exhale t._absstate |-> t_a0; // Havoc abstract state
-//        inhale t._absstate |-> ?t_a1;
-//        assume t_a1 >= 3;
-//        assume t_a0 == 0 ==> t_a1 % 3 == 0; // Choose new abstract state ...
-//        assume t_a0 == 1 ==> t_a1 % 3 == 1; // ... depending on previous state
-//        exhale t._nextrid |-> _;   // Havoc next region's id ...
-//        inhale t._nextrid |-> y_r; // ... and set to y_r
-//      }
-//    }
-//
-////    if (cr != 0) {
-////      return;
-////    }
-//    if (b) {
-//      cont := false;
-//    }
-//  }
-//}
+    if (b) {
+      cont := false;
+    }
+  }
+}
 
 procedure dequeue(id q_r, queue q) returns (bool success, int v)
   requires Qu(q_r, q, 0);
@@ -322,18 +326,18 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
             {
               assert sl.next |-> ?hd1;
               if (hd1 != hd) {
-                // TODO: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                 assume false;
                   // TODO: Provable in Caper (i.e. unreachable), but not in Voila.
                   //
-                  //       Without knowing that sentinel still precedes head we won't get
-                  //       OWN for head out of the sentinel (we would get it for some other
-                  //       node), which in turn would prevent us from changing the abstract
-                  //       state of the head, which we need in order to take the invariant out
-                  //       of the head.
+                  // My current understanding is the following: without knowing that sentinel
+                  // still precedes head we won't get OWN for head out of the sentinel (we would
+                  // get it for some other node), which in turn would prevent us from changing
+                  // the abstract state of the head region, which we need in order to take the
+                  // invariant out of the region.
                   //
-                  //       However, I have no idea how Caper can prove that the sentinel's
-                  //       successor cannot have changed in the meantime.
+                  // I believe that Caper can prove that the sentinel's successor cannot have
+                  // changed in the meantime because the action used there effectively disallow
+                  // changing the next pointer once it is non-null.
               }
 
               assert sl._nextrid |-> ?hd_r1;
