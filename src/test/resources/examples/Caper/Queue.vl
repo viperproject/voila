@@ -321,7 +321,7 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
             exhale QL(sl_r0, sl); // TODO: We hold two copies of QL(sl_r0, sl). In order to
                                   //       prevent contradictions between the two ...
 
-            use_atomic
+            use_atomic // TODO: Reconsider which rule to use here
               using QL(sl_r0, sl) with OWN@sl_r0;
             {
               assert sl.next |-> ?hd1;
@@ -352,7 +352,7 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
 
               exhale QL(hd_r0, hd); // TODO: We hold two copies of QL(hd_r0, hd) ...
 
-              use_atomic
+              use_atomic // TODO: Reconsider which rule to use here
                 using QL(hd_r0, hd) with OWN@hd_r0;
               {
                 assert hd.value |-> ?v0;

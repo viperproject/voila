@@ -131,12 +131,21 @@ procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int suc
                               //       (further down, after updating t._absstate), we exhale one
                               //       copy here.
 
-      unfold BagList(t_r, t);
-      assert t._nextid |-> ?t2_r0;
-      assume t2_r0 == t2_r;     // See above
-      exhale t._absstate |-> 0; // Update abstract state of region t_r in order ...
-      inhale t._absstate |-> 1; // ... to free OWN@t2_r and Inv(v)
-      fold BagList(t_r, t);
+      use_atomic
+        /* TODO: Reconsider the use of rule use-atomic here.
+         *       What we want: temporarily open the BagList region in order to change its state
+         *       and afterwards check that the state change was permitted.
+         *       However: TaDA's use-atomic expects the execution of a real atomic operation,
+         *       but we only perform a ghost state update. My *guess* is that such a region state
+         *       change is achieved in TaDA/Caper by doing a view shift.
+         */
+        using BagList(t_r, t) with OWN@t_r;
+      {
+        assert t._nextid |-> ?t2_r0;
+        assume t2_r0 == t2_r;     // See above
+        exhale t._absstate |-> 0; // Update abstract state of region t_r in order ...
+        inhale t._absstate |-> 1; // ... to free OWN@t2_r and Inv(v)
+      }
 
       assert BagList(t2_r, t2, _, _, 0); // See above
     }
