@@ -1,0 +1,39 @@
+struct cell {
+  int f;
+}
+
+/* Work-around: bind n1, n2, n3 */
+region R1(id r, cell c, int v)
+  guards { unique G1; }
+  interpretation {
+    v ==  0 ? (c.f |-> ?n && n == 0) :
+    v ==  1 ? (c.f |-> ?n && n > 0) :
+    v == -1 ? (c.f |-> ?n && n < 0) :
+    false
+  }
+  state { 0 }
+  actions {}
+
+/* Work-around not possible */
+region R2(id r, cell c, int v; int n) /* n is an out-argument */
+  guards { unique G2; }
+  interpretation {
+    v ==  0 ? (c.f |-> ?n && n == 0) :
+    v ==  1 ? (c.f |-> ?n && n > 0) :
+    v == -1 ? (c.f |-> ?n && n < 0) :
+    false
+  }
+  state { 0 }
+  actions {}
+
+/* Work-around not possible */
+region R3(id r, cell c, int v)
+  guards { unique G3; }
+  interpretation {
+    v ==  0 ? (c.f |-> ?n && n == 0) :
+    v ==  1 ? (c.f |-> ?n && n > 0) :
+    v == -1 ? (c.f |-> ?n && n < 0) :
+    false
+  }
+  state { n } /* n is a glorified out-argument */
+  actions {}
