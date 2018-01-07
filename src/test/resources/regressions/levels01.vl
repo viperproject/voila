@@ -1,0 +1,30 @@
+//:: IgnoreFile(/voila/issue/7/)
+
+struct cell {
+  int value;
+}
+
+region Cell(id s, cell c)
+  guards { unique G; }
+  interpretation { c.value |-> ?v }
+  state { v }
+  actions { G: ?n ~> Int; }
+
+procedure test01(id s, cell c)
+  requires Cell(s, c);
+  ensures  false; // TODO: Should not hold!
+{
+  // Duplicate the region assertion
+  assert Cell(s, c);
+  inhale Cell(s, c);
+
+  open_region
+    using Cell(s, c);
+  {
+    open_region // TODO: Should be rejected
+      using Cell(s, c);
+    {
+      skip;
+    }
+  }
+}
