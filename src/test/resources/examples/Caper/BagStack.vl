@@ -2,6 +2,11 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/BagStack.t
 //
 
+// TODO: Caper's BagList forces a node's value (int v) and successor (node z) to be invariant.
+//       This should also be possible in Voila: by making the arguments in- rather than
+//       out-arguments. However, Voila doesn't support existentially quantified out-arguments,
+//       so we would have to introduce and maintain additional ghost fields.
+
 predicate Inv(int v)
 
 struct bag {
