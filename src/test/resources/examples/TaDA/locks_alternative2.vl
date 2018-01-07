@@ -1,0 +1,83 @@
+struct memcell {
+  int f;
+}
+
+region Lock(id a, memcell x)
+  guards { unique G; }
+  interpretation {
+    x.f |-> ?v && (v == 0 || v == 1)
+  }
+  state { v }
+  actions {
+    G: 0 ~> Set(0, 1);
+    G: 1 ~> Set(1, 0);
+  }
+
+/* Original implementation */
+abstract_atomic procedure unlock0(id a, memcell x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures  Lock(a, x, 0) && G@a;
+{
+  make_atomic
+    using Lock(a, x) with G@a;
+  {
+    update_region
+      using Lock(a, x);
+    {
+      x.f := 0;
+    }
+  }
+}
+
+/* Alternative implementation (but same specs) */
+abstract_atomic procedure unlock1(id a, memcell x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures  Lock(a, x, 0) && G@a;
+{
+  make_atomic
+    using Lock(a, x) with G@a;
+  {
+    update_region
+      using Lock(a, x);
+    {
+      x.f := 1;
+    }
+
+    update_region
+      using Lock(a, x);
+    {
+      x.f := 0;
+    }
+  }
+}
+
+/* Alternative implementation (but same specs) */
+abstract_atomic procedure unlock2(id a, memcell x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures  Lock(a, x, 0) && G@a;
+{
+  int nonDet;
+
+  make_atomic
+    using Lock(a, x) with G@a;
+  {
+    do
+      invariant Lock(a, x, ?si);
+      invariant 0 <= nonDet <= 1;
+      invariant nonDet == 1 ==> a |=> <D> && si == 1;
+      invariant nonDet == 0 ==> a |=> (1, 0);
+    {
+      havoc nonDet;
+      assume 0 <= nonDet <= 1;
+
+      update_region
+        using Lock(a, x);
+      {
+        x.f := nonDet;
+      }
+    } while (nonDet != 0);
+  }
+}
