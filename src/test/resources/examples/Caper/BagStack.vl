@@ -71,9 +71,7 @@ procedure push(id r, bag x, int v)
   y.value := v;
   y.next := null;
 
-  b := 0;
-
-  while (b == 0)
+  do
 //    invariant Bag(r,x,0) &*& (cr = 0 ? y |-> v &*& y+1 |-> _ &*& bagInvariant(v) : true);
     invariant Bag(r, x, 0);
     invariant b == 0 ==> y.value |-> v && y.next |-> _ && Inv(v);
@@ -107,7 +105,7 @@ procedure push(id r, bag x, int v)
         inhale x._nextid |-> y_r; // ... of the bag is y, whose region id is y_r
       }
     }
-  }
+  } while (b == 0);
 }
 
 procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int success)
