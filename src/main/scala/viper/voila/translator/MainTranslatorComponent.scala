@@ -8,11 +8,11 @@ package viper.voila.translator
 
 import scala.collection.breakOut
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
+import viper.silver.ast.{LocalVarDecl, Seqn}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
 import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, UnfoldError}
-import viper.silver.ast.LocalVarDecl
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -101,7 +101,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
   }
 
-  def localVariableDeclaration(binder: PLogicalVariableBinder): LocalVarDecl = {
+  def localVariableDeclaration(binder: PLogicalVariableBinder): vpr.LocalVarDecl = {
     vpr.LocalVarDecl(
       binder.id.name,
       translate(semanticAnalyser.typeOfIdn(binder.id))
@@ -153,8 +153,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def extractLogicalVariableBindings(assertion: PExpression): Vector[vpr.LocalVarAssign] = {
-    /* TODO: Related to code inside 'def translate(PProcedure)' --- unify! */
-
     val collectBindings =
       collectall[Vector, vpr.LocalVarAssign] {
         case PPointsTo(location, binder: PLogicalVariableBinder) =>
@@ -305,26 +303,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
     }
 
-    /* TODO: Related to extractLogicalVariableBindings --- unify */
-
-    val procedureWideBoundLogicalVariableDeclarations = {
-      val collectBinders = collect[Vector, PLogicalVariableBinder] {
-        case binder: PLogicalVariableBinder => binder
+    val procedureWideBoundLogicalVariableDeclarations: Vector[LocalVarDecl] = {
+      procedure.body match {
+        case Some(body) =>
+          AstUtils.extractLogicalVariableBinders(body).map(localVariableDeclaration)
+        case None =>
+          Vector.empty
       }
-
-      val collectRelevantBinders = collect[Vector, Vector[PLogicalVariableBinder]] {
-        case PAssert(assertion) => collectBinders(assertion)
-        case PExhale(assertion) => collectBinders(assertion)
-        case PInhale(assertion) => collectBinders(assertion)
-        case foldUnfold: PFoldUnfold => collectBinders(foldUnfold.predicateExp)
-      }
-
-      collectRelevantBinders(procedure.body)
-        .flatten
-        .map(localVariableDeclaration)
     }
 
-    val bodyWithAdditionalVariableDeclarations =
+    val bodyWithAdditionalVariableDeclarations: Option[Seqn] =
       vprMethod.body.map(actualBody =>
         actualBody.copy(
           scopedDecls =

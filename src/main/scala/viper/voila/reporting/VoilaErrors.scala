@@ -223,7 +223,7 @@ case class InsufficientPermissionError(offendingNode: PExpression, detail: Optio
 
   type OffendingNode = PExpression
   def localId: String = "permission_error"
-  val localMessage: String = s"Insufficient permission to $offendingNode"
+  val localMessage: String = s"Insufficient permission to ${offendingNode.formatForUsers}"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)
@@ -234,7 +234,7 @@ case class AssertionError(offendingNode: PExpression, detail: Option[Verificatio
 
   type OffendingNode = PExpression
   def localId: String = "assertion_error"
-  val localMessage: String = s"Assertion $offendingNode might not hold"
+  val localMessage: String = s"Assertion ${offendingNode.formatForUsers} might not hold"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)
@@ -245,7 +245,7 @@ case class InterferenceError(offendingNode: PInterferenceClause, detail: Option[
 
   type OffendingNode = PInterferenceClause
   def localId: String = "interference_error"
-  val localMessage: String = s"Interference clause '$offendingNode' might not hold"
+  val localMessage: String = s"Interference clause '${offendingNode.formatForUsers}' might not hold"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)
@@ -256,7 +256,7 @@ case class InsufficientRegionPermissionError(offendingNode: PPredicateExp, detai
 
   type OffendingNode = PPredicateExp
   def localId: String = "region_permission_error"
-  val localMessage: String = s"Region $offendingNode might not be accessible"
+  val localMessage: String = s"Region ${offendingNode.formatForUsers} might not be accessible"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)
@@ -267,7 +267,7 @@ case class RegionStateError(offendingNode: PPredicateExp, detail: Option[Verific
 
   type OffendingNode = PPredicateExp
   def localId: String = "region_state_error"
-  val localMessage: String = s"Region $offendingNode might not be in the expected state"
+  val localMessage: String = s"Region ${offendingNode.formatForUsers} might not be in the expected state"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)
@@ -278,7 +278,7 @@ case class InsufficientGuardPermissionError(offendingNode: PGuardExp, detail: Op
 
   type OffendingNode = PGuardExp
   def localId: String = "guard_permission_error"
-  val localMessage: String = s"Guard $offendingNode might not be available"
+  val localMessage: String = s"Guard ${offendingNode.formatForUsers} might not be available"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)

@@ -7,8 +7,10 @@
 package viper.voila.frontend
 
 import scala.annotation.switch
+import scala.collection.breakOut
 import scala.language.postfixOps
 import org.bitbucket.inkytonik.kiama.parsing.Parsers
+import org.bitbucket.inkytonik.kiama.relation.TreeRelation.isLeaf
 import org.bitbucket.inkytonik.kiama.rewriting.{Cloner, PositionedRewriter}
 import org.bitbucket.inkytonik.kiama.util.Positions
 
@@ -190,18 +192,29 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val location: Parser[PLocation] =
     idnuse ~ ("." ~> idnuse) ^^ PLocation
 
-  /* Parses and unrolls a do-while loop.
-   * Several hack-ish steps are performed to avoid node sharing while ensuring correct
-   * position information bookkeeping.
+  /* Parses and unrolls a do-while loop, in a way that avoids name clashes but preserves
+   * position information.
    */
   private lazy val parseAndUnrollDoWhileLoop: Parser[~[PStatement, PWhile]] =
     parseDoWhileLoop ^^ {
       case tuple @ (invs, stmts, cond) =>
+
+        val loop: PWhile = {
+          val binders = AstUtils.extractLogicalVariableBinders(stmts)
+
+           /* TODO: Current renaming scheme does not guarantee global name-clash freedom */
+          val renamings: Map[String, String] =
+            binders.map(b => b.id.name -> s"${b.id.name}$$")(breakOut)
+
+          val clonedBody = positionedRewriter.deepcloneAndRename(stmts, renamings)
+
+          PWhile(cond, invs, clonedBody)
+        }
+
         /* Since the tuple is obtained from a parser (i.e. returned as a `Parser[...]`) its
          * position has been recorded in `this.positions`. We assign this position to the
          * synthesised while-loop node.
          */
-        val loop = PWhile(cond, invs, positionedRewriter.deepclone(stmts))
         positions.dupPos(tuple, loop)
 
         new ~(stmts, loop)
@@ -415,6 +428,19 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   object positionedRewriter extends PositionedRewriter with Cloner {
     override val positions: Positions = SyntaxAnalyser.this.positions
+
+    def deepcloneAndRename[T <: Product](t: T, renamings: Map[String, String]): T = {
+      /* Implementation adapted from Cloner.deepclone */
+
+      val cloner =
+        everywherebu(rule[PAstNode] {
+          case id @ PIdnDef(_) if renamings.contains(id.name) => dup(id, Array(renamings(id.name)))
+          case id @ PIdnUse(_) if renamings.contains(id.name) => dup(id, Array(renamings(id.name)))
+          case n if isLeaf(n) => copy(n)
+        })
+
+      rewrite(cloner)(t)
+    }
   }
 
   implicit class PositionedPAstNode[N <: PAstNode](node: N) {

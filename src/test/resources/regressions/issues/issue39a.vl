@@ -1,0 +1,39 @@
+struct cell {
+  int val;
+}
+
+procedure test01(cell c)
+  requires c.val |-> _;
+{
+  do
+    invariant c.val |-> ?vi;
+  {
+    assert c.val |-> ?v;
+  } while (true);
+}
+
+procedure test02(cell c)
+  requires c.val |-> _;
+{
+  //:: ExpectedOutput(typechecker_error)
+  assert c.val |-> ?v1;
+
+  while (true)
+    invariant c.val |-> ?vi;
+  {
+    //:: ExpectedOutput(typechecker_error)
+    assert c.val |-> ?v1;
+  }
+}
+
+procedure test03(cell c)
+  requires c.val |-> _;
+{
+  assert c.val |-> ?v1;
+
+  while (true)
+    invariant c.val |-> ?vi;
+  {
+    assert c.val |-> ?v2;
+  }
+}

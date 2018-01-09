@@ -19,7 +19,16 @@ sealed abstract class PAstNode extends Product {
     prettyPrinter.format(this)
 
   lazy val pretty: String = pretty()
-  override lazy val toString: String = pretty
+
+  lazy val source: Option[String] = {
+    if (VoilaGlobalState.positions == null) None
+    else VoilaGlobalState.positions.textOf(this)
+  }
+
+  lazy val formatForUsers: String = source.getOrElse(pretty)
+  lazy val formatForDevelopers: String = pretty
+
+  override lazy val toString: String = formatForDevelopers
 
   def position: silver.ast.SourcePosition = {
     VoilaGlobalState.positions.getStart(this) match {

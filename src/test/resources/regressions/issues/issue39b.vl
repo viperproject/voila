@@ -1,0 +1,33 @@
+struct cell {
+  int val;
+}
+
+/* This file is meant to demonstrate that the unrolling of a do-while-loop into a
+ * while-loop is transparent to the user in terms of error reporting. In particular, the renaming
+ * of logical variables bound inside the loop (to avoid clashes with the unrolled copy of the loop
+ * body) should not be exhibited by error messages.
+ */
+
+procedure test01(cell c)
+  requires c.val |-> _;
+{
+  do
+    invariant c.val |-> 0;
+  {
+    //:: ExpectedOutput(assert_error:assertion_error)
+    assert c.val |-> ?v && v == 0; // Fails before the loop is entered (i.e. in the unrolled body)
+    c.val := 0;
+  } while (true);
+}
+
+procedure test02(cell c)
+  requires c.val |-> 0;
+{
+  do
+    invariant c.val |-> 1;
+  {
+    //:: ExpectedOutput(assert_error:assertion_error)
+    assert c.val |-> ?v && v == 0; // Fails inside the loop
+    c.val := 1;
+  } while (true);
+}
