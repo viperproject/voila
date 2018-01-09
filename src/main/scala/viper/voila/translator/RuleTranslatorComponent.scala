@@ -38,7 +38,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId)))()
 
     val exhaleGuard =
-      vpr.Exhale(guardAccessIfNotDuplicable(makeAtomic.guard))()
+      vpr.Exhale(guardAccessIfNotDuplicable(makeAtomic.guard))().withSource(makeAtomic.guard)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
@@ -81,7 +81,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
              if (e causedBy vprCheckFrom) && (reason causedBy vprStepFrom) =>
 
           MakeAtomicError(makeAtomic)
-            .dueTo(MissingRegionStateChangeError(makeAtomic.regionPredicate))
+            .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
             .dueTo(AdditionalErrorClarification("This could be related to issue #8", regionId))
 
         case e @ vprerr.AssertFailed(_, reason: vprrea.AssertionFalse, _)
@@ -157,15 +157,31 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val inhaleGuard = vpr.Inhale(exhaleGuard.exp)()
 
     val exhaleTrackingResource = {
-      val stepFrom = stepFromAccess(vprRegionIdArg, regionType)
-      val stepTo = stepToAccess(vprRegionIdArg, regionType)
+      val stepFrom =
+        stepFromAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
 
-      vpr.Exhale(
-        vpr.And(
-          stepFrom,
-          stepTo
-        )()
-      )()
+      val stepTo =
+        stepToAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
+
+      val exhale =
+        vpr.Exhale(
+          vpr.And(
+            stepFrom,
+            stepTo
+          )()
+        )().withSource(makeAtomic.regionPredicate)
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.ExhaleFailed if e causedBy exhale =>
+          MakeAtomicError(makeAtomic)
+            .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
+            /* TODO: Only append next clarification if rule body contains a loop */
+            .dueTo(AdditionalErrorClarification(
+                      "A common source of this problem are insufficient loop invariants",
+                      regionId))
+      }
+
+      exhale
     }
 
     val result =
@@ -191,6 +207,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(updateRegion: PUpdateRegion): vpr.Stmt = {
+    val regionArgs = updateRegion.regionPredicate.arguments
+    val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
+
     val (region, vprInArgs, vprOutArgs) =
       getAndTranslateRegionPredicateDetails(updateRegion.regionPredicate)
 
@@ -203,7 +222,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val vprRegionId = vprInArgs.head
 
     val exhaleDiamond =
-      vpr.Exhale(diamondAccess(vprRegionId))()
+      vpr.Exhale(diamondAccess(vprRegionId))().withSource(updateRegion.regionPredicate)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.ExhaleFailed if e causedBy exhaleDiamond =>
+        UpdateRegionError(
+          updateRegion,
+          InsufficientDiamondResourcePermissionError(updateRegion.regionPredicate, regionId))
+    }
 
     val label = freshLabel("pre_region_update")
 
@@ -362,7 +388,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
             Vector(vprRegionId, oldState)
           )()
         )()
-      )()
+      )().withSource(useAtomic.regionPredicate)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy stateChangePermitted =>

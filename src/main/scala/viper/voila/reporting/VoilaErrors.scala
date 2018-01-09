@@ -284,15 +284,31 @@ case class InsufficientGuardPermissionError(offendingNode: PGuardExp, detail: Op
     copy(offendingNode, detail)
 }
 
-//case class RegionPredicateError(offendingNode: PAstNode, detail: Option[VerificationError] = None)
-//    extends AbstractVerificationError {
-//
-//  def id: String = "region.predicate.error"
-//  val localMessage: String = s"Region predicate $offendingNode might not be available"
-//
-//  protected def dup(offendingNode: PAstNode, detail: Option[VerificationError]): VerificationError =
-//    copy(offendingNode, detail)
-//}
+case class InsufficientDiamondResourcePermissionError(offendingNode: PPredicateExp,
+                                                      regionId: PIdnNode,
+                                                      detail: Option[VerificationError] = None)
+    extends AbstractVerificationError {
+
+  type OffendingNode = PPredicateExp
+  def localId: String = "diamond_permission_error"
+  val localMessage: String = s"Diamond resource $regionId |=> <D> might not be available"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, regionId, detail)
+}
+
+case class InsufficientTrackingResourcePermissionError(offendingNode: PPredicateExp,
+                                                       regionId: PIdnNode,
+                                                       detail: Option[VerificationError] = None)
+    extends AbstractVerificationError {
+
+  type OffendingNode = PPredicateExp
+  def localId: String = "tracking_permission_error"
+  val localMessage: String = s"Tracking resource $regionId |=> (_, _) might not be available"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, regionId, detail)
+}
 
 case class IllegalRegionStateChangeError(offendingNode: PAstNode, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {

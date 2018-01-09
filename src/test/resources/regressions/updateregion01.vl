@@ -1,0 +1,65 @@
+struct cell {
+  int value;
+}
+
+region Cell(id r, cell c)
+  guards { unique G; }
+  interpretation { c.value |-> ?v }
+  state { v }
+  actions { G: ?n ~> Int; }
+
+procedure test01(id r, cell c)
+  requires Cell(r, c, 0);
+{
+  //:: ExpectedOutput(update-region_error:diamond_permission_error)
+  update_region
+    using Cell(r, c);
+  {
+    c.value := 1;
+  }
+}
+
+procedure test02(id r, cell c)
+  requires Cell(r, c, 0);
+{
+  inhale r |=> <D>;
+
+  update_region
+    using Cell(r, c);
+  {
+    c.value := 1;
+  }
+}
+
+abstract_atomic procedure test03(id r, cell c)
+  interference ?v in Set(0) on r;
+  requires Cell(r, c, 0) && G@r;
+{
+  make_atomic
+    using Cell(r, c) with G@r;
+  {
+    update_region
+      using Cell(r, c);
+    {
+      c.value := 1;
+    }
+  }
+}
+
+abstract_atomic procedure test04(id r, cell c)
+  interference ?v in Set(0) on r;
+  requires Cell(r, c, 0) && G@r;
+{
+  //:: ExpectedOutput(make-atomic_error:tracking_permission_error)
+  make_atomic
+    using Cell(r, c) with G@r;
+  {
+    update_region
+      using Cell(r, c);
+    {
+      c.value := 1;
+    }
+
+    exhale r |=> (0, 1);
+  }
+}
