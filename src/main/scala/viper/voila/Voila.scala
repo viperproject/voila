@@ -107,6 +107,19 @@ class Voila extends StrictLogging {
         logger.info(s"  ${program.predicates.length} predicate(s): ${program.predicates.map(_.id.name).mkString(", ")}")
         logger.info(s"  ${program.procedures.length} procedures(s): ${program.procedures.map(_.id.name).mkString(", ")}")
 
+        if (config.include.supplied) {
+          val excludedProcedures: Vector[String] =
+            program.procedures
+              .map(_.id.name)
+              .filterNot(config.include().contains)
+
+          if (excludedProcedures.nonEmpty) {
+            logger.warn(
+              "The following procedures have been excluded from verification: " +
+              excludedProcedures.mkString(", "))
+          }
+        }
+
         val tree = new VoilaTree(program)
 
         var stop = false
@@ -129,7 +142,7 @@ class Voila extends StrictLogging {
           return Some(Failure(voilaErrors))
         }
 
-        val translator = new PProgramToViperTranslator(semanticAnalyser)
+        val translator = new PProgramToViperTranslator(config, semanticAnalyser)
         val (translatedProgram, errorBacktranslator) = translator.translate(tree)
 
         logger.debug(s"Taking Viper preamble from ${defaultPreambleFile.toString}")

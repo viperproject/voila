@@ -323,8 +323,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     collectedVariableDeclarations = Vector.empty
 
+    val bodyToVerify: Option[Seqn] =
+      if (!config.include.supplied || config.include().contains(procedure.id.name))
+        bodyWithAdditionalVariableDeclarations
+      else
+        None
+
     vprMethod.copy(
-      body = bodyWithAdditionalVariableDeclarations
+      body = bodyToVerify
     )(vprMethod.pos, vprMethod.info, vprMethod.errT)
   }
 

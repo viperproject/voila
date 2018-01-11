@@ -14,6 +14,15 @@ class Config(arguments: Seq[String])
     extends ScallopConf(arguments)
        with StrictLogging {
 
+  /* Attention: Don't use options to compute default values! This will cause
+   * a crash when help is printed (--help) because of the order in which things
+   * are initialised.
+   */
+
+  /*
+   * Prologue
+   */
+
   version(VoilaConstants.versionMessage)
 
   banner(s"""Usage: ${VoilaConstants.toolName} [OPTIONS] -i <input-file>
@@ -28,13 +37,11 @@ class Config(arguments: Seq[String])
   val inputFile: ScallopOption[String] = opt[String](
     name = "inputFile",
     descr = "Voila program to verify is read from this file",
-    required = true
-  )
+    required = true)
 
   val outputFile: ScallopOption[String] = opt[String](
     name = "outputFile",
-    descr = "Generated Viper program is written to this file"
-  )
+    descr = "Generated Viper program is written to this file")
 
   val logLevel: ScallopOption[String] = opt[String](
     name = "logLevel",
@@ -42,6 +49,11 @@ class Config(arguments: Seq[String])
     default = Some("INFO"),
     noshort = true
   )(singleArgConverter(level => level.toUpperCase))
+
+  val include: ScallopOption[List[String]] = opt[List[String]](
+    name = "include",
+    descr = "A space-separated list of procedures to verify",
+    noshort = true)
 
   /*
    * Exception handling
@@ -73,6 +85,10 @@ class Config(arguments: Seq[String])
     logger.info(forBuilder.bann.get)
     logger.info(forBuilder.help)
   }
+
+  /*
+   * Epilogue
+   */
 
   /* Immediately finalise command-line parsing */
   verify()
