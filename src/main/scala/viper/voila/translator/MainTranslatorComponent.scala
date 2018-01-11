@@ -8,7 +8,6 @@ package viper.voila.translator
 
 import scala.collection.breakOut
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
-import viper.silver.ast.{LocalVarDecl, Seqn}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.frontend._
@@ -28,6 +27,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   private var _errorBacktranslator: ErrorBacktranslator = _
   protected def errorBacktranslator: ErrorBacktranslator = _errorBacktranslator
+
+  private var _translatedProcedureStubs: Map[String, vpr.Method] = _
+  protected def translatedProcedureStubs: Map[String, vpr.Method] = _translatedProcedureStubs
 
   /*
    * Immutable state and utility methods
@@ -121,10 +123,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     decl
   }
 
+  /* TODO: Reconsider use of havoc methods:
+   *         - Avoid introducing a havoc method for each type in the source program
+   *         - Maybe use fresh variables instead? What about loops?
+   *         - Rename method?
+   */
   def usedVariableHavocs(tree: VoilaTree): Vector[vpr.Method] = {
     val voilaTypes =
       PBoolType() +:
-      tree.nodes.collect { case PHavocVariable(variable) => semanticAnalyser.typ(PIdnExp(variable)) }
+      tree.nodes.collect { case typ: PType => typ }
 
     val vprTypes = voilaTypes.map(translate).distinct
 
@@ -205,6 +212,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     analyseSetComprehensions(tree)
 
+    // TODO: tree.root appears to be a costly operation rather than a simple getter - investigate
+
+    _translatedProcedureStubs =
+      tree.root.procedures.map(procedure =>
+        procedure.id.name -> translateAsStub(procedure)
+      )(breakOut)
+
     val topLevelDeclarations: Vector[vpr.Declaration] = (
          Vector(
             diamondField,
@@ -263,6 +277,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     _tree = null
     _errorBacktranslator = null
+    _translatedProcedureStubs = null
 
     (vprProgram, backtranslator)
   }
@@ -303,7 +318,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
     }
 
-    val procedureWideBoundLogicalVariableDeclarations: Vector[LocalVarDecl] = {
+    val procedureWideBoundLogicalVariableDeclarations: Vector[vpr.LocalVarDecl] = {
       procedure.body match {
         case Some(body) =>
           AstUtils.extractLogicalVariableBinders(body).map(localVariableDeclaration)
@@ -312,7 +327,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       }
     }
 
-    val bodyWithAdditionalVariableDeclarations: Option[Seqn] =
+    val bodyWithAdditionalVariableDeclarations: Option[vpr.Seqn] =
       vprMethod.body.map(actualBody =>
         actualBody.copy(
           scopedDecls =
@@ -323,7 +338,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     collectedVariableDeclarations = Vector.empty
 
-    val bodyToVerify: Option[Seqn] =
+    val bodyToVerify: Option[vpr.Seqn] =
       if (!config.include.supplied || config.include().contains(procedure.id.name))
         bodyWithAdditionalVariableDeclarations
       else
@@ -332,6 +347,35 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vprMethod.copy(
       body = bodyToVerify
     )(vprMethod.pos, vprMethod.info, vprMethod.errT)
+  }
+
+  def translateAsStub(procedure: PProcedure): vpr.Method = {
+    val (vprPres, vprPosts) =
+      procedure.atomicity match {
+        case PAbstractAtomic() =>
+          val pres =
+            procedure.pres.map(pre => translate(pre.assertion)) ++
+            procedure.inters.map(translate)
+
+          val posts = procedure.posts.map(post => translate(post.assertion))
+
+          (pres, posts)
+
+        case PNonAtomic() | PPrimitiveAtomic() =>
+          val pres = procedure.pres.map(pre => translate(pre.assertion))
+          val posts = procedure.posts map (post => translate(post.assertion))
+
+          (pres, posts)
+      }
+
+    vpr.Method(
+      name = procedure.id.name,
+      formalArgs = procedure.formalArgs map translate,
+      formalReturns = procedure.formalReturns map translate,
+      pres = vprPres,
+      posts = vprPosts,
+      body = None
+    )().withSource(procedure)
   }
 
   def translateAbstractlyAtomicProcedure(procedure: PProcedure): vpr.Method = {
@@ -358,13 +402,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprLocals = procedure.locals.map(translate)
 
-    val vprPres = (
-         procedure.pres.map(pre => translate(pre.assertion))
-      ++ procedure.inters.map(translate)
-    )
-
-    val vprPosts = procedure.posts.map(post => translate(post.assertion))
-
     val vprBody = {
       val vprSaveInferenceSets: Vector[vpr.Stmt] =
         regionInterferenceVariables.map { case (_, entry) =>
@@ -385,14 +422,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Seqn(vprSaveInferenceSets :+ vprMainBody, vprLocals)()
     }
 
-    vpr.Method(
-      name = procedure.id.name,
-      formalArgs = procedure.formalArgs map translate,
-      formalReturns = procedure.formalReturns map translate,
-      pres = vprPres,
-      posts = vprPosts,
+    val vprStub = translatedProcedureStubs(procedure.id.name)
+
+    vprStub.copy(
       body = Some(vprBody)
-    )().withSource(procedure)
+    )(vprStub.pos, vprStub.info, vprStub.errT)
   }
 
   def translateStandardProcedure(procedure: PProcedure): vpr.Method = {
@@ -401,9 +435,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         s"Expected procedure ${procedure.id} to have no interference clause, "
       + s"but found ${procedure.inters}")
 
-    val pres = procedure.pres.map(pre => translate(pre.assertion))
-
-    val body = {
+    val vprBody = {
       val mainBody =
         procedure.body match {
           case Some(stmt) => translate(stmt)
@@ -413,14 +445,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Seqn(Vector(mainBody), procedure.locals map translate)()
     }
 
-    vpr.Method(
-      name = procedure.id.name,
-      formalArgs = procedure.formalArgs map translate,
-      formalReturns = procedure.formalReturns map translate,
-      pres = pres,
-      posts = procedure.posts map (post => translate(post.assertion)),
-      body = Some(body)
-    )().withSource(procedure)
+    val vprStub = translatedProcedureStubs(procedure.id.name)
+
+    vprStub.copy(
+      body = Some(vprBody)
+    )(vprStub.pos, vprStub.info, vprStub.errT)
   }
 
   def translate(declaration: PFormalArgumentDecl): vpr.LocalVarDecl =
@@ -754,7 +783,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               vpr.Assert(vpr.TrueLit()())()
 
             case PAbstractAtomic() =>
-              // TODO: See Voila i ssue #29
+              // TODO: See Voila issue #29
               // TODO: Inject code comments at various places
 
               val vprPreHavocLabel = freshLabel("pre_havoc")
@@ -908,12 +937,47 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               )()
           }
 
-        val vprCall =
-          vpr.MethodCall(
-            callee.id.name,
-            vprArguments,
-            vprReturns
-          )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos).withSource(statement)
+        val vprCall = {
+          val vprStub = translatedProcedureStubs(procedureId.name)
+
+          val vprPreCallLabel = freshLabel("pre_call")
+
+          val vprPre =
+            vpr.utility.Expressions.instantiateVariables(
+              viper.silicon.utils.ast.BigAnd(vprStub.pres),
+              vprStub.formalArgs,
+              vprArguments)
+
+          val vprPost =
+            vpr.utility.Expressions.instantiateVariables(
+              viper.silicon.utils.ast.BigAnd(vprStub.posts),
+              vprStub.formalArgs ++ vprStub.formalReturns,
+              vprArguments ++ vprReturns
+            ).transform(
+              {
+                case old: vpr.Old =>
+                  vpr.LabelledOld(old.exp, vprPreCallLabel.name)(old.pos, old.info, old.errT)
+              },
+              vpr.utility.Rewriter.Traverse.TopDown)
+
+          val vprExhalePres = vpr.Exhale(vprPre)()
+
+          val stabilizeFrameRegions =
+            stabilizeRegions(s"before ${call.statementName}@${call.lineColumnPosition}")
+
+          val vprHavocTargets = vprReturns map havoc
+
+          val vprInhalePosts = vpr.Inhale(vprPost)()
+
+          vpr.Seqn(
+            vprPreCallLabel +:
+            vprExhalePres +:
+            stabilizeFrameRegions +:
+            vprHavocTargets :+
+            vprInhalePosts,
+            Vector.empty
+          )()
+        }
 
         val result =
           vpr.Seqn(
