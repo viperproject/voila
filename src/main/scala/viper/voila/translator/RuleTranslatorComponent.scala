@@ -241,6 +241,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UpdateRegionError(updateRegion, InsufficientRegionPermissionError(updateRegion.regionPredicate))
     }
 
+    val stabilizeFrameRegions =
+      stabilizeRegions(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}")
+
     val ruleBody = translate(updateRegion.body)
 
     val foldRegionPredicate =
@@ -305,6 +308,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           exhaleDiamond,
           label,
           unfoldRegionPredicate,
+          stabilizeFrameRegions,
           ruleBody,
           foldRegionPredicate,
           postRegionUpdate),
@@ -329,14 +333,6 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
                       .declaration
 
     val preUseAtomicLabel = freshLabel("pre_use_atomic")
-
-    val checkGuard =
-      vpr.Assert(guardAccessIfNotDuplicable(useAtomic.guard))()
-
-    errorBacktranslator.addErrorTransformer {
-      case e: vprerr.AssertFailed if e causedBy checkGuard =>
-        UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
-    }
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
@@ -366,6 +362,29 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           .dueTo(AdditionalErrorClarification("In particular, closing the region at the end of the use-atomic block might fail", useAtomic.regionPredicate))
           .dueTo(ebt.translate(e.reason))
     }
+
+    /* Temporarily exhale the guard used in the use-atomic rule so that it is no longer held
+     * when stabilising the frame.
+     *
+     * Note: The guard must be checked in any case! I.e. the check is independent of the
+     * technical treatment of frame stabilisation.
+     */
+    val exhaleGuard = vpr.Exhale(guardAccessIfNotDuplicable(useAtomic.guard))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
+        UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
+    }
+
+    val inhaleGuard = vpr.Inhale(guardAccessIfNotDuplicable(useAtomic.guard))()
+
+    val stabilizationReason = s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}"
+
+    val stabilizeOtherRegionTypes =
+      stabilizeRegions(tree.root.regions.filterNot(_ == region), stabilizationReason)
+
+    val stabilizeCurrentRegionTypes =
+      stabilizeRegions(Vector(region), stabilizationReason)
 
     val currentState =
       vpr.FuncApp(
@@ -399,8 +418,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Seqn(
         Vector(
           preUseAtomicLabel,
-          checkGuard,
+          /* Note: Guard must be checked!
+           * I.e. the check is independent of the technical treatment of frame stabilisation.
+           */
+          exhaleGuard,
+          stabilizeOtherRegionTypes,
           unfoldRegionPredicate,
+          stabilizeCurrentRegionTypes,
+          inhaleGuard,
           ruleBody,
           foldRegionPredicate,
           stateChangePermitted),

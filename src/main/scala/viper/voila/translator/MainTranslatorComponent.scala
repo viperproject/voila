@@ -488,10 +488,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         if (alreadyHavoced) {
           None
         } else {
-          logger.debug(s"${indent()} // Havocking regions " +
-                       s"(after ${statement.statementName}@${statement.lineColumnPosition})")
-
-          Some(stabiliseAfter(statement))
+          Some(stabilizeRegions(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
         }
       } else {
         None
@@ -933,13 +930,18 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def stabiliseAfter(statement: PStatement): vpr.Stmt = {
+  def stabilizeRegions(reason: String): vpr.Stmt = {
+    stabilizeRegions(tree.root.regions, reason)
+  }
+
+  def stabilizeRegions(regions: Vector[PRegion], reason: String): vpr.Stmt = {
+    logger.debug(s"${indent()} // Stabilising ${regions.mkString(",")} ($reason)")
+
     val preHavocLabel = freshLabel("pre_havoc")
 
     vpr.Seqn(
       preHavocLabel +:
-      tree.root.regions.map(region =>
-        havocAllRegionsInstances(region, preHavocLabel).asSeqn),
+      regions.map(region => havocAllRegionsInstances(region, preHavocLabel).asSeqn),
       Vector.empty
     )()
   }

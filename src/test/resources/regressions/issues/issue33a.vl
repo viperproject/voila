@@ -9,8 +9,8 @@ procedure test01(id r, memcell x)
   requires Cell(r, x, 0); // OK, since region assertions are duplicable
 {
   set_to_one(r, x);
-  assert Cell(r, x, 1);
-  assert false; // Follows from Cell(r, x, 0) && Cell(r, x, 1)
+  //:: MissingOutput(assert_error:assertion_error, /voila/issue/33/)
+  assert Cell(r, x, 0) && Cell(r, x, 1) && false;
 }
 
 abstract_atomic procedure set_to_one(id r, memcell x)
