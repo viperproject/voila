@@ -176,7 +176,7 @@ procedure getTail(id r, node x) returns (node y, id y_r) // y_r is ghost
 
 procedure enqueue(id s, queue x, int v)
   requires Qu(s, x, 0) && Inv(v);
-  ensures  Qu(s, x, 0); // Caper's original specs, weak and trivial to satisfy
+  ensures  Qu(s, x, 0);
 {
   node y;
   node h;
@@ -230,7 +230,7 @@ procedure enqueue(id s, queue x, int v)
         fold QL(y_r, y); // Close newly-allocated region
 
         assert t._absstate |-> ?t_a0; // Bind previous tail's abstract state
-        assert t_a0 == 0 || t_a0 == 1; // State was in one of two states
+        assert t_a0 == 0 || t_a0 == 1; // State was in one of two states [DEBUG]
         exhale t._absstate |-> t_a0; // Havoc abstract state
         inhale t._absstate |-> ?t_a1;
         assume t_a1 >= 3;
@@ -275,8 +275,8 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
       assert q._nextrid |-> ?sl_r0;
       assert QL(sl_r0, sl, ?sl_a0);
       inhale QL(sl_r0, sl);
-      assert sl_a0 >= 0;     // REMOVE
-      assert sl_a0 % 3 == 1; // REMOVE
+      assert sl_a0 >= 0;     // [DEBUG]
+      assert sl_a0 % 3 == 1; // [DEBUG]
     }
 
 //    head := [sentinel + 1];
@@ -310,16 +310,13 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
           // If dequeue succeeded, perform various ghost operations
           if (success) {
             // Since the CAS succeeded, q.sentinel was sl before the CAS.
-            assert sl1 == sl;
+            assert sl1 == sl;      // [DEBUG]
             assume sl_r1 == sl_r0; // TODO: Implied by sl1 == sl
-            assert sl_a1 >= 0;
-            assert sl_a1 % 3 == 1;
+            assert sl_a1 >= 0;     // [DEBUG]
+            assert sl_a1 % 3 == 1; // [DEBUG]
 
             exhale q._nextrid |-> _;
             inhale q._nextrid |-> hd_r0;
-
-            exhale QL(sl_r0, sl); // TODO: We hold two copies of QL(sl_r0, sl). In order to
-                                  //       prevent contradictions between the two ...
 
             use_atomic // TODO: Reconsider which rule to use here
               using QL(sl_r0, sl) with OWN@sl_r0;
@@ -343,23 +340,21 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
               assert sl._nextrid |-> ?hd_r1;
               assume hd_r1 == hd_r0; // TODO: Implied by hd1 == hd
 
-              assert sl_a1 % 3 == 1;
-              assert sl_a1 >= 4;
+              assert sl_a1 % 3 == 1; // [DEBUG]
+              assert sl_a1 >= 4;     // [DEBUG]
               exhale sl._absstate |-> sl_a1;
               inhale sl._absstate |-> sl_a1 + 1;
-              assert (sl_a1 + 1) >= 5;
-              assert (sl_a1 + 1) % 3 == 2;
-
-              exhale QL(hd_r0, hd); // TODO: We hold two copies of QL(hd_r0, hd) ...
+              assert (sl_a1 + 1) >= 5;     // [DEBUG]
+              assert (sl_a1 + 1) % 3 == 2; // [DEBUG]
 
               use_atomic // TODO: Reconsider which rule to use here
                 using QL(hd_r0, hd) with OWN@hd_r0;
               {
                 assert hd.value |-> ?v0;
                 assert hd._absstate |-> ?u40;
-                assert u40 % 3 == 0;
-                assert u40 == 0 || u40 >= 3;
-                assert Inv(v0);
+                assert u40 % 3 == 0;          // [DEBUG]
+                assert u40 == 0 || u40 >= 3;  // [DEBUG]
+                assert Inv(v0);               // [DEBUG]
                 assume u40 == 0; // TODO: Get rid of (case split?) Could also be a non-issue once overlapping actions are supported.
                 exhale hd._absstate |-> u40;
                 inhale hd._absstate |-> u40 + 1;

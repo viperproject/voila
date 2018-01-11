@@ -123,23 +123,25 @@ procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int suc
       exhale x._nextid |-> ?t_r0; // Update x._nextid to reflect that the new head ...
       inhale x._nextid |-> t2_r;  // ... of the bag is t2, whose region id is t2_r
 
-      assume t_r0 == t_r; // Provable in Caper (but not by Voila). Probably implied by x.hd |-> t
-                          // from (before) the successful CAS.
+      assert BagList(t_r0, t, ?v0, ?t2_0, 0);
+        // Bind out-arguments of the region assertion obtained from unfolding Bag(r, x),
+        // i.e. of the previous head.
 
-      assert BagList(t_r, t, v, t2, 0); // Knowing that the region's state is 0 requires
-                                        // knowing that t_r0 == t_r.
+      assume t_r0 == t_r && v0 == v && t2_0 == t2;
+        // Provable in Caper (but not by Voila). Probably implied by x.hd |-> t
+        // from (before) the successful CAS.
 
-      exhale BagList(t_r, t); // TODO: We now hold two copies of region BagList(t_r, t).
-                              //       In order to avoid contradictions between the two copies
-                              //       (further down, after updating t._absstate), we exhale one
-                              //       copy here.
+      assert BagList(t_r, t, v, t2, 0); // [DEBUG]
+        // Knowing that the region BagList(t_r, t, v, t2), which we got from the precondition,
+        // is in state 0 requires knowing that it is a duplicate of the previous head, i.e.
+        // of BagList(t_r0, t, v0, t2_0, 0).
 
       use_atomic
         /* TODO: Reconsider the use of rule use-atomic here.
          *       What we want: temporarily open the BagList region in order to change its state
          *       and afterwards check that the state change was permitted.
          *       However: TaDA's use-atomic expects the execution of a real atomic operation,
-         *       but we only perform a ghost state update. My *guess* is that such a region state
+         *       but we only perform a ghost state update. My guess is that such a region state
          *       change is achieved in TaDA/Caper by doing a view shift.
          */
         using BagList(t_r, t) with OWN@t_r;
@@ -150,7 +152,7 @@ procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int suc
         inhale t._absstate |-> 1; // ... to free OWN@t2_r and Inv(v)
       }
 
-      assert BagList(t2_r, t2, _, _, 0); // See above
+      assert BagList(t2_r, t2, _, _, 0); // See above [DEBUG]
     }
   }
 }
@@ -247,7 +249,7 @@ procedure pop(id x_r, bag x) returns (int status, int ret)
       assert Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
       inhale Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
 
-      status := popCAS(x_r, x, t_r, t, t2_r, t2); // TODO: Wrap in use-atomic block?
+      status := popCAS(x_r, x, t_r, t, t2_r, t2);
 
       // Model memory immutability (as before)
       assert BagList(t_r, t, ?v_2, ?t2_2);
