@@ -1,0 +1,31 @@
+region Cell(id r, memcell x)
+  guards { unique G; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions { G: ?m ~> Int; }
+
+abstract_atomic procedure test01(id r, memcell x)
+  interference ?v in Set(0) on r;
+  requires Cell(r, x, v) && G@r;
+  ensures  Cell(r, x, 1) && G@r;
+{
+  make_atomic
+    using Cell(r, x) with G@r;
+  {
+    assert Cell(r, x, 0); // Duplicate the
+    inhale Cell(r, x);    // region assertion
+
+    update_region
+      using Cell(r, x);
+    {
+      x.f := 1;
+    }
+
+    //:: ExpectedOutput(assert_error:assertion_error)
+    assert false;
+  }
+}
+
+struct memcell {
+  int f;
+}

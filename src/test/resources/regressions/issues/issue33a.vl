@@ -6,17 +6,30 @@ region Cell(id r, memcell x)
 
 procedure test01(id r, memcell x)
   requires Cell(r, x, 0) && G@r;
-  requires Cell(r, x, 0); // OK, since region assertions are duplicable
+  requires Cell(r, x, 0);
 {
   set_to_one(r, x);
-  assert Cell(r, x, 1);
-  assert false; // Follows from Cell(r, x, 0) && Cell(r, x, 1)
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert false;
+}
+
+procedure test02(id r, memcell x)
+  requires Cell(r, x, 0) && G@r;
+{
+  inhale Cell(r, x, 0);
+  set_to_two(r, x);
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert false;
 }
 
 abstract_atomic procedure set_to_one(id r, memcell x)
   interference ?v in Set[int](v) on r;
   requires Cell(r, x, v) && G@r;
   ensures  Cell(r, x, 1) && G@r;
+
+procedure set_to_two(id r, memcell x)
+  requires Cell(r, x, _) && G@r;
+  ensures  Cell(r, x, 2) && G@r;
 
 struct memcell {
   int f;
