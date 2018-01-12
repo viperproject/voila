@@ -32,3 +32,15 @@ procedure test01(id c, memcell x)
   v := read(c, x);
   assert v == n;
 }
+
+procedure noop(id c, memcell x)
+  requires (false ==> Counter(c, x)) && G@c;
+  ensures  (false ==> Counter(c, x)) && G@c;
+
+procedure test02(id c, memcell x)
+  requires Counter(c, x);
+  ensures  true;
+{
+  //:: ExpectedOutput(precondition_error:guard_permission_error)
+  noop(c, x);
+}

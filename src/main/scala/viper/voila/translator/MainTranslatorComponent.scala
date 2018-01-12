@@ -962,6 +962,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val vprExhalePres = vpr.Exhale(vprPre)()
 
+          val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.ExhaleFailed if e causedBy vprExhalePres =>
+              PreconditionError(call, ebt.translate(e.reason))
+          }
+
           val stabilizeFrameRegions =
             stabilizeRegions(s"before ${call.statementName}@${call.lineColumnPosition}")
 
