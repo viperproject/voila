@@ -1,0 +1,64 @@
+region Counter(id c, memcell x)
+  guards { unique INC; }
+  interpretation { x.f |-> ?n }
+  state { n }
+  actions { INC: ?m ~> Int; }
+
+/*
+ * Corresponds to Fig. 7.5 from Pedro's thesis
+ */
+abstract_atomic procedure incr(id c, memcell x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n) && INC@c;
+  ensures Counter(c, x, n + 1) && INC@c;
+{
+  int m;
+  int v;
+  bool b;
+
+  make_atomic
+    using Counter(c, x) with INC@c;
+  {
+    b := false;
+
+    while (!b)
+      invariant Counter(c, x);
+      invariant !b ==> c |=> <D>;
+      invariant b ==> c |=> (v, v + 1);
+    {
+      if (m == 0) {
+//        v := [x];
+        open_region
+          using Counter(c, x);
+        {
+          v := x.f;
+        }
+
+//        b := CAS(x, v, v + 1);
+        update_region
+          using Counter(c, x);
+        {
+          b := CAS(x, v, v + 1);
+        }
+
+//        m := random();
+        havoc m;
+        assume 0 <= m;
+      } else {
+        m := m - 1;
+      }
+    }
+  }
+}
+
+
+
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;
+
+struct memcell {
+  int f;
+}
