@@ -38,7 +38,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId)))()
 
     val exhaleGuard =
-      vpr.Exhale(guardAccessIfNotDuplicable(makeAtomic.guard))().withSource(makeAtomic.guard)
+      vpr.Exhale(translate(makeAtomic.guard))().withSource(makeAtomic.guard)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
@@ -369,14 +369,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
      * Note: The guard must be checked in any case! I.e. the check is independent of the
      * technical treatment of frame stabilisation.
      */
-    val exhaleGuard = vpr.Exhale(guardAccessIfNotDuplicable(useAtomic.guard))()
+    val exhaleGuard = vpr.Exhale(translate(useAtomic.guard))().withSource(useAtomic.guard)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
         UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
     }
 
-    val inhaleGuard = vpr.Inhale(guardAccessIfNotDuplicable(useAtomic.guard))()
+    val inhaleGuard = vpr.Inhale(translate(useAtomic.guard))()
 
     val stabilizationReason = s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}"
 
@@ -504,16 +504,5 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       )()
 
     surroundWithSectionComments(openRegion.statementName, result)
-  }
-
-  /* TODO: See also issue #19 */
-  protected def guardAccessIfNotDuplicable(guardExp: PGuardExp): vpr.Exp = {
-    val guardDecl = semanticAnalyser.entity(guardExp.guard).asInstanceOf[GuardEntity]
-                                    .declaration
-
-    guardDecl.modifier match {
-      case PUniqueGuard() => translate(guardExp)
-      case PDuplicableGuard() => vpr.TrueLit()()
-    }
   }
 }

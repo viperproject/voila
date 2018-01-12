@@ -40,7 +40,7 @@ procedure incr(id r, memcell x) returns (int ret)
   bool b;
 
   do
-    invariant BCounter(r, x);
+    invariant BCounter(r, x) && INCREMENT@r;
     invariant 0 <= v <= 2;
   {
     open_region

@@ -55,7 +55,7 @@ region BagList(id r, node y; int v, node z)
   actions { OWN: 0 ~> Set(0, 1); }
 
 procedure push(id r, bag x, int v)
-  requires Bag(r, x, 0) && Inv(v);
+  requires Bag(r, x, 0) && Inv(v) && Z@r;
   ensures  Bag(r, x, 0);
 {
   node y;
@@ -73,7 +73,7 @@ procedure push(id r, bag x, int v)
 
   do
 //    invariant Bag(r,x,0) &*& (cr = 0 ? y |-> v &*& y+1 |-> _ &*& bagInvariant(v) : true);
-    invariant Bag(r, x, 0);
+    invariant Bag(r, x, 0) && Z@r;
     invariant b == 0 ==> y.value |-> v && y.next |-> _ && Inv(v);
   {
 //	  t := [x];
@@ -109,9 +109,10 @@ procedure push(id r, bag x, int v)
 }
 
 procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int success)
-  requires Bag(r, x, 0) && BagList(t_r, t, ?v, t2) && BagList(t2_r, t2) && t != null;
+  requires Bag(r, x, 0) && BagList(t_r, t, ?v, t2) && BagList(t2_r, t2) && t != null && Z@r;
   ensures success == 0 || success == 1;
   ensures success == 1 ==> Inv(v);
+  ensures Z@r;
 {
   use_atomic
     using Bag(r, x) with Z@r;
@@ -158,7 +159,7 @@ procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int suc
 }
 
 procedure pop(id x_r, bag x) returns (int status, int ret)
-  requires Bag(x_r, x, 0);
+  requires Bag(x_r, x, 0) && Z@x_r;
 //  ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
   ensures  status == 1 ? Bag(x_r, x, 0) && Inv(ret) : Bag(x_r, x, 0);
   ensures  status == -1 || status == 1;
@@ -178,7 +179,7 @@ procedure pop(id x_r, bag x) returns (int status, int ret)
   while (status == 0)
     invariant -1 <= status <= 1;
 //    invariant Bag(r,x,0) &*& (cr = 0 ? true : BagList(rt,t,v,t2,_) &*& t != 0 &*& bagInvariant(v));
-    invariant Bag(x_r, x, 0);
+    invariant Bag(x_r, x, 0) && Z@x_r;
     // TODO: Cannot yet use these invariants: they require modelling Caper's immutable
     //       memory, which is modelled in Voila via ghost code (additional assumes).
     //       In Voila's Viper encoding, this ghost code, even if put at the end of the loop body,
@@ -245,7 +246,8 @@ procedure pop(id x_r, bag x) returns (int status, int ret)
         // CAS inside popCAS succeeded). After the loop, t.value is assigned to ret, but if
         // t.value weren't immutable, then we might not hold Inv(ret) afterwards.
 
-      // Duplicate the regions (since popCAS consumes them)
+      // Duplicate region assertions, since popCAS consumes them.
+      // Alternative (until region assertions are automatically duplicated): change contract of popCAS.
       assert Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
       inhale Bag(x_r, x, 0) && BagList(t_r, t, v, t2) && BagList(t2_r, t2);
 

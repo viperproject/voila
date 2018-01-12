@@ -78,7 +78,7 @@ procedure incrNA2(id r, memcell x) returns (int ret)
   b := false;
 
   while (!b)
-    invariant BCounter(r, x);
+    invariant BCounter(r, x) && INCREMENT@r;
     invariant 0 <= v <= 2;
   {
     open_region

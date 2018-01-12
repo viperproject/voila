@@ -127,7 +127,7 @@ abstract_atomic procedure lock(id a, memcell x)
 }
 
 procedure non_atomic_lock(id r, id a, memcell x)
-  requires isLock(r, a, x);
+  requires isLock(r, a, x) && Z@r;
   ensures  Locked(r, a, x);
   // ensures  isLock(r, a, x);
 {

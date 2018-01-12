@@ -25,7 +25,7 @@ procedure incr(id r, memcell x) returns (int ret)
   bool b;
 
   do
-    invariant Counter(r, x, ?vi);     // TODO: Why isn't INCREMENT@r needed here????????????????????????
+    invariant Counter(r, x, ?vi) && INCREMENT@r;
     invariant b ? v0 < vi : v0 <= vi;
   {
     open_region
