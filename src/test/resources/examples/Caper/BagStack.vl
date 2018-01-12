@@ -149,6 +149,7 @@ procedure popCAS(id r, bag x, id t_r, node t, id t2_r, node t2) returns (int suc
       {
         assert t._nextid |-> ?t2_r0;
         assume t2_r0 == t2_r;     // See above
+        assert t.value |-> v && Inv(v); // [DEBUG]
         exhale t._absstate |-> 0; // Update abstract state of region t_r in order ...
         inhale t._absstate |-> 1; // ... to free OWN@t2_r and Inv(v)
       }
