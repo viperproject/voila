@@ -109,7 +109,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     interference.* ~
     requires.* ~
     ensures .* ~
-    (("{" ~> varDeclStmt.*) ~ (statementsOrSkip <~ "}")).? ^^ {
+    (("{" ~> varDeclStmts) ~ (statementsOrSkip <~ "}")).? ^^ {
       case mod ~ id ~ args ~ optReturns ~ inters ~ pres ~ posts ~ optBraces =>
         val (locals, body) =
           optBraces match {
@@ -250,6 +250,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
     typ ~ idndef <~ ";" ^^ { case tpe ~ id => PLocalVariableDecl(id, tpe) }
+
+  lazy val varDeclStmts: Parser[Vector[PLocalVariableDecl]] =
+    (typ ~ rep1sep(idndef, ",") <~ ";").* ^^ (decls =>
+      decls flatMap { case tpe ~ ids =>
+        ids map (id =>
+          PLocalVariableDecl(id, positionedRewriter.deepclone(tpe)).range(tpe, id))})
 
   /* Operator precedences and associativity taken from the following sources:
    *   http://en.cppreference.com/w/cpp/language/operator_precedence
