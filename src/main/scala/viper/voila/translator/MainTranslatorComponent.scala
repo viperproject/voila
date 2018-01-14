@@ -774,6 +774,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, result)
 
+      case use @ PLemmaApplication(call) =>
+        // TODO: No need to havoc the frame of this call, which happens by reusing the translation
+        //       of regular method calls
+        directlyTranslate(call)
+
       case call @ PProcedureCall(procedureId, arguments, rhs) =>
         val callee =
           semanticAnalyser.entity(procedureId).asInstanceOf[ProcedureEntity].declaration

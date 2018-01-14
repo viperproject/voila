@@ -37,7 +37,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", "non_atomic",
     "if", "else", "while", "do", "skip",
-    "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation",
+    "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation", "use",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "Int", "Nat", "Set",
     "Seq", "size", "head", "tail",
@@ -177,17 +177,21 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "havoc" ~> idnuse <~ ";" ^^ PHavocVariable |
     "havoc" ~> location <~ ";" ^^ PHavocLocation |
     "use_region_interpretation" ~> predicateExp <~ ";" ^^ PUseRegionInterpretation |
+    "use" ~> procedureCall ^^ PLemmaApplication |
     makeAtomic |
     updateRegion |
     useAtomic |
     openRegion |
     "(" ~> statements <~ ")" <~ ";" |
-    (repsep(idnuse, ",") <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
-      case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs.getOrElse(Vector.empty))
-    } |
+    procedureCall |
     idnuse ~ (":=" ~> location) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     location ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
+
+  lazy val procedureCall: Parser[PProcedureCall] =
+    (repsep(idnuse, ",") <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
+      case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs.getOrElse(Vector.empty))
+    }
 
   lazy val location: Parser[PLocation] =
     idnuse ~ ("." ~> idnuse) ^^ PLocation
