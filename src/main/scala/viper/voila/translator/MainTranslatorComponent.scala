@@ -190,6 +190,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                       vprValue
                     )()
 
+                  errorBacktranslator.addErrorTransformer {
+                    case e @ vprerr.PreconditionInAppFalse(_, _: vprrea.InsufficientPermission, _)
+                         if e causedBy vprValue =>
+
+                      InsufficientRegionPermissionError(predicateExp)
+                  }
+
                   Vector(vprAssignment)
 
                 case _ =>  Vector.empty
