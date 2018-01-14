@@ -130,6 +130,17 @@ case class AssertError(offendingNode: PAssert, detail: Option[VerificationError]
     copy(offendingNode, detail)
 }
 
+case class ExhaleError(offendingNode: PExhale, detail: Option[VerificationError] = None)
+    extends AbstractVerificationError {
+
+  type OffendingNode = PExhale
+  def localId: String = "exhale_error"
+  val localMessage: String = "Exhale might fail"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class FoldError(offendingNode: PFold, detail: Option[VerificationError] = None)
   extends AbstractVerificationError {
 

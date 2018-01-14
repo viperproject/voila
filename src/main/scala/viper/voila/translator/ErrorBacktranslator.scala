@@ -33,6 +33,8 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
         PreconditionError(sourceNode, translate(reason))
       case vprerr.AssertFailed(Source(sourceNode: PAssert), reason, _) =>
         AssertError(sourceNode, translate(reason))
+      case vprerr.ExhaleFailed(Source(sourceNode: PExhale), reason, _) =>
+        ExhaleError(sourceNode, translate(reason))
       case vprerr.FoldFailed(Source(sourceNode: PFold), reason, _) =>
         FoldError(sourceNode, translate(reason))
       case vprerr.UnfoldFailed(Source(sourceNode: PUnfold), reason, _) =>
