@@ -297,6 +297,7 @@ case class PTrueLit() extends PLiteral
 case class PFalseLit() extends PLiteral
 case class PNullLit() extends PLiteral
 case class PIntLit(value: BigInt) extends PLiteral
+case class PFracLiteral(numerator: BigInt, denominator: BigInt) extends PLiteral
 
 sealed trait PUnOp extends PExpression {
   def operand: PExpression
@@ -401,6 +402,7 @@ sealed trait PInternalType extends PType
 case class PIntType() extends PType
 case class PBoolType() extends PType
 case class PRegionIdType() extends PType
+case class PFracType() extends PType
 
 case class PNullType() extends PInternalType
 case class PUnknownType() extends PInternalType

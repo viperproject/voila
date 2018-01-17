@@ -301,6 +301,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
     typ match {
       case PIntType() => "int"
       case PBoolType() => "bool"
+      case PFracType() => "frac"
       case PSetType(elementType) => "set" <> angles(toDoc(elementType))
       case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
       case PRefType(referencedType) => toDoc(referencedType)

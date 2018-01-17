@@ -31,7 +31,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   val reservedWords = Set(
     "true", "false",
-    "int", "bool", "id", "set",
+    "int", "bool", "id", "set", "frac", "seq",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
@@ -361,6 +361,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "_" ^^^ PIrrelevantValue() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
+    regex("[0-9]+".r) ~ regex("[0-9]+".r) ^^ { case n ~ d => PFracLiteral(BigInt(n), BigInt(d)) } |
     setExpression |
     seqLiteral |
     seqOperation |
@@ -418,6 +419,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "int" ^^^ PIntType() |
     "bool" ^^^ PBoolType() |
     "id" ^^^ PRegionIdType() |
+    "frac" ^^^ PFracType() |
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
     idnuse ^^ PRefType
