@@ -323,6 +323,7 @@ case class PAtLeast(left: PExpression, right: PExpression) extends PBinOp
 case class PAdd(left: PExpression, right: PExpression) extends PBinOp
 case class PSub(left: PExpression, right: PExpression) extends PBinOp
 case class PMul(left: PExpression, right: PExpression) extends PBinOp
+case class PFrac(left: PExpression, right: PExpression) extends PBinOp
 case class PMod(left: PExpression, right: PExpression) extends PBinOp
 case class PDiv(left: PExpression, right: PExpression) extends PBinOp
 

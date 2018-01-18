@@ -344,8 +344,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     exp50 ~ ("+" ~> exp40) ^^ PAdd |
     exp50 ~ ("-" ~> exp40) ^^ PSub |
     exp50 ~ ("*" ~> exp40) ^^ PMul |
-    exp50 ~ ("%" ~> exp40) ^^ PMod |
-    exp50 ~ ("/" ~> exp40) ^^ PDiv |
+    exp50 ~ ("/" ~> exp40) ^^ PFrac |
+    exp50 ~ ("div" ~> exp40) ^^ PDiv |
+    exp50 ~ ("mod" ~> exp40) ^^ PMod |
     exp40
 
   lazy val exp40: PackratParser[PExpression] = /* Right-associative */
@@ -361,7 +362,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "_" ^^^ PIrrelevantValue() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
-    regex("[0-9]+".r) ~ regex("[0-9]+".r) ^^ { case n ~ d => PFracLiteral(BigInt(n), BigInt(d)) } |
     setExpression |
     seqLiteral |
     seqOperation |
