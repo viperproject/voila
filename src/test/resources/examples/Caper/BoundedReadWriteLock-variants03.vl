@@ -239,8 +239,8 @@ region CAPLock(id r, id s, memcell x)
   }
 
 procedure lock(id r, id s, memcell x)
-  requires CAPLock(r, s, x, ?m) && (m in Set(0, 1));
-  ensures  CAPLock(r, s, x, ?n) && n == 1 && K@r;
+  requires CAPLock(r, s, x, ?m) && (m in Set(0, 1)) && Z@r;
+  ensures  CAPLock(r, s, x, ?n) && n == 1 && K@r && Z@r;
 {
   use_atomic
     using CAPLock(r, s, x) with Z@r;

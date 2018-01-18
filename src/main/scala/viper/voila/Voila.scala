@@ -9,6 +9,7 @@ package viper.voila
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path, Paths}
+
 import scala.collection.breakOut
 import scala.util.{Left, Right}
 import ch.qos.logback.classic.{Level, Logger}
@@ -17,7 +18,7 @@ import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
-import viper.voila.backends.{MockViperFrontend, Silicon}
+import viper.voila.backends.{MockViperFrontend, Silicon, ViperNameSanitizer}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
@@ -142,7 +143,9 @@ class Voila extends StrictLogging {
           return Some(Failure(voilaErrors))
         }
 
-        val translator = new PProgramToViperTranslator(config, semanticAnalyser)
+        val nameSanitizer = new ViperNameSanitizer()
+
+        val translator = new PProgramToViperTranslator(config, semanticAnalyser, nameSanitizer)
         val (translatedProgram, errorBacktranslator) = translator.translate(tree)
 
         logger.debug(s"Taking Viper preamble from ${defaultPreambleFile.toString}")

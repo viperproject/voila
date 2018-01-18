@@ -123,6 +123,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     decl
   }
 
+  def havocMethodName(typ: vpr.Type): String =
+    nameSanitizer.sanitize(s"havoc_$typ")
+
   /* TODO: Reconsider use of havoc methods:
    *         - Avoid introducing a havoc method for each type in the source program
    *         - Maybe use fresh variables instead? What about loops?
@@ -137,7 +140,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     vprTypes map (typ =>
       vpr.Method(
-        name = s"havoc_$typ",
+        name = havocMethodName(typ),
+        /* TODO: Name sanitisation must be done (more) systematically */
         formalArgs = Vector.empty,
         formalReturns = Vector(vpr.LocalVarDecl("$r", typ)()),
         pres = Vector.empty,
@@ -153,7 +157,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def havoc(variable: vpr.LocalVar): vpr.Stmt = {
     vpr.MethodCall(
-      s"havoc_${variable.typ}",
+      havocMethodName(variable.typ),
       Vector.empty,
       Vector(variable)
     )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
