@@ -31,7 +31,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   val reservedWords = Set(
     "true", "false",
-    "int", "bool", "id", "set",
+    "int", "bool", "id", "set", "frac", "seq",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
@@ -344,8 +344,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     exp50 ~ ("+" ~> exp40) ^^ PAdd |
     exp50 ~ ("-" ~> exp40) ^^ PSub |
     exp50 ~ ("*" ~> exp40) ^^ PMul |
-    exp50 ~ ("%" ~> exp40) ^^ PMod |
-    exp50 ~ ("/" ~> exp40) ^^ PDiv |
+    exp50 ~ ("/" ~> exp40) ^^ PFrac |
+    exp50 ~ ("div" ~> exp40) ^^ PDiv |
+    exp50 ~ ("mod" ~> exp40) ^^ PMod |
     exp40
 
   lazy val exp40: PackratParser[PExpression] = /* Right-associative */
@@ -418,6 +419,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "int" ^^^ PIntType() |
     "bool" ^^^ PBoolType() |
     "id" ^^^ PRegionIdType() |
+    "frac" ^^^ PFracType() |
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
     idnuse ^^ PRefType

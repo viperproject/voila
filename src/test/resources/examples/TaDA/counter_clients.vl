@@ -43,11 +43,30 @@ procedure seq_client(id c, cell x, int n)
 
 /*
  * An encoding of Fig. 7.3 from Pedro's thesis
+ *
+ * Remarks on the current encoding:
+ *
+ *   1. Parameterised guards are not yet supported by Voila, see issue #42.
+ *      For now, this issue is overcome as follows:
+ *        - Guards INC and TOTAL are encoded as abstract predicates with appropriate arguments
+ *        - A "fake" guard xINC is used to guard actions where INC should be used.
+ *          This is in general not sound since there is no formal coupling between INC and xINC.
+ *
+ *   2. Complex guard algebras are not yet supported.
+ *      For now, this is overcome by modelling the algebra using lemma procedures and calling
+ *      them at the appropriate places. This increases the annotation overhead, but is not more
+ *      or less sound than having native support for such algebras.
+ *
+ *   3. Voila doesn't natively support parallel composition (or fork/join statements); it is
+ *      encoded using exhales and inhales
+ *
+ *   4. In Pedro's example, the guard algebra also controls when a region can be disposed.
+ *      This aspect is missing from the current Voila encoding.
  */
 
 region CClient(id a, id c, cell x)
   guards {
-//    duplicable INC(int k, perm p);
+//    splitable INC(int k, perm p);
     duplicable xINC;
 //    unique TOTAL(int n);
   }
@@ -61,42 +80,42 @@ region CClient(id a, id c, cell x)
     xINC: ?k ~> Set(?kk | k < kk);
   }
 
-predicate INC(id a, int k/*, perm p*/)
-predicate TOTAL(id a, int n/*, perm p*/)
+predicate INC(id a, int k, frac p)
+predicate TOTAL(id a, int n)
 
-/* lemma */ procedure INC_split(id a, int k1, int k2/*, perm p1, perm p2*/)
-  requires INC(a, k1 + k2/*, p1 + p2*/);
-  ensures  INC(a, k1/*, p1*/) && INC(a, k2/*, p2*/);
+/* lemma */ procedure INC_split(id a, int k1, int k2, frac p1, frac p2)
+  requires INC(a, k1 + k2, p1 + p2);
+  ensures  INC(a, k1, p1) && INC(a, k2, p2);
 
-/* lemma */ procedure INC_join(id a, int k1, int k2/*, perm p1, perm p2*/)
-  requires INC(a, k1/*, p1*/) && INC(a, k2/*, p2*/);
-  ensures  INC(a, k1 + k2/*, p1 + p2*/);
+/* lemma */ procedure INC_join(id a, int k1, int k2, frac p1, frac p2)
+  requires INC(a, k1, p1) && INC(a, k2, p2);
+  ensures  INC(a, k1 + k2, p1 + p2);
 
 /* lemma */ procedure TOTAL_INC_equality(id a, int n, int k)
-  requires TOTAL(a, n) && INC(a, k/*, 1*/);
+  requires TOTAL(a, n) && INC(a, k, 1);
 //  requires TODO: ... and the composition must be defined
-  ensures  TOTAL(a, n) && INC(a, k/*, 1*/);
+  ensures  TOTAL(a, n) && INC(a, k, 1);
   ensures  n == k;
-
-/* lemma */ procedure TOTAL_INC_update(id a, int n, int k0, int k1/*, perm p*/)
-  requires TOTAL(a, n + k0) && INC(a, k0/*, p*/);
-  ensures  TOTAL(a, n + k1) && INC(a, k1/*, p*/);
+//
+/* lemma */ procedure TOTAL_INC_update(id a, int n, int k0, int k1, frac p)
+  requires TOTAL(a, n + k0) && INC(a, k0, p);
+  ensures  TOTAL(a, n + k1) && INC(a, k1, p);
 
 /* Specialised version of (i.e. derived from) TOTAL_INC_update */
-/* lemma */ procedure TOTAL_INC_inc(id a, int n, int k/*, perm p*/)
-  requires TOTAL(a, n) && INC(a, k/*, p*/) && 0 <= n - k;
-  ensures  TOTAL(a, n + 1) && INC(a, k + 1/*, p*/);
+/* lemma */ procedure TOTAL_INC_inc(id a, int n, int k, frac p)
+  requires TOTAL(a, n) && INC(a, k, p) && 0 <= n - k;
+  ensures  TOTAL(a, n + 1) && INC(a, k + 1, p);
 {
   int m;
   assume n == m + k;
-  use TOTAL_INC_update(a, m, k, k + 1);
+  use TOTAL_INC_update(a, m, k, k + 1, p);
 }
 
 /* The parallelly-composed code of Fig. 7.3 */
-procedure single_client(id a, id c, cell x) returns (int n)
-  requires CClient(a, c, x, ?v0) && INC(a, 0/*, 1/2*/) && 0 <= v0;
+procedure single_client(id a, id c, cell x, frac p) returns (int n)
+  requires CClient(a, c, x, ?v0) && INC(a, 0, p) && 0 <= v0;
   requires xINC@a;
-  ensures  CClient(a, c, x,  _) && INC(a, n/*, 1/2*/) && 0 <= n;
+  ensures  CClient(a, c, x,  _) && INC(a, n, p) && 0 <= n;
 {
   int i;
 
@@ -109,7 +128,7 @@ procedure single_client(id a, id c, cell x) returns (int n)
   while (i < n)
     invariant 0 <= i && i <= n;
     invariant CClient(a, c, x, ?vi) && i <= vi;
-    invariant INC(a, i/*, 1/2*/);
+    invariant INC(a, i, p);
     invariant xINC@a;
   {
     use_atomic
@@ -118,14 +137,12 @@ procedure single_client(id a, id c, cell x) returns (int n)
       assert Counter(c, x, ?v);
       incr(c, x);
       assert Counter(c, x, v + 1); // [DEBUG]
-      assert TOTAL(a, v) && INC(a, i); // [DEBUG]
-      use TOTAL_INC_inc(a, v, i);
+      assert TOTAL(a, v) && INC(a, i, p); // [DEBUG]
+      use TOTAL_INC_inc(a, v, i, p);
     }
 
     i := i + 1;
   }
-
-  assert INC(a, n);
 }
 
 /* Main code of Fig. 7.3 */
@@ -138,7 +155,7 @@ procedure client() {
   // x := makeCounter();
   inhale Counter(c, x, 0) && G@c;
   // Create a new CClient region
-  inhale TOTAL(a, 0) && INC(a, 0/*, 1*/);
+  inhale TOTAL(a, 0) && INC(a, 0, 1);
   inhale xINC@a;
   fold CClient(a, c, x, 0);
 
@@ -149,22 +166,22 @@ procedure client() {
   assert xINC@a;
   inhale xINC@a;
   // Split encoded guard INC
-  use INC_split(a, 0, 0);
+  use INC_split(a, 0, 0, 1/2, 1/2);
 
   // Fork two instances of single_client(a, c, x)
-  exhale CClient(a, c, x, ?v01) && INC(a, 0/*, 1/2*/) && 0 <= v01 && xINC@a;
-  exhale CClient(a, c, x, ?v02) && INC(a, 0/*, 1/2*/) && 0 <= v02 && xINC@a;
+  exhale CClient(a, c, x, ?v01) && INC(a, 0, 1/2) && 0 <= v01 && xINC@a;
+  exhale CClient(a, c, x, ?v02) && INC(a, 0, 1/2) && 0 <= v02 && xINC@a;
 
   skip; // Account for possible interference between forking and joining
 
   // Join the two forked instances of single_client(a, c, x)
   havoc k1;
-  inhale CClient(a, c, x, _) && INC(a, k1/*, 1/2*/) && 0 <= k1;
+  inhale CClient(a, c, x, _) && INC(a, k1, 1/2) && 0 <= k1;
   havoc k2;
-  inhale CClient(a, c, x, _) && INC(a, k2/*, 1/2*/) && 0 <= k2;
+  inhale CClient(a, c, x, _) && INC(a, k2, 1/2) && 0 <= k2;
 
   // Join encoded guard INC
-  use INC_join(a, k1, k2);
+  use INC_join(a, k1, k2, 1/2, 1/2);
   // Transform CClient assertion according to guard algebra (view shift?)
   unfold CClient(a, c, x, _);
   assert Counter(c, x, ?n);

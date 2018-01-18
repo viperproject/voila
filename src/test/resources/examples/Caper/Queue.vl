@@ -25,9 +25,9 @@ region Qu(id q_r, queue q)
   interpretation {
 ////    0 : p |-> x &*& QL(rs,x,_,3*n+1) &*& n >= 0 &*& rs@OWN;
     q.sentinel |-> ?sl && sl != null &&
-//    sentinel._absstate |-> ?x_a && x_a >= 0 && x_a % 3 == 1 &&
+//    sentinel._absstate |-> ?x_a && x_a >= 0 && x_a mod 3 == 1 &&
     q._nextrid |-> ?sl_r &&
-    QL(sl_r, sl, ?sl_a) && sl_a >= 0 && sl_a % 3 == 1 &&
+    QL(sl_r, sl, ?sl_a) && sl_a >= 0 && sl_a mod 3 == 1 &&
     OWN@sl_r
   }
   state { 0 }
@@ -70,9 +70,9 @@ region QL(id r, node x/*, int v */) // TODO: Add v as an out-argument
     (x._nextrid |-> ?y_r) &&
     (  a == 0               ? (Inv(v) && y == null)
      : a == 1               ? (          y == null)
-     : a >= 3 && a % 3 == 0 ? (Inv(v) && OWN@y_r && QL(y_r, y, ?y_a) && y_a % 3 == 0 && y != null)
-     : a >= 4 && a % 3 == 1 ? (          OWN@y_r && QL(y_r, y, ?y_b) && y_b % 3 == 0 && y != null) // TODO: Binding a_y again here results in duplicated identifiers
-     : a >= 5 && a % 3 == 2 ? (          OWN@r   && QL(y_r, y)                       && y != null)
+     : a >= 3 && a mod 3 == 0 ? (Inv(v) && OWN@y_r && QL(y_r, y, ?y_a) && y_a mod 3 == 0 && y != null)
+     : a >= 4 && a mod 3 == 1 ? (          OWN@y_r && QL(y_r, y, ?y_b) && y_b mod 3 == 0 && y != null) // TODO: Binding a_y again here results in duplicated identifiers
+     : a >= 5 && a mod 3 == 2 ? (          OWN@r   && QL(y_r, y)                       && y != null)
      : false)
   }
   state { a }
@@ -85,19 +85,19 @@ region QL(id r, node x/*, int v */) // TODO: Add v as an out-argument
 ////    n >= 3 | OWN : 0 ~> n;
     OWN: 0 ~> Set(?n | n == 0 || n >= 3);
 ////    n > 0  | OWN : 1 ~> 3*n+2;
-    OWN: 1 ~> Set(?n | n == 1 || n > 0 && n % 3 == 2);
+    OWN: 1 ~> Set(?n | n == 1 || n > 0 && n mod 3 == 2);
 
 ////    n > 0  |     : 0 ~> 3*n;
-    Z: 0 ~> Set(?n | n == 0 || n > 0 && n % 3 == 0);
+    Z: 0 ~> Set(?n | n == 0 || n > 0 && n mod 3 == 0);
 ////    n > 0  |     : 1 ~> 3*n+1;
-    Z: 1 ~> Set(?n | n == 1 || n > 0 && n % 3 == 1);
+    Z: 1 ~> Set(?n | n == 1 || n > 0 && n mod 3 == 1);
 
 ////    n >= 0 | OWN : 3*n ~> 3*n+1;
-    OWN: ?n if n >=0 && n % 3 == 0 ~> Set(n, n + 1);
+    OWN: ?n if n >=0 && n mod 3 == 0 ~> Set(n, n + 1);
 ////    n > 0  | OWN : 3*n+1 ~> 3*n+2;
-    OWN: ?n if n > 0 && n % 3 == 1 ~> Set(n, n + 1);
+    OWN: ?n if n > 0 && n mod 3 == 1 ~> Set(n, n + 1);
 ////    n > 0  | OWN : 3*n ~> 3*n+2;
-    OWN: ?n if n > 0 && n % 3 == 0 ~> Set(n, n + 2);
+    OWN: ?n if n > 0 && n mod 3 == 0 ~> Set(n, n + 2);
   }
 
 procedure makeQueue() returns (id r, queue ret)
@@ -234,8 +234,8 @@ procedure enqueue(id s, queue x, int v)
         exhale t._absstate |-> t_a0; // Havoc abstract state
         inhale t._absstate |-> ?t_a1;
         assume t_a1 >= 3;
-        assume t_a0 == 0 ==> t_a1 % 3 == 0; // Choose new abstract state ...
-        assume t_a0 == 1 ==> t_a1 % 3 == 1; // ... depending on previous state
+        assume t_a0 == 0 ==> t_a1 mod 3 == 0; // Choose new abstract state ...
+        assume t_a0 == 1 ==> t_a1 mod 3 == 1; // ... depending on previous state
         exhale t._nextrid |-> _;   // Havoc next region's id ...
         inhale t._nextrid |-> y_r; // ... and set to y_r
       }
@@ -276,7 +276,7 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
       assert QL(sl_r0, sl, ?sl_a0);
       inhale QL(sl_r0, sl);
       assert sl_a0 >= 0;     // [DEBUG]
-      assert sl_a0 % 3 == 1; // [DEBUG]
+      assert sl_a0 mod 3 == 1; // [DEBUG]
     }
 
 //    head := [sentinel + 1];
@@ -313,7 +313,7 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
             assert sl1 == sl;      // [DEBUG]
             assume sl_r1 == sl_r0; // TODO: Implied by sl1 == sl
             assert sl_a1 >= 0;     // [DEBUG]
-            assert sl_a1 % 3 == 1; // [DEBUG]
+            assert sl_a1 mod 3 == 1; // [DEBUG]
 
             exhale q._nextrid |-> _;
             inhale q._nextrid |-> hd_r0;
@@ -340,19 +340,19 @@ procedure dequeue(id q_r, queue q) returns (bool success, int v)
               assert sl._nextrid |-> ?hd_r1;
               assume hd_r1 == hd_r0; // TODO: Implied by hd1 == hd
 
-              assert sl_a1 % 3 == 1; // [DEBUG]
+              assert sl_a1 mod 3 == 1; // [DEBUG]
               assert sl_a1 >= 4;     // [DEBUG]
               exhale sl._absstate |-> sl_a1;
               inhale sl._absstate |-> sl_a1 + 1;
               assert (sl_a1 + 1) >= 5;     // [DEBUG]
-              assert (sl_a1 + 1) % 3 == 2; // [DEBUG]
+              assert (sl_a1 + 1) mod 3 == 2; // [DEBUG]
 
               use_atomic // TODO: Reconsider which rule to use here
                 using QL(hd_r0, hd) with OWN@hd_r0;
               {
                 assert hd.value |-> ?v0;
                 assert hd._absstate |-> ?u40;
-                assert u40 % 3 == 0;          // [DEBUG]
+                assert u40 mod 3 == 0;          // [DEBUG]
                 assert u40 == 0 || u40 >= 3;  // [DEBUG]
                 assert Inv(v0);               // [DEBUG]
                 assume u40 == 0; // TODO: Get rid of (case split?) Could also be a non-issue once overlapping actions are supported.

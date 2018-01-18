@@ -151,18 +151,26 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   }
 
   private def reportTypeMismatch(offendingNode: PExpression, expectedType: PType): Messages =
-    reportTypeMismatch(offendingNode, expectedType, typ(offendingNode))
+    reportTypeMismatch(offendingNode, Set(expectedType), typ(offendingNode))
 
   private def reportTypeMismatch(offendingNode: PIdnUse, expectedType: PType): Messages =
-    reportTypeMismatch(offendingNode, expectedType, typeOfIdn(offendingNode))
+    reportTypeMismatch(offendingNode, Set(expectedType), typeOfIdn(offendingNode))
 
   private def reportTypeMismatch(offendingNode: PAstNode, expectedType: PType, foundType: PType)
                                 : Messages = {
 
+    reportTypeMismatch(offendingNode, Set(expectedType), foundType)
+  }
+
+  private def reportTypeMismatch(offendingNode: PAstNode,
+                                 expectedTypes: Set[PType],
+                                 foundType: PType)
+                                : Messages = {
+
     message(
       offendingNode,
-      s"Type error: expected $expectedType but got $foundType",
-      !isCompatible(foundType, expectedType))
+      s"Type error: expected one of ${expectedTypes.mkString(", ")} but got $foundType",
+      !expectedTypes.exists(isCompatible(foundType, _)))
   }
 
   /**
@@ -507,10 +515,22 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               collect[Set, PIdnExp] { case exp @ PIdnExp(PIdnUse(`name`)) => exp }
 
             val expectedTypes =
-              collectOccurrencesOfFreeVariable(comprehension.filter).map(expectedType)
+              collectOccurrencesOfFreeVariable(comprehension.filter).flatMap(expectedType)
 
-            if (expectedTypes.size != 1) PUnknownType()
-            else expectedTypes.head
+            /* TODO: Implement a proper type inference */
+
+            if (expectedTypes.size == 2 &&
+                expectedTypes.contains(PIntType()) &&
+                expectedTypes.contains(PFracType())) {
+
+              /* Resolve the choice between int and frac by preferring int */
+
+              PIntType()
+            } else if (expectedTypes.size != 1) {
+              PUnknownType()
+            } else {
+              expectedTypes.head
+            }
         }
 
       case other => sys.error(s"Unexpectedly found $other as the binding context of $binder")
@@ -572,7 +592,16 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case PIdnExp(id) => typeOfIdn(id)
 
-      case _: PAdd | _: PSub | _: PMul | _: PMod | _: PDiv => PIntType()
+      case _aop @ (_: PAdd | _: PSub | _: PMul) =>
+        val aop = _aop.asInstanceOf[PBinOp] // TODO: How to avoid the cast?
+
+        if (typ(aop.left) == typ(aop.right)) typ(aop.right)
+        else PUnknownType()
+
+      case _: PFrac => PFracType()
+
+      case _: PMod | _: PDiv => PIntType()
+
       case _: PAnd | _: POr | _: PNot => PBoolType()
       case _: PEquals | _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
 
@@ -624,19 +653,19 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   /**
     * What is the expected type of an expression?
     */
-  lazy val expectedType: PExpression => PType =
+  lazy val expectedType: PExpression => Set[PType] =
     attr {
-      case tree.parent(_: PIf | _: PWhile) => PBoolType()
+      case tree.parent(_: PIf | _: PWhile) => Set(PBoolType())
 
       case tree.parent(PAssign(id, _)) =>
         entity(id) match {
-          case LocalVariableEntity(decl) => decl.typ
-          case _ => PUnknownType()
+          case LocalVariableEntity(decl) => Set(decl.typ)
+          case _ => Set(PUnknownType())
         }
 
-      case tree.parent(PHeapRead(id, _)) => typeOfIdn(id)
+      case tree.parent(PHeapRead(id, _)) => Set(typeOfIdn(id))
 
-      case tree.parent(PHeapWrite(location, _)) => typeOfLocation(location)
+      case tree.parent(PHeapWrite(location, _)) => Set(typeOfLocation(location))
 
       case e @ tree.parent(PEquals(lhs, rhs)) =>
         /* Given an equality lhs == rhs, the expected type of the lhs is the type of the rhs
@@ -646,25 +675,30 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
          * IllegalStateException and we return PUnknownType.
          */
         try {
-          if (e eq lhs) typ(rhs)
-          else typ(lhs)
+          if (e eq lhs) Set(typ(rhs))
+          else Set(typ(lhs))
         } catch {
           case ex: IllegalStateException if ex.getMessage.toLowerCase.startsWith("cycle detected") =>
-            PUnknownType()
+            Set(PUnknownType())
         }
 
-      case tree.parent(_: PAdd | _: PSub | _: PMul | _: PMod | _: PDiv) => PIntType()
-      case tree.parent(_: PAnd | _: POr | _: PNot) => PBoolType()
-      case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => PIntType()
+      case tree.parent(_: PAdd | _: PSub | _: PMul | _: PFrac) => Set(PIntType(), PFracType())
+      case tree.parent(_: PMod | _: PDiv) => Set(PIntType())
+      case tree.parent(_: PAnd | _: POr | _: PNot) => Set(PBoolType())
+      case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => Set(PIntType())
 
-      case cnd @ tree.parent(conditional: PConditional) if cnd eq conditional.cond => PBoolType()
-      case els @ tree.parent(conditional: PConditional) if els eq conditional.els => typ(conditional.thn)
+      case cnd @ tree.parent(conditional: PConditional) if cnd eq conditional.cond =>
+        Set(PBoolType())
 
-      case set @ tree.parent(contains: PSetContains) if set eq contains.set => PSetType(typ(contains.element))
+      case els @ tree.parent(conditional: PConditional) if els eq conditional.els =>
+        Set(typ(conditional.thn))
+
+      case set @ tree.parent(contains: PSetContains) if set eq contains.set =>
+        Set(PSetType(typ(contains.element)))
 
       case _ =>
         /* Returning unknown expresses that no particular type is expected */
-        PUnknownType()
+        Set(PUnknownType())
     }
 
   lazy val atomicity: PStatement => AtomicityKind =
