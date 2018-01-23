@@ -34,3 +34,21 @@ procedure test05() {
 procedure test06() {
   test04(10);
 }
+
+procedure test07(frac f) {
+  frac f1;
+
+  f1 := 2 * f;
+  f1 := f * f1;
+  //:: ExpectedOutput(typechecker_error)
+  f1 := f1 * 2;
+}
+
+procedure test08(frac f, int n) {
+  frac f1;
+
+  f1 := f - f/2;
+  f1 := n*f1 + f;
+  //:: ExpectedOutput(typechecker_error)
+  f1 := n + f;
+}
