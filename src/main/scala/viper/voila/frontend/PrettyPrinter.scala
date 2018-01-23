@@ -108,11 +108,11 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PFormalReturnDecl(id, typ) => toDoc(id) <> ":" <+> toDoc(typ)
       case PLocalVariableDecl(id, typ) =>  toDoc(typ) <+> toDoc(id)
       case PGuardDecl(id, modifier) =>  toDoc(modifier) <+> toDoc(id)
-      case PLogicalVariableBinder(id) =>  "?" <> toDoc(id)
+      case PNamedBinder(id) =>  "?" <> toDoc(id)
     }
   }
 
-  def toDoc(declaration: PLogicalVariableBinder): Doc =
+  def toDoc(declaration: PNamedBinder): Doc =
     toDoc(declaration: PDeclaration)
 
   def toDoc(member: PMember): Doc = {
@@ -230,14 +230,15 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
   def toDoc(expression: PExpression): Doc =
     expression match {
-      case PLogicalVariableBinder(id) => "?" <> toDoc(id)
-
       case PTrueLit() => "true"
       case PFalseLit() => "false"
       case PNullLit() => "null"
       case PIntLit(value) => value.toString
       case PFullPerm() => "1f"
       case PNoPerm() => "0f"
+
+      case PNamedBinder(id) => "?" <> toDoc(id)
+      case PAnonymousBinder() => "_"
 
       case PUnfolding(predicate, body) =>
         "unfolding" <+> toDoc(predicate) <+> "in" <+> toDoc(body)
@@ -296,8 +297,6 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
       case PRegionUpdateWitness(regionId, from, to) =>
         toDoc(regionId) <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"
-
-      case PIrrelevantValue() => "_"
     }
 
   def toDoc(typ: PType): Doc =

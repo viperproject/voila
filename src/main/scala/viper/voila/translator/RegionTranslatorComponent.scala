@@ -64,8 +64,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           formalRegionArgs.map(_.localVar))
 
       val collectOutArgumentBinders =
-        collect[Vector, PLogicalVariableBinder] {
-          case binder: PLogicalVariableBinder if binder.id == outArg.id => binder
+        collect[Vector, PNamedBinder] {
+          case binder: PNamedBinder if binder.id == outArg.id => binder
         }
 
       val outArgBinder =
@@ -434,8 +434,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprOutConstraints =
       outArgsAndState.zipWithIndex.flatMap {
-        case (_: PLogicalVariableBinder, _) => None
-        case (_: PIrrelevantValue, _) => None
+        case (_: PLogicalVariableBinder, _) =>
+          None
         case (exp, idx) =>
           val vprOutValue =
             vpr.FuncApp(

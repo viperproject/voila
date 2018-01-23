@@ -232,7 +232,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case decl: PFormalArgumentDecl => FormalArgumentEntity(decl)
           case decl: PFormalReturnDecl => FormalReturnEntity(decl)
           case decl: PLocalVariableDecl => LocalVariableEntity(decl)
-          case decl: PLogicalVariableBinder => LogicalVariableEntity(decl)
+          case decl: PNamedBinder => LogicalVariableEntity(decl)
           case _ => UnknownEntity()
         }
     }
@@ -305,7 +305,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
        * that contains the bound variable.
        */
 
-      def add(binder: PLogicalVariableBinder): Environment =
+      def add(binder: PNamedBinder): Environment =
         defineIfNew(enter(in(bindingContext)), binder.id.name, definedEntity(binder.id))
 
       bindingContext match {
@@ -441,7 +441,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => enclosingMakeAtomicAttr(of)(p)
     }}
 
-  def generalBindingContext(of: PLogicalVariableBinder): LogicalVariableContext =
+  def generalBindingContext(of: PNamedBinder): LogicalVariableContext =
     generalContextAttr(of.id)(of)
 
   def generalUsageContext(of: PIdnNode): LogicalVariableContext =
@@ -532,13 +532,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case action @ PAction3(_, `binder`, _, _) =>
         typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
 
-      case comprehension @ PSetComprehension(`binder`, _, _) =>
+      case comprehension @ PSetComprehension(namedBinder: PNamedBinder, _, _)
+           if namedBinder eq binder =>
+
         comprehension.typeAnnotation match {
           case Some(_typ) =>
             _typ
 
           case None =>
-            val name = binder.id.name
+            val name = namedBinder.id.name
 
             val collectOccurrencesOfFreeVariable =
               collect[Set, PIdnExp] { case exp @ PIdnExp(PIdnUse(`name`)) => exp }
@@ -601,7 +603,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       val args = exp.arguments
 
       val idx =
-        args.indices.find(args(_) == binder).get - region.formalInArgs.length
+        args.indices.find(args(_) eq binder).get - region.formalInArgs.length
 
       assert(0 <= idx && idx < region.formalOutArgs.length + 1,
              s"Logical variables can only be bound by out-arguments")
@@ -689,18 +691,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PSeqSize => PIntType()
       case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
       case tailExp: PSeqTail => typ(tailExp.seq)
-
       case conditional: PConditional => typ(conditional.thn)
       case unfolding: PUnfolding => typ(unfolding.body)
-
       case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
-
-      case tree.parent.pair(_: PIrrelevantValue, p: PExpression) =>
-        /* TODO: This is wrong! */
-        typ(p)
-
       case binder: PLogicalVariableBinder => typeOfLogicalVariable(binder)
-
       case _ => PUnknownType()
     }
 
@@ -886,12 +880,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PRegionUpdateWitness(regionId, from, to) =>
         ListSet(regionId) ++ freeVariables(from) ++ freeVariables(to)
 
-      case _: PIrrelevantValue => ListSet.empty
+      case _: PAnonymousBinder => ListSet.empty
     }
 
   lazy val boundVariables: PExpression => ListSet[PIdnDef] =
     attr {
-      case PLogicalVariableBinder(id) => ListSet(id)
+      case PNamedBinder(id) => ListSet(id)
       case _ => ListSet.empty
     }
 

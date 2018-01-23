@@ -103,7 +103,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
   }
 
-  def localVariableDeclaration(binder: PLogicalVariableBinder): vpr.LocalVarDecl = {
+  def localVariableDeclaration(binder: PNamedBinder): vpr.LocalVarDecl = {
     vpr.LocalVarDecl(
       binder.id.name,
       translate(semanticAnalyser.typeOfIdn(binder.id))
@@ -166,7 +166,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def extractLogicalVariableBindings(assertion: PExpression): Vector[vpr.LocalVarAssign] = {
     val collectBindings =
       collectall[Vector, vpr.LocalVarAssign] {
-        case PPointsTo(location, binder: PLogicalVariableBinder) =>
+        case PPointsTo(location, binder: PNamedBinder) =>
           val vprVar = localVariableDeclaration(binder).localVar
           val vprValue = translate(location)
 
@@ -179,7 +179,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               val vprInArgs = inArgs map translate
 
               outArgsAndState.zipWithIndex.flatMap {
-                case (binder: PLogicalVariableBinder, index) =>
+                case (binder: PNamedBinder, index) =>
                   val vprVar = localVariableDeclaration(binder).localVar
 
                   val vprValue =
@@ -1185,13 +1185,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         )()
 
-      case irrelevantValue: PIrrelevantValue =>
+      case binder: PAnonymousBinder =>
         sys.error(
-          s"Wildcard arguments ($irrelevantValue) are not yet supported in this position: " +
-          s"${irrelevantValue.position}. In particular, wildcards are not supported in in-argument position, e.g. " +
+          s"Wildcard arguments ($binder) are not yet supported in this position: " +
+          s"${binder.position}. In particular, wildcards are not supported in in-argument position, e.g. " +
            "of region assertions.")
 
-      case binder: PLogicalVariableBinder =>
+      case binder: PNamedBinder =>
         sys.error(
           s"Logical variable binders ($binder) are not yet supported in this position: ${binder.position}. " +
           "In particular, wildcards are not supported in in-argument position, e.g. of region assertions.")
@@ -1209,7 +1209,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def translateUseOf(id: PIdnNode, binder: PLogicalVariableBinder): vpr.Exp = {
+  def translateUseOf(id: PIdnNode, binder: PNamedBinder): vpr.Exp = {
     semanticAnalyser.boundBy(binder) match {
       case   PAction2(_, `binder`, _)
            | PAction3(_, `binder`, _, _)

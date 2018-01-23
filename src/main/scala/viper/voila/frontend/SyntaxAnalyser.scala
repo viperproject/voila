@@ -359,7 +359,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "true" ^^^ PTrueLit() |
     "false" ^^^ PFalseLit() |
     "null" ^^^ PNullLit() |
-    "_" ^^^ PIrrelevantValue() |
+    "_" ^^^ PAnonymousBinder() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
     "1f" ^^^ PFullPerm() |
     "0f" ^^^ PNoPerm() |
@@ -408,8 +408,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "head" ~> "(" ~> expression <~ ")" ^^ PSeqHead |
     "tail" ~> "(" ~> expression <~ ")" ^^ PSeqTail
 
-  lazy val binder: Parser[PLogicalVariableBinder] =
-    "?" ~> idndef ^^ (id => PLogicalVariableBinder(id))
+  lazy val binder: Parser[PNamedBinder] =
+    "?" ~> idndef ^^ (id => PNamedBinder(id))
 
   lazy val listOfExpressions: Parser[Vector[PExpression]] =
     repsep(expression, ",")

@@ -51,7 +51,7 @@ case class LocalVariableEntity(declaration: PLocalVariableDecl) extends LocalVar
   val typ: PType = declaration.typ
 }
 
-case class LogicalVariableEntity(declaration: PLogicalVariableBinder) extends RegularEntity
+case class LogicalVariableEntity(declaration: PNamedBinder) extends RegularEntity
 
 //// Internal types, not created from user programs by the parser but
 //// used to represent some types internally to the semantic analysis.

@@ -97,7 +97,9 @@ case class PFormalReturnDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
 
-case class PLogicalVariableBinder(id: PIdnDef) extends PDeclaration with PExpression
+sealed trait PLogicalVariableBinder extends PExpression
+case class PNamedBinder(id: PIdnDef) extends PLogicalVariableBinder with PDeclaration
+case class PAnonymousBinder() extends PLogicalVariableBinder
 
 sealed trait PBindingContext extends PAstNode
 
@@ -107,7 +109,7 @@ sealed trait PBindingContext extends PAstNode
 
 sealed trait PSpecificationClause extends PAstNode
 
-case class PInterferenceClause(variable: PLogicalVariableBinder, set: PExpression, region: PIdnUse)
+case class PInterferenceClause(variable: PNamedBinder, set: PExpression, region: PIdnUse)
     extends PSpecificationClause with PBindingContext
 
 case class PPreconditionClause(assertion: PExpression) extends PSpecificationClause
@@ -130,12 +132,12 @@ sealed trait PAction extends PAstNode {
 case class PAction1(guard: PIdnUse, from: PExpression, to: PExpression) extends PAction
 
 /* G: ?n ~> Int */
-case class PAction2(guard: PIdnUse, from: PLogicalVariableBinder, to: PExpression)
+case class PAction2(guard: PIdnUse, from: PNamedBinder, to: PExpression)
     extends PAction with PBindingContext with PScope
 
 /* G: ?n if b(n) ~> Set(?m | c(n, m)) */
 case class PAction3(guard: PIdnUse,
-                    from: PLogicalVariableBinder,
+                    from: PNamedBinder,
                     constraint: PExpression,
                     to: PExpression)
     extends PAction with PBindingContext with PScope
@@ -357,7 +359,7 @@ sealed trait PSetExp extends PCollectionExp
 case class PExplicitSet(elements: Vector[PExpression], typeAnnotation: Option[PType])
     extends PSetExp with PExplicitCollection
 
-case class PSetComprehension(qvar: PLogicalVariableBinder,
+case class PSetComprehension(qvar: PNamedBinder,
                              filter: PExpression,
                              typeAnnotation: Option[PType])
     extends PSetExp with PLiteral with PBindingContext with PScope
@@ -396,8 +398,6 @@ case class PDiamond(regionId: PIdnUse) extends PTrackingResource
 
 case class PRegionUpdateWitness(regionId: PIdnUse, from: PExpression, to: PExpression)
     extends PTrackingResource
-
-case class PIrrelevantValue() extends PExpression
 
 /*
  * Types

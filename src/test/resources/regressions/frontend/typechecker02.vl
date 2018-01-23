@@ -12,6 +12,7 @@ procedure test2(hell x)
 
 //:: ExpectedOutput(typechecker_error)
 procedure test3(hell x)
+  //:: ExpectedOutput(typechecker_error)
   requires x.g |-> _;
 
 procedure test4(int x)

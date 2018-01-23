@@ -52,7 +52,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprFieldValueConstraint =
       pointsTo.value match {
-        case _: PLogicalVariableBinder | _: PIrrelevantValue => vpr.TrueLit()()
+        case _: PLogicalVariableBinder => vpr.TrueLit()()
         case exp => vpr.EqCmp(vprFieldAccess, translate(exp))()
       }
 
@@ -65,7 +65,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def translateAsHeapAccess(id: PIdnNode, declaration: PLogicalVariableBinder): vpr.Exp = {
+  def translateAsHeapAccess(id: PIdnNode, declaration: PNamedBinder): vpr.Exp = {
     val generalBindingContext = semanticAnalyser.generalBindingContext(declaration)
     val generalUsageContext = semanticAnalyser.generalUsageContext(id)
 
