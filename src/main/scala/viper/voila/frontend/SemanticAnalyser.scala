@@ -167,10 +167,17 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                                  foundType: PType)
                                 : Messages = {
 
-    message(
-      offendingNode,
-      s"Type error: expected one of ${expectedTypes.mkString(", ")} but got $foundType",
-      !expectedTypes.exists(isCompatible(foundType, _)))
+    assert(expectedTypes.nonEmpty)
+
+    val text =
+      if (expectedTypes.size == 1) {
+        s"Type error: expected ${expectedTypes.head} but got $foundType"
+      } else {
+        s"Type error: expected one of ${expectedTypes.tail.mkString(", ")} or " +
+        s"${expectedTypes.last}, but got $foundType"
+      }
+
+    message(offendingNode, text, !expectedTypes.exists(isCompatible(foundType, _)))
   }
 
   /**
