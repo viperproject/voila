@@ -103,7 +103,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
   }
 
-  def localVariableDeclaration(binder: PLogicalVariableBinder): vpr.LocalVarDecl = {
+  def localVariableDeclaration(binder: PNamedBinder): vpr.LocalVarDecl = {
     vpr.LocalVarDecl(
       binder.id.name,
       translate(semanticAnalyser.typeOfIdn(binder.id))
@@ -166,7 +166,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def extractLogicalVariableBindings(assertion: PExpression): Vector[vpr.LocalVarAssign] = {
     val collectBindings =
       collectall[Vector, vpr.LocalVarAssign] {
-        case PPointsTo(location, binder: PLogicalVariableBinder) =>
+        case PPointsTo(location, binder: PNamedBinder) =>
           val vprVar = localVariableDeclaration(binder).localVar
           val vprValue = translate(location)
 
@@ -179,7 +179,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               val vprInArgs = inArgs map translate
 
               outArgsAndState.zipWithIndex.flatMap {
-                case (binder: PLogicalVariableBinder, index) =>
+                case (binder: PNamedBinder, index) =>
                   val vprVar = localVariableDeclaration(binder).localVar
 
                   val vprValue =
@@ -1041,23 +1041,71 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     def go(expression: PExpression) = translateWith(expression)(customTranslationScheme)
 
+    type VprExpConstructor =
+      (vpr.Exp, vpr.Exp) => (vpr.Position, vpr.Info, vpr.ErrorTrafo) => vpr.Exp
+
+    type PolymorphicOperatorTranslationScheme =
+      Map[Class[_ <: PBinOp], Map[PType, VprExpConstructor]]
+
+    val polymorphicOperatorTranslationScheme: PolymorphicOperatorTranslationScheme =
+      Map(
+        classOf[PAdd]     -> Map(PIntType() -> vpr.Add.apply,   PFracType() -> vpr.PermAdd.apply),
+        classOf[PSub]     -> Map(PIntType() -> vpr.Sub.apply,   PFracType() -> vpr.PermSub.apply),
+        classOf[PMul]     -> Map(PIntType() -> vpr.Mul.apply,   PFracType() -> vpr.PermMul.apply),
+        classOf[PLess]    -> Map(PIntType() -> vpr.LtCmp.apply, PFracType() -> vpr.PermLtCmp.apply),
+        classOf[PAtMost]  -> Map(PIntType() -> vpr.LeCmp.apply, PFracType() -> vpr.PermLeCmp.apply),
+        classOf[PGreater] -> Map(PIntType() -> vpr.GtCmp.apply, PFracType() -> vpr.PermGtCmp.apply),
+        classOf[PAtLeast] -> Map(PIntType() -> vpr.GeCmp.apply, PFracType() -> vpr.PermGeCmp.apply))
+
+    def transPoly(op: PBinOp): vpr.Exp = {
+      assert(
+        semanticAnalyser.typ(op.left) == semanticAnalyser.typ(op.right),
+          s"Expected both operands of ${op.formatForUsers} to have the same type, but got "
+        + s"${semanticAnalyser.typ(op.left)} and ${semanticAnalyser.typ(op.right)}")
+
+      val vprLeft = go(op.left)
+      val vprRight = go(op.right)
+
+      val constructor =
+        polymorphicOperatorTranslationScheme(op.getClass)(semanticAnalyser.typ(op.left))
+
+      val vprExp =
+        constructor(vprLeft, vprRight)(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+
+      vprExp.withSource(expression)
+    }
+
     val defaultTranslationScheme: PartialFunction[PExpression, vpr.Exp] = {
       case PTrueLit() => vpr.TrueLit()().withSource(expression)
       case PFalseLit() => vpr.FalseLit()().withSource(expression)
       case PNullLit() => vpr.NullLit()().withSource(expression)
       case PIntLit(n) => vpr.IntLit(n)().withSource(expression)
+      case PFullPerm() => vpr.FullPerm()().withSource(expression)
+      case PNoPerm() => vpr.NoPerm()().withSource(expression)
       case PEquals(left, right) => vpr.EqCmp(go(left), go(right))().withSource(expression)
       case PAnd(left, right) => vpr.And(go(left), go(right))().withSource(expression)
       case POr(left, right) => vpr.Or(go(left), go(right))().withSource(expression)
       case PNot(operand) => vpr.Not(go(operand))().withSource(expression)
-      case PLess(left, right) => vpr.LtCmp(go(left), go(right))().withSource(expression)
-      case PAtMost(left, right) => vpr.LeCmp(go(left), go(right))().withSource(expression)
-      case PGreater(left, right) => vpr.GtCmp(go(left), go(right))().withSource(expression)
-      case PAtLeast(left, right) => vpr.GeCmp(go(left), go(right))().withSource(expression)
-      case PAdd(left, right) => vpr.Add(go(left), go(right))().withSource(expression)
-      case PSub(left, right) => vpr.Sub(go(left), go(right))().withSource(expression)
-      case PMul(left, right) => vpr.Mul(go(left), go(right))().withSource(expression)
-      case PFrac(left, right) => vpr.FractionalPerm(go(left), go(right))().withSource(expression)
+      case op: PLess => transPoly(op)
+      case op: PAtMost => transPoly(op)
+      case op: PGreater => transPoly(op)
+      case op: PAtLeast => transPoly(op)
+      case op: PAdd => transPoly(op)
+      case op: PSub => transPoly(op)
+      case op: PMul => transPoly(op)
+
+      case PFrac(left, right) =>
+        if (semanticAnalyser.typ(left) == PFracType()) {
+          assert(semanticAnalyser.typ(right) == PIntType())
+
+          vpr.PermDiv(go(left), go(right))().withSource(expression)
+        } else {
+          assert(semanticAnalyser.typ(left) == PIntType())
+          assert(semanticAnalyser.typ(right) == PIntType())
+
+          vpr.FractionalPerm(go(left), go(right))().withSource(expression)
+        }
+
       case PMod(left, right) => vpr.Mod(go(left), go(right))().withSource(expression)
       case PDiv(left, right) => vpr.Div(go(left), go(right))().withSource(expression)
       case PConditional(cond, thn, els) => vpr.CondExp(go(cond), go(thn), go(els))().withSource(expression)
@@ -1137,13 +1185,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         )()
 
-      case irrelevantValue: PIrrelevantValue =>
+      case binder: PAnonymousBinder =>
         sys.error(
-          s"Wildcard arguments ($irrelevantValue) are not yet supported in this position: " +
-          s"${irrelevantValue.position}. In particular, wildcards are not supported in in-argument position, e.g. " +
+          s"Wildcard arguments ($binder) are not yet supported in this position: " +
+          s"${binder.position}. In particular, wildcards are not supported in in-argument position, e.g. " +
            "of region assertions.")
 
-      case binder: PLogicalVariableBinder =>
+      case binder: PNamedBinder =>
         sys.error(
           s"Logical variable binders ($binder) are not yet supported in this position: ${binder.position}. " +
           "In particular, wildcards are not supported in in-argument position, e.g. of region assertions.")
@@ -1161,7 +1209,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  def translateUseOf(id: PIdnNode, binder: PLogicalVariableBinder): vpr.Exp = {
+  def translateUseOf(id: PIdnNode, binder: PNamedBinder): vpr.Exp = {
     semanticAnalyser.boundBy(binder) match {
       case   PAction2(_, `binder`, _)
            | PAction3(_, `binder`, _, _)

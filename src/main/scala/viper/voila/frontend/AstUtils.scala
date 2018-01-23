@@ -9,12 +9,12 @@ package viper.voila.frontend
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 
 object AstUtils {
-  def extractLogicalVariableBinders(statement: PStatement): Vector[PLogicalVariableBinder] = {
-      val collectBinders = collect[Vector, PLogicalVariableBinder] {
-        case binder: PLogicalVariableBinder => binder
+  def extractLogicalVariableBinders(statement: PStatement): Vector[PNamedBinder] = {
+      val collectBinders = collect[Vector, PNamedBinder] {
+        case binder: PNamedBinder => binder
       }
 
-      val collectRelevantBinders = collect[Vector, Vector[PLogicalVariableBinder]] {
+      val collectRelevantBinders = collect[Vector, Vector[PNamedBinder]] {
         case PAssert(assertion) => collectBinders(assertion)
         case PExhale(assertion) => collectBinders(assertion)
         case PInhale(assertion) => collectBinders(assertion)

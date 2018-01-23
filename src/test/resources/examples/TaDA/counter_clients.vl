@@ -85,25 +85,29 @@ predicate TOTAL(id a, int n)
 
 /* lemma */ procedure INC_split(id a, int k1, int k2, frac p1, frac p2)
   requires INC(a, k1 + k2, p1 + p2);
+  requires 0f < p1 && 0f < p2;
   ensures  INC(a, k1, p1) && INC(a, k2, p2);
 
 /* lemma */ procedure INC_join(id a, int k1, int k2, frac p1, frac p2)
   requires INC(a, k1, p1) && INC(a, k2, p2);
+  requires 0f < p1 && 0f < p2;
   ensures  INC(a, k1 + k2, p1 + p2);
 
 /* lemma */ procedure TOTAL_INC_equality(id a, int n, int k)
-  requires TOTAL(a, n) && INC(a, k, 1);
+  requires TOTAL(a, n) && INC(a, k, 1f);
 //  requires TODO: ... and the composition must be defined
-  ensures  TOTAL(a, n) && INC(a, k, 1);
+  ensures  TOTAL(a, n) && INC(a, k, 1f);
   ensures  n == k;
 //
 /* lemma */ procedure TOTAL_INC_update(id a, int n, int k0, int k1, frac p)
   requires TOTAL(a, n + k0) && INC(a, k0, p);
+  requires 0f < p;
   ensures  TOTAL(a, n + k1) && INC(a, k1, p);
 
 /* Specialised version of (i.e. derived from) TOTAL_INC_update */
 /* lemma */ procedure TOTAL_INC_inc(id a, int n, int k, frac p)
   requires TOTAL(a, n) && INC(a, k, p) && 0 <= n - k;
+  requires 0f < p;
   ensures  TOTAL(a, n + 1) && INC(a, k + 1, p);
 {
   int m;
@@ -114,6 +118,7 @@ predicate TOTAL(id a, int n)
 /* The parallelly-composed code of Fig. 7.3 */
 procedure single_client(id a, id c, cell x, frac p) returns (int n)
   requires CClient(a, c, x, ?v0) && INC(a, 0, p) && 0 <= v0;
+  requires 0f < p;
   requires xINC@a;
   ensures  CClient(a, c, x,  _) && INC(a, n, p) && 0 <= n;
 {
@@ -155,7 +160,7 @@ procedure client() {
   // x := makeCounter();
   inhale Counter(c, x, 0) && G@c;
   // Create a new CClient region
-  inhale TOTAL(a, 0) && INC(a, 0, 1);
+  inhale TOTAL(a, 0) && INC(a, 0, 1f);
   inhale xINC@a;
   fold CClient(a, c, x, 0);
 
