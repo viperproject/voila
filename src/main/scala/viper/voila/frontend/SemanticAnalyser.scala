@@ -93,8 +93,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case ProcedureEntity(decl) => (
                reportArgumentLengthMismatch(call, decl.id, decl.formalArgs.length, call.arguments.length)
             ++ reportArgumentLengthMismatch(call, decl.id, decl.formalReturns.length, call.rhs.length)
-            ++ call.arguments.zip(decl.formalArgs).flatMap { case (actual, formal) => reportTypeMismatch(actual, formal.typ) }
+            ++ reportTypeMismatch(call.arguments, decl.formalArgs)
             ++ call.rhs.zip(decl.formalReturns).flatMap { case (rhs, formal) => reportTypeMismatch(rhs, formal.typ) })
+//            ++ reportTypeMismatch(call.rhs, decl.formalReturns)) /* TODO: See comment for reportTypeMismatch */
 
           case _ =>
             message(call.procedure, s"Cannot call ${call.procedure}")
@@ -112,7 +113,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               case PPredicateExp(id, args) =>
                 checkUse(entity(id)) {
                   case PredicateEntity(decl) =>
-                    reportArgumentLengthMismatch(exp, decl.id, decl.formalArgs.length, args.length)
+                    (   reportArgumentLengthMismatch(exp, decl.id, decl.formalArgs.length, args.length)
+                     ++ reportTypeMismatch(args, decl.formalArgs))
 
                   case RegionEntity(decl) =>
                     /* A region predicate has the following argument structure:
@@ -125,12 +127,23 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
                     val actualArgCount = args.length
 
-                    message(
-                      id,
-                        s"Wrong number of arguments for '${id.name}': expected at least "
-                      + s"${expectedArgCounts._1} (no out-arguments) and at most "
-                      + s"${expectedArgCounts._2} (all out-arguments), but got $actualArgCount",
-                      !(expectedArgCounts._1 <= actualArgCount && actualArgCount <= expectedArgCounts._2))
+                    val lengthMessages =
+                      message(
+                        id,
+                          s"Wrong number of arguments for '${id.name}': expected at least "
+                        + s"${expectedArgCounts._1} (no out-arguments) and at most "
+                        + s"${expectedArgCounts._2} (all out-arguments), but got $actualArgCount",
+                        !(expectedArgCounts._1 <= actualArgCount && actualArgCount <= expectedArgCounts._2))
+
+                    val expectedArgumentTypes =
+                      decl.formalInArgs.map(_.typ) ++
+                      decl.formalOutArgs.map(_.typ) :+
+                      typ(decl.state)
+
+                    val typeMessages =
+                      args.zip(expectedArgumentTypes).flatMap { case (arg, tip) => reportTypeMismatch(arg, tip) }
+
+                    lengthMessages ++ typeMessages
 
                   case _ =>
                     message(id, s"Cannot call ${id.name} here")
@@ -149,6 +162,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       + s"but expected $formalArgCount",
       formalArgCount != actualArgCount)
   }
+
+  private def reportTypeMismatch(actuals: Vector[PExpression], formals: Vector[PTypedDeclaration]): Messages =
+    actuals zip formals flatMap { case (actual, formal) => reportTypeMismatch(actual, formal.typ) }
+
+  /* TODO: Cannot also declare this method, due to type erase.
+   *       It would not be necessary if PIdnUse would replace PIdnExp everywhere.
+   */
+  //  private def reportTypeMismatch(actuals: Vector[PIdnUse], formals: Vector[PTypedDeclaration]): Messages =
+  //    actuals zip formals flatMap { case (actual, formal) => reportTypeMismatch(actual, formal.typ) }
 
   private def reportTypeMismatch(offendingNode: PExpression, expectedType: PType): Messages =
     reportTypeMismatch(offendingNode, Set(expectedType), typ(offendingNode))
@@ -588,6 +610,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       else None /* Region state out-argument */
     })
 
+  /* TODO: Generalise poor man's type inference */
+
   /**
     * What is the type of an expression?
     */
@@ -596,21 +620,42 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PIntLit => PIntType()
       case _: PTrueLit | _: PFalseLit => PBoolType()
       case _: PNullLit => PNullType()
+      case _: PFullPerm | _: PNoPerm => PFracType()
 
       case PIdnExp(id) => typeOfIdn(id)
 
-      case _aop @ (_: PAdd | _: PSub | _: PMul) =>
-        val aop = _aop.asInstanceOf[PBinOp] // TODO: How to avoid the cast?
+      case op @ (_: PAdd | _: PSub) =>  // TODO: How to type op as PBinOp?
+        val signatures: Signatures =
+          Map((PFracType(), PFracType()) -> PFracType(),
+              (PIntType(),  PIntType())  -> PIntType())
 
-        if (typ(aop.left) == typ(aop.right)) typ(aop.right)
-        else PUnknownType()
+        typeOrUnknown(op.asInstanceOf[PBinOp], signatures)
 
-      case _: PFrac => PFracType()
+      case op: PMul =>
+        val signatures: Signatures =
+          Map((PFracType(), PFracType()) -> PFracType(),
+              (PIntType(),  PFracType()) -> PFracType(),
+              (PIntType(),  PIntType())  -> PIntType())
+
+        typeOrUnknown(op, signatures)
+
+      case op: PFrac =>
+        val signatures: Signatures =
+          Map((PFracType(), PIntType()) -> PFracType(),
+              (PIntType(),  PIntType()) -> PFracType())
+
+        typeOrUnknown(op, signatures)
 
       case _: PMod | _: PDiv => PIntType()
-
       case _: PAnd | _: POr | _: PNot => PBoolType()
-      case _: PEquals | _: PLess | _: PAtMost | _: PGreater | _: PAtLeast => PBoolType()
+      case _: PEquals => PBoolType()
+
+      case op @ (_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => // TODO: How to type op as PBinOp?
+        val signatures: Signatures =
+          Map((PFracType(), PFracType()) -> PBoolType(),
+              (PIntType(),  PIntType()) -> PBoolType())
+
+        typeOrUnknown(op.asInstanceOf[PBinOp], signatures)
 
       case _: PIntSet | _: PNatSet => PSetType(PIntType())
 
@@ -650,12 +695,23 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
 
-      case tree.parent.pair(_: PIrrelevantValue, p: PExpression) => typ(p)
+      case tree.parent.pair(_: PIrrelevantValue, p: PExpression) =>
+        /* TODO: This is wrong! */
+        typ(p)
 
       case binder: PLogicalVariableBinder => typeOfLogicalVariable(binder)
 
       case _ => PUnknownType()
     }
+
+  private type Signatures = Map[(PType, PType), PType]
+
+  private def typeOrUnknown(op: PBinOp, signatures: Signatures): PType = {
+    val leftType = typ(op.left)
+    val rightType = typ(op.right)
+
+    signatures.getOrElse((leftType, rightType), PUnknownType())
+  }
 
   /**
     * What is the expected type of an expression?
@@ -689,10 +745,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             Set(PUnknownType())
         }
 
-      case tree.parent(_: PAdd | _: PSub | _: PMul | _: PFrac) => Set(PIntType(), PFracType())
+      case tree.parent(_: PAdd | _: PSub | _: PMul) => Set(PIntType(), PFracType())
       case tree.parent(_: PMod | _: PDiv) => Set(PIntType())
       case tree.parent(_: PAnd | _: POr | _: PNot) => Set(PBoolType())
-      case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => Set(PIntType())
+
+      case left  @ tree.parent(frac: PFrac) if frac.left  eq left  => Set(PIntType(), PFracType())
+      case right @ tree.parent(frac: PFrac) if frac.right eq right => Set(PIntType())
+
+      case tree.parent(_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) =>
+        Set(PIntType(), PFracType())
 
       case cnd @ tree.parent(conditional: PConditional) if cnd eq conditional.cond =>
         Set(PBoolType())
@@ -795,11 +856,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             ListSet(location.receiver) ++ (freeVariables(value) -- boundVariables(value))
         }
 
-      case _: PTrueLit => ListSet.empty
-      case _: PFalseLit => ListSet.empty
       case _: PIntLit => ListSet.empty
-      case _: PIntSet => ListSet.empty
-      case _: PNatSet => ListSet.empty
+      case _: PTrueLit | _: PFalseLit => ListSet.empty
+      case _: PFullPerm | _: PNoPerm => ListSet.empty
+      case _: PIntSet | _: PNatSet => ListSet.empty
 
       case explicitCollection: PExplicitCollection =>
         ListSet(explicitCollection.elements flatMap freeVariables :_*)

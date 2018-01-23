@@ -361,6 +361,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "null" ^^^ PNullLit() |
     "_" ^^^ PIrrelevantValue() |
     ("unfolding" ~> predicateExp <~ "in") ~ expression ^^ PUnfolding |
+    "1f" ^^^ PFullPerm() |
+    "0f" ^^^ PNoPerm() |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     setExpression |
     seqLiteral |

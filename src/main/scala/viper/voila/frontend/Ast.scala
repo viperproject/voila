@@ -88,9 +88,13 @@ sealed trait PDeclaration extends PAstNode {
   def id: PIdnDef
 }
 
-case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PDeclaration
-case class PFormalReturnDecl(id: PIdnDef, typ: PType) extends PDeclaration
-case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PDeclaration
+sealed trait PTypedDeclaration extends PDeclaration {
+  def typ: PType
+}
+
+case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
+case class PFormalReturnDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
+case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
 case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
 
 case class PLogicalVariableBinder(id: PIdnDef) extends PDeclaration with PExpression
@@ -298,6 +302,8 @@ case class PFalseLit() extends PLiteral
 case class PNullLit() extends PLiteral
 case class PIntLit(value: BigInt) extends PLiteral
 case class PFracLiteral(numerator: BigInt, denominator: BigInt) extends PLiteral
+case class PFullPerm() extends PLiteral
+case class PNoPerm() extends PLiteral
 
 sealed trait PUnOp extends PExpression {
   def operand: PExpression

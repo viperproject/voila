@@ -236,6 +236,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
       case PFalseLit() => "false"
       case PNullLit() => "null"
       case PIntLit(value) => value.toString
+      case PFullPerm() => "1f"
+      case PNoPerm() => "0f"
 
       case PUnfolding(predicate, body) =>
         "unfolding" <+> toDoc(predicate) <+> "in" <+> toDoc(body)

@@ -85,6 +85,7 @@ predicate TOTAL(id a, int n)
 
 /* lemma */ procedure INC_split(id a, int k1, int k2, frac p1, frac p2)
   requires INC(a, k1 + k2, p1 + p2);
+//  requires 0/1 <= 1/2; //p1 && 0/1 <= p2;
   ensures  INC(a, k1, p1) && INC(a, k2, p2);
 
 /* lemma */ procedure INC_join(id a, int k1, int k2, frac p1, frac p2)
@@ -92,9 +93,9 @@ predicate TOTAL(id a, int n)
   ensures  INC(a, k1 + k2, p1 + p2);
 
 /* lemma */ procedure TOTAL_INC_equality(id a, int n, int k)
-  requires TOTAL(a, n) && INC(a, k, 1);
+  requires TOTAL(a, n) && INC(a, k, 1f);
 //  requires TODO: ... and the composition must be defined
-  ensures  TOTAL(a, n) && INC(a, k, 1);
+  ensures  TOTAL(a, n) && INC(a, k, 1f);
   ensures  n == k;
 //
 /* lemma */ procedure TOTAL_INC_update(id a, int n, int k0, int k1, frac p)
@@ -155,7 +156,7 @@ procedure client() {
   // x := makeCounter();
   inhale Counter(c, x, 0) && G@c;
   // Create a new CClient region
-  inhale TOTAL(a, 0) && INC(a, 0, 1);
+  inhale TOTAL(a, 0) && INC(a, 0, 1f);
   inhale xINC@a;
   fold CClient(a, c, x, 0);
 

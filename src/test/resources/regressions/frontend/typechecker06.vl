@@ -1,0 +1,36 @@
+procedure test01() {
+  frac f;
+
+  f := 1/2;
+}
+
+procedure test02(frac f)
+  requires f == 1f;
+  ensures 1/2 < f;
+  ensures f <= 2*1f;
+{}
+
+procedure test03(int f)
+  requires f == 1;
+  //:: ExpectedOutput(typechecker_error)
+  ensures 1/2 < f;
+{}
+
+procedure test04(int i)
+  requires i != 0;
+{
+  frac f;
+
+  f := i/i;
+  f := f/i;
+  //:: ExpectedOutput(typechecker_error)
+  f := i/f;
+}
+
+procedure test05() {
+  test02(1f);
+}
+
+procedure test06() {
+  test04(10);
+}
