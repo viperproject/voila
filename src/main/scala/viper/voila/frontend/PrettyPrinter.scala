@@ -13,10 +13,7 @@ trait PrettyPrinter {
   def format(node: PAstNode): String
 }
 
-class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter {
-  override val defaultIndent = 2
-  override val defaultWidth = 80
-
+trait PrettyPrinterCombinators { this: kiama.output.PrettyPrinter =>
   def section(fn: immutable.Seq[Doc] => Doc,
               docs: immutable.Seq[Doc],
               gap: Doc = emptyDoc)
@@ -41,8 +38,24 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
   }
 
   def block(doc: Doc): Doc = {
-    braces(nest(line <> doc) <> line)// <> line
+    braces(nest(doc) <> line)
   }
+
+  /** A copy of Kiama's `lterm` that omits the preceding linebreak. */
+  def lterm2(ds : immutable.Seq[Doc], term: Doc) : Doc =
+    if (ds.isEmpty)
+      emptyDoc
+    else
+      folddoc(ds, _ <> term <@> _) <> term
+}
+
+class DefaultPrettyPrinter
+    extends PrettyPrinter
+       with kiama.output.PrettyPrinter
+       with PrettyPrinterCombinators {
+
+  override val defaultIndent = 2
+  override val defaultWidth = 80
 
   def format(node: PAstNode): String =
     pretty(toDoc(node)).layout
@@ -144,7 +157,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
     member match {
       case PStruct(id, fields) =>
         "struct" <+> toDoc(id) <+>
-        block(vsep(fields map toDoc, semi))
+        block(lterm(fields map toDoc, semi))
 
       case PRegion(id, formalInArgs, formalOutArgs, guards, interpretation, state, actions) =>
         "region" <+> toDoc(id) <>
@@ -155,10 +168,10 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
         }) <>
         nest(
           line <>
-          "guards" <+> block(vsep(guards map toDoc, semi)) <@>
-          "interpretation" <+> block(toDoc(interpretation)) <@>
-          "state" <+> block(toDoc(state)) <@>
-          "actions" <+> block(vsep(actions map toDoc, semi)))
+          "guards" <+> block(lterm(guards map toDoc, semi)) <@>
+          "interpretation" <+> block(line <> toDoc(interpretation)) <@>
+          "state" <+> block(line <> toDoc(state)) <@>
+          "actions" <+> block(lterm(actions map toDoc, semi)))
 
       case PProcedure(id, formalArgs, formalReturns, inters, pres, posts, locals, optBody, atomicity) =>
         toDoc(atomicity) <+> "procedure" <+>
@@ -178,7 +191,8 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
           case Some(body) =>
             (if (inters.nonEmpty || pres.nonEmpty || posts.nonEmpty) line else space) <>
             block(
-              ssection(vsep, locals map toDoc, semi) <>
+              line <>
+              ssection(lterm2, locals map toDoc, semi) <>
               toDoc(body))
         })
 
@@ -186,7 +200,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
         "predicate" <+> toDoc(id) <> asFormalArguments(formalArgs) <+>
         (optBody match {
           case None => emptyDoc
-          case Some(body) => block(toDoc(body))
+          case Some(body) => block(line <> toDoc(body))
         })
 
       case PExpressionMacro(id, formalArguments, body) =>
@@ -207,11 +221,11 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
     statement match {
       case rule: PRuleStatement => toDoc(rule)
       case ghost: PGhostStatement => toDoc(ghost)
-      case PSeqComp(first, second) => toDoc(first) <> semi <> line <> toDoc(second)
+      case PSeqComp(first, second) => toDoc(first) <> line <> toDoc(second)
       case PSkip() => "skip" <> semi
-      case PAssign(lhs, rhs) => toDoc(lhs) <+> ":=" <+> toDoc(rhs)
-      case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location)
-      case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs)
+      case PAssign(lhs, rhs) => toDoc(lhs) <+> ":=" <+> toDoc(rhs) <> semi
+      case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location) <> semi
+      case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs) <> semi
 
       case _: PIf => ???
 
@@ -229,14 +243,14 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
 
   def toDoc(statement: PGhostStatement): Doc = {
     statement match {
-      case PFold(predicateExp) => "fold" <+> toDoc(predicateExp)
-      case PUnfold(predicateExp) => "unfold" <+> toDoc(predicateExp)
-      case PInhale(assertion) => "inhale" <+> toDoc(assertion)
-      case PExhale(assertion) => "exhale" <+> toDoc(assertion)
-      case PAssume(assertion) => "assume" <+> toDoc(assertion)
-      case PAssert(assertion) => "assert" <+> toDoc(assertion)
-      case PHavocVariable(variable) => "havoc" <+> toDoc(variable)
-      case PHavocLocation(location) => "havoc" <+> toDoc(location)
+      case PFold(predicateExp) => "fold" <+> toDoc(predicateExp) <> semi
+      case PUnfold(predicateExp) => "unfold" <+> toDoc(predicateExp) <> semi
+      case PInhale(assertion) => "inhale" <+> toDoc(assertion) <> semi
+      case PExhale(assertion) => "exhale" <+> toDoc(assertion) <> semi
+      case PAssume(assertion) => "assume" <+> toDoc(assertion) <> semi
+      case PAssert(assertion) => "assert" <+> toDoc(assertion) <> semi
+      case PHavocVariable(variable) => "havoc" <+> toDoc(variable) <> semi
+      case PHavocLocation(location) => "havoc" <+> toDoc(location) <> semi
     }
   }
 
