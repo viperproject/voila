@@ -9,18 +9,33 @@ package viper.voila.frontend
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 
 object AstUtils {
-  def extractLogicalVariableBinders(statement: PStatement): Vector[PNamedBinder] = {
-      val collectBinders = collect[Vector, PNamedBinder] {
-        case binder: PNamedBinder => binder
-      }
+  private var counter = 0
 
-      val collectRelevantBinders = collect[Vector, Vector[PNamedBinder]] {
-        case PAssert(assertion) => collectBinders(assertion)
-        case PExhale(assertion) => collectBinders(assertion)
-        case PInhale(assertion) => collectBinders(assertion)
-        case foldUnfold: PFoldUnfold => collectBinders(foldUnfold.predicateExp)
-      }
+  def uniqueName(name: String): String = {
+    /* TODO: Current approach does not guarantee globally-unique names */
 
-    collectRelevantBinders(statement).flatten
+    counter += 1
+
+    s"$$${name}_$counter"
+  }
+
+  def extractNamedBinders(from: PAstNode): Vector[PNamedBinder] = {
+    val collectBinders = collect[Vector, PNamedBinder] {
+      case binder: PNamedBinder => binder
+    }
+
+    collectBinders(from)
+  }
+
+  def extractNamedBindersFromGhostStatements(statement: PStatement): Vector[PNamedBinder] = {
+      val collectBinders =
+        collect[Vector, Vector[PNamedBinder]] {
+          case PAssert(assertion) => extractNamedBinders(assertion)
+          case PExhale(assertion) => extractNamedBinders(assertion)
+          case PInhale(assertion) => extractNamedBinders(assertion)
+          case foldUnfold: PFoldUnfold => extractNamedBinders(foldUnfold.predicateExp)
+        }
+
+    collectBinders(statement).flatten
   }
 }

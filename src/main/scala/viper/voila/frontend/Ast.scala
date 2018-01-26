@@ -178,6 +178,30 @@ case class PPredicate(id: PIdnDef,
                       body: Option[PExpression])
     extends PMember
 
+sealed trait PMacro extends PMember {
+  type Body <: PAstNode
+
+  def id: PIdnDef
+  def body: Body
+}
+
+case class PExpressionMacro(id: PIdnDef,
+                            formalArguments: Option[Vector[PIdnDef]],
+                            body: PExpression)
+    extends PMacro {
+
+  type Body = PExpression
+}
+
+case class PStatementMacro(id: PIdnDef,
+                           formalArguments: Vector[PIdnDef],
+                           locals: Vector[PLocalVariableDecl],
+                           body: PStatement)
+    extends PMacro {
+
+  type Body = PStatement
+}
+
 /*
  * Statements
  */

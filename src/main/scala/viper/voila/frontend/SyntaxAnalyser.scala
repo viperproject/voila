@@ -10,11 +10,11 @@ import scala.annotation.switch
 import scala.collection.breakOut
 import scala.language.postfixOps
 import org.bitbucket.inkytonik.kiama.parsing.Parsers
-import org.bitbucket.inkytonik.kiama.relation.TreeRelation.isLeaf
-import org.bitbucket.inkytonik.kiama.rewriting.{Cloner, PositionedRewriter}
 import org.bitbucket.inkytonik.kiama.util.Positions
 
 class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
+  private val positionedRewriter = new PositionedRewriter(positions)
+
   override val whitespace: Parser[String] =
     """(\s|(//.*\s*\n)|/\*(?:.|[\n\r])*?\*/)*""".r
 
@@ -33,7 +33,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "true", "false",
     "int", "bool", "id", "set", "frac", "seq",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
-    "predicate", "struct", "procedure",
+    "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", "non_atomic",
     "if", "else", "while", "do", "skip",
@@ -46,7 +46,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   lazy val program: Parser[PProgram] =
-    (struct | region | predicate | procedure).* ^^ (members => {
+    (struct | region | predicate | procedure | makro).* ^^ (allMembers => {
+      val (_macros, _members) = allMembers.partition(_.isInstanceOf[PMacro])
+      val macros = _macros.asInstanceOf[Vector[PMacro]]
+
+      val members = positionedRewriter.expand(macros, _members)
+
       val structs = members collect { case p: PStruct => p }
       val regions = members collect { case p: PRegion => p }
       val predicates = members collect { case p: PPredicate => p }
@@ -102,6 +107,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case id ~ args ~ body => PPredicate(id, args, body)
     }
 
+  lazy val makro: Parser[PMacro] =
+    ("macro" ~> idndef) ~ ("(" ~> repsep(idndef, ",") <~ ")").? ~ expression <~ ";" ^^ PExpressionMacro |
+    ("macro" ~> idndef) ~ ("(" ~> repsep(idndef, ",") <~ ")") ~ procedureBody ^^ {
+      case id ~ args ~ (locals ~ stmts) => PStatementMacro(id, args, locals, stmts)
+    }
+
   lazy val procedure: Parser[PProcedure] =
     (atomicityModifier <~ "procedure") ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
@@ -109,7 +120,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     interference.* ~
     requires.* ~
     ensures .* ~
-    (("{" ~> varDeclStmts) ~ (statementsOrSkip <~ "}")).? ^^ {
+    procedureBody.? ^^ {
       case mod ~ id ~ args ~ optReturns ~ inters ~ pres ~ posts ~ optBraces =>
         val (locals, body) =
           optBraces match {
@@ -126,6 +137,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
         PProcedure(id, args, returns, inters, pres, posts, locals, body, mod)
     }
+
+  private lazy val procedureBody: Parser[~[Vector[PLocalVariableDecl], PStatement]] =
+    ("{" ~> varDeclStmts) ~ (statementsOrSkip <~ "}")
 
   lazy val statementsOrSkip: Parser[PStatement] =
     statements | success(PSkip())
@@ -201,16 +215,16 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
    */
   private lazy val parseAndUnrollDoWhileLoop: Parser[~[PStatement, PWhile]] =
     parseDoWhileLoop ^^ {
-      case tuple @ (invs, stmts, cond) =>
+      case tuple @ (invs, body, cond) =>
 
         val loop: PWhile = {
-          val binders = AstUtils.extractLogicalVariableBinders(stmts)
+          val binders = AstUtils.extractNamedBinders(body)
 
            /* TODO: Current renaming scheme does not guarantee global name-clash freedom */
           val renamings: Map[String, String] =
             binders.map(b => b.id.name -> s"${b.id.name}$$")(breakOut)
 
-          val clonedBody = positionedRewriter.deepcloneAndRename(stmts, renamings)
+          val clonedBody = positionedRewriter.deepcloneAndRename(body, renamings)
 
           PWhile(cond, invs, clonedBody)
         }
@@ -221,7 +235,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
          */
         positions.dupPos(tuple, loop)
 
-        new ~(stmts, loop)
+        new ~(body, loop)
     }
 
   /* Parses a do-while loop and returns a tuple with all constituents of the loop.
@@ -439,23 +453,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       else
         success(s)
     })
-
-  object positionedRewriter extends PositionedRewriter with Cloner {
-    override val positions: Positions = SyntaxAnalyser.this.positions
-
-    def deepcloneAndRename[T <: Product](t: T, renamings: Map[String, String]): T = {
-      /* Implementation adapted from Cloner.deepclone */
-
-      val cloner =
-        everywherebu(rule[PAstNode] {
-          case id @ PIdnDef(_) if renamings.contains(id.name) => dup(id, Array(renamings(id.name)))
-          case id @ PIdnUse(_) if renamings.contains(id.name) => dup(id, Array(renamings(id.name)))
-          case n if isLeaf(n) => copy(n)
-        })
-
-      rewrite(cloner)(t)
-    }
-  }
 
   implicit class PositionedPAstNode[N <: PAstNode](node: N) {
     def at(other: PAstNode): N = {

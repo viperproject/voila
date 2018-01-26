@@ -149,7 +149,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
             require(locals.isEmpty)
             emptyDoc
           case Some(body) =>
-            braces(ssep(locals map toDoc, semi <> line <> toDoc(body)))
+            braces(nest(ssep(locals map toDoc, semi) <> line <> toDoc(body)))
         })
 
       case PPredicate(id, formalArgs, optBody) =>
@@ -158,6 +158,18 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
                 case None => emptyDoc
                 case Some(body) => braces(nest(toDoc(body)))
               }))
+
+      case PExpressionMacro(id, formalArguments, body) =>
+        "macro" <+> (
+        formalArguments match {
+          case Some(args) => parens(ssep(args map toDoc, comma))
+          case None => emptyDoc
+        }) <+>
+        toDoc(body) <> semi
+
+      case PStatementMacro(id, formalArguments, locals, body) =>
+        "macro" <+> parens(ssep(formalArguments map toDoc, comma)) <+>
+        braces(nest(ssep(locals map toDoc, semi) <> line <> toDoc(body)))
     }
   }
 

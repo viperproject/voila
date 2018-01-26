@@ -1,0 +1,87 @@
+struct cell {
+  int f;
+}
+
+struct pair {
+  bool f;
+  bool g;
+}
+
+macro Z 0;
+
+macro B(a, b) a < b;
+
+macro ravage(x) {
+  exhale x.f |-> _;
+  inhale x.f |-> _;
+}
+
+procedure test02() {
+  assert Z == 0;
+  assert Z == Z;
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert Z == 1;
+}
+
+procedure test03(int i1, int i2, int i3) {
+  assume B(0, i1);
+  assert 1 <= i1;
+
+  assume B(i1, i2);
+  assert B(1, i2);
+
+  assume B(i2, i3);
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert i3 <= i2;
+}
+
+procedure test01(cell x) {
+  inhale x.f |-> ?v;
+  ravage(x);
+  //:: ExpectedOutput(exhale_error)
+  exhale x.f |-> v;
+}
+
+macro ravage2(x) {
+  int w;
+
+  exhale x.f |-> ?v;
+  inhale x.f |-> w;
+}
+
+procedure test04(cell x, cell y) {
+  inhale x.f |-> ?v0 && y.f |-> ?w0;
+  ravage2(x);
+  ravage2(y);
+  assert x.f |-> ?v1 && y.f |-> ?w1;
+  ravage2(x);
+  ravage2(y);
+  //:: ExpectedOutput(exhale_error)
+  exhale false;
+}
+
+macro PTEQ(x, v) x.f |-> ?v0 && v0 == v;
+
+procedure test05(cell x, cell y) {
+  int v1;
+  int v2;
+
+  inhale PTEQ(x, v1);
+  inhale PTEQ(y, v2);
+  assume v1 < v2;
+  assert x.f |-> ?w1 && y.f |-> ?w2 && w1 < w2;
+  //:: ExpectedOutput(exhale_error)
+  exhale false;
+}
+
+macro XDotF x.f |-> ?v0;
+macro YDotF y.f |-> ?v0;
+
+procedure test06(cell x, pair y) {
+  inhale x.f |-> 0;
+  inhale y.f |-> false;
+  exhale XDotF;
+  exhale YDotF;
+  //:: ExpectedOutput(exhale_error)
+  exhale false;
+}

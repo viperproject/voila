@@ -332,7 +332,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val procedureWideBoundLogicalVariableDeclarations: Vector[vpr.LocalVarDecl] = {
       procedure.body match {
         case Some(body) =>
-          AstUtils.extractLogicalVariableBinders(body).map(localVariableDeclaration)
+          AstUtils.extractNamedBindersFromGhostStatements(body).map(localVariableDeclaration)
         case None =>
           Vector.empty
       }
