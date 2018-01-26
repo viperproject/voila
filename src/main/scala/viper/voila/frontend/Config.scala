@@ -34,14 +34,20 @@ class Config(arguments: Seq[String])
    * Command-line options
    */
 
-  val inputFile: ScallopOption[String] = opt[String](
-    name = "inputFile",
+  val inputFileName: ScallopOption[String] = opt[String](
+    name = "input",
     descr = "Voila program to verify is read from this file",
     required = true)
 
-  val outputFile: ScallopOption[String] = opt[String](
-    name = "outputFile",
+  val outputFileName: ScallopOption[String] = opt[String](
+    name = "output",
     descr = "Generated Viper program is written to this file")
+
+  val outputParsedProgramFileName: ScallopOption[String] = opt[String](
+    name = "outputParsedProgram",
+    descr = "Writes the parsed and desugared Voila program back to this file",
+    default = None,
+    noshort = true)
 
   val logLevel: ScallopOption[String] = opt[String](
     name = "logLevel",

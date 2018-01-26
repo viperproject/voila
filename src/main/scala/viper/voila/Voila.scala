@@ -67,19 +67,19 @@ class Voila extends StrictLogging {
   }
 
   def verify(config: Config): Option[VoilaResult] = {
-    verify(Paths.get(config.inputFile()), config)
+    verify(Paths.get(config.inputFileName()), config)
   }
 
   def verify(file: String): Option[VoilaResult] = {
     val config = new Config(Array("-i", file))
 
-    verify(Paths.get(config.inputFile()), config)
+    verify(Paths.get(config.inputFileName()), config)
   }
 
   def verify(path: Path): Option[VoilaResult] = {
     val config = new Config(Array("-i", path.toFile.getPath))
 
-    verify(Paths.get(config.inputFile()), config)
+    verify(Paths.get(config.inputFileName()), config)
   }
 
   def verify(file: Path, config: Config): Option[VoilaResult] = {
@@ -87,10 +87,10 @@ class Voila extends StrictLogging {
 
     logger.info(VoilaConstants.versionMessage)
 
-    if (!Files.isRegularFile(file)) exitWithError(s"${config.inputFile()} is not a file")
-    if (!Files.isReadable(file)) exitWithError(s"Cannot read from ${config.inputFile()}")
+    if (!Files.isRegularFile(file)) exitWithError(s"${config.inputFileName()} is not a file")
+    if (!Files.isReadable(file)) exitWithError(s"Cannot read from ${config.inputFileName()}")
 
-    logger.debug(s"Reading source program from file ${config.inputFile()}")
+    logger.debug(s"Reading source program from file ${config.inputFileName()}")
 
     val frontend = new Frontend()
 
@@ -107,6 +107,15 @@ class Voila extends StrictLogging {
         logger.info(s"  ${program.regions.length} region(s): ${program.regions.map(_.id.name).mkString(", ")}")
         logger.info(s"  ${program.predicates.length} predicate(s): ${program.predicates.map(_.id.name).mkString(", ")}")
         logger.info(s"  ${program.procedures.length} procedures(s): ${program.procedures.map(_.id.name).mkString(", ")}")
+
+        /* Pretty-print the parsed and desugared Voila program back to a file, if requested */
+        config.outputParsedProgramFileName.map(new File(_)).foreach(outputFile => {
+          logger.info(
+             "Writing parsed and desugared input program back to file " +
+            s"${config.outputParsedProgramFileName()}")
+
+          FileUtils.writeStringToFile(outputFile, program.pretty, UTF_8)
+        })
 
         if (config.include.supplied) {
           val excludedProcedures: Vector[String] =
@@ -171,8 +180,8 @@ class Voila extends StrictLogging {
           )(translatedProgram.pos, translatedProgram.info, translatedProgram.errT)
 
         /* Pretty-print the generated Viper program to a file, if requested */
-        config.outputFile.map(new File(_)).foreach(outputFile => {
-          logger.debug(s"Writing generated program to file ${config.outputFile()}")
+        config.outputFileName.map(new File(_)).foreach(outputFile => {
+          logger.debug(s"Writing generated program to file ${config.outputFileName()}")
 
           FileUtils.writeStringToFile(
             outputFile,
