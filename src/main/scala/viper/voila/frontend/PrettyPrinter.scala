@@ -7,6 +7,7 @@
 package viper.voila.frontend
 
 import org.bitbucket.inkytonik.kiama
+import scala.collection.immutable
 
 trait PrettyPrinter {
   def format(node: PAstNode): String
@@ -15,6 +16,33 @@ trait PrettyPrinter {
 class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter {
   override val defaultIndent = 2
   override val defaultWidth = 80
+
+  def section(fn: immutable.Seq[Doc] => Doc,
+              docs: immutable.Seq[Doc],
+              gap: Doc = emptyDoc)
+             : Doc = {
+
+    if (docs.isEmpty)
+      emptyDoc
+    else
+      fn(docs) <> line <> gap <> line
+  }
+
+  def ssection(fn: (immutable.Seq[Doc], Doc) => Doc,
+               docs: immutable.Seq[Doc],
+               sep: Doc,
+               gap: Doc = emptyDoc)
+              : Doc = {
+
+    if (docs.isEmpty)
+      emptyDoc
+    else
+      fn(docs, sep) <> line <> gap <> line
+  }
+
+  def block(doc: Doc): Doc = {
+    braces(nest(line <> doc) <> line)// <> line
+  }
 
   def format(node: PAstNode): String =
     pretty(toDoc(node)).layout
@@ -92,20 +120,17 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
   def toDoc(program: PProgram): Doc = {
     val PProgram(structs, regions, predicates, procedures) = program
 
-    (    ssep(structs map toDoc, line)
-      <> line
-      <> ssep(regions map toDoc, line)
-      <> line
-      <> ssep(predicates map toDoc, line)
-      <> line
-      <> ssep(procedures map toDoc, line))
+    ssection(vsep, structs map toDoc, line) <>
+    ssection(vsep, regions map toDoc, line) <>
+    ssection(vsep, predicates map toDoc, line) <>
+    ssection(vsep, procedures map toDoc, line)
   }
 
   def toDoc(declaration: PDeclaration): Doc = {
     declaration match {
       case member: PMember => toDoc(member)
-      case PFormalArgumentDecl(id, typ) => toDoc(id) <> ":" <+> toDoc(typ)
-      case PFormalReturnDecl(id, typ) => toDoc(id) <> ":" <+> toDoc(typ)
+      case PFormalArgumentDecl(id, typ) => toDoc(typ) <+> toDoc(id)
+      case PFormalReturnDecl(id, typ) => toDoc(typ) <+> toDoc(id)
       case PLocalVariableDecl(id, typ) =>  toDoc(typ) <+> toDoc(id)
       case PGuardDecl(id, modifier) =>  toDoc(modifier) <+> toDoc(id)
       case PNamedBinder(id) =>  "?" <> toDoc(id)
@@ -118,46 +143,51 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
   def toDoc(member: PMember): Doc = {
     member match {
       case PStruct(id, fields) =>
-        "struct" <+> toDoc(id) <>
-        nest(braces(ssep(fields map toDoc, semi <> line)))
+        "struct" <+> toDoc(id) <+>
+        block(vsep(fields map toDoc, semi))
 
       case PRegion(id, formalInArgs, formalOutArgs, guards, interpretation, state, actions) =>
-        (   "region" <+> toDoc(id)
-                     <> asFormalArguments(formalInArgs)
-                     <> (formalOutArgs match {
-                          case Seq() => emptyDoc
-                          case args => semi <+> ssep(args map toDoc, comma)
-                        })
-         <> nest("guards" <+> braces(ssep(guards map toDoc, semi <> line)))
-         <> nest("interpretation" <+> braces(toDoc(interpretation)))
-         <> nest("state" <+> braces(toDoc(state)))
-         <> nest("actions" <+> braces(ssep(actions map toDoc, semi <> line))))
+        "region" <+> toDoc(id) <>
+        asFormalArguments(formalInArgs) <>
+        (formalOutArgs match {
+          case Seq() => emptyDoc
+          case args => semi <+> ssep(args map toDoc, comma)
+        }) <>
+        nest(
+          line <>
+          "guards" <+> block(vsep(guards map toDoc, semi)) <@>
+          "interpretation" <+> block(toDoc(interpretation)) <@>
+          "state" <+> block(toDoc(state)) <@>
+          "actions" <+> block(vsep(actions map toDoc, semi)))
 
       case PProcedure(id, formalArgs, formalReturns, inters, pres, posts, locals, optBody, atomicity) =>
         toDoc(atomicity) <+> "procedure" <+>
-        toDoc(id) <+> asFormalArguments(formalArgs) <> (
+        toDoc(id) <> asFormalArguments(formalArgs) <> (
           if (formalReturns.isEmpty)
             emptyDoc
           else
             space <> "returns" <+> asFormalReturns(formalReturns)
-        ) <> line <>
-        nest(ssep(inters map toDoc, semi <> line)) <> line <>
-        nest(ssep(pres map toDoc, semi <> line)) <> line <>
-        nest(ssep(posts map toDoc, semi <> line)) <> line <> (
+        ) <>
+        nest(lterm(inters map toDoc, semi)) <>
+        nest(lterm(pres map toDoc, semi)) <>
+        nest(lterm(posts map toDoc, semi)) <> (
         optBody match {
           case None =>
             require(locals.isEmpty)
             emptyDoc
           case Some(body) =>
-            braces(nest(ssep(locals map toDoc, semi) <> line <> toDoc(body)))
+            (if (inters.nonEmpty || pres.nonEmpty || posts.nonEmpty) line else space) <>
+            block(
+              ssection(vsep, locals map toDoc, semi) <>
+              toDoc(body))
         })
 
       case PPredicate(id, formalArgs, optBody) =>
-        (    "predicate" <+> toDoc(id) <> asFormalArguments(formalArgs)
-         <+> (optBody match {
-                case None => emptyDoc
-                case Some(body) => braces(nest(toDoc(body)))
-              }))
+        "predicate" <+> toDoc(id) <> asFormalArguments(formalArgs) <+>
+        (optBody match {
+          case None => emptyDoc
+          case Some(body) => block(toDoc(body))
+        })
 
       case PExpressionMacro(id, formalArguments, body) =>
         "macro" <+> (
