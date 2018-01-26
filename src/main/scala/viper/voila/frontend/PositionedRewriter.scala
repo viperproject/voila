@@ -45,7 +45,7 @@ class PositionedRewriter(override val positions: Positions)
     val cloner =
       alltd(rule[PAstNode] {
         case declaration: PDeclaration if fullDeclarationReplacements.contains(declaration) =>
-          copy(fullDeclarationReplacements(declaration))
+          deepclone(fullDeclarationReplacements(declaration))
         case id @ PIdnUse(name) if fullDeclarationRenamings.contains(name) =>
           dup(id, Array(fullDeclarationRenamings(name)))
 
@@ -54,10 +54,10 @@ class PositionedRewriter(override val positions: Positions)
             s"Did not expect to find the definition of ${id.name}, "+
             s"only usages are expected (${id.position})")
         case PIdnExp(PIdnUse(name)) if useRenamings.contains(name) =>
-          copy(useRenamings(name))
+          deepclone(useRenamings(name))
         case oldIdn @ PIdnUse(name) if useRenamings.contains(name) =>
           val replacement =
-            useRenamings(name) match {
+            deepclone(useRenamings(name)) match {
               case newIdn: PIdnUse => newIdn
               case PIdnExp(newIdn) => newIdn
               case other =>
@@ -67,13 +67,13 @@ class PositionedRewriter(override val positions: Positions)
                   s"$oldIdn (${oldIdn.getClass.getSimpleName}, ${oldIdn.position})")
             }
 
-          copy(replacement)
+          deepclone(replacement)
 
         case node if generalReplacements.contains(node) =>
-          copy(generalReplacements(node))
+          deepclone(generalReplacements(node))
 
         case n if isLeaf(n) =>
-          copy(n)
+          copy(n) /* Deepcloning isn't necessary for leafs, copy suffices */
       })
 
     rewrite(cloner)(root)
