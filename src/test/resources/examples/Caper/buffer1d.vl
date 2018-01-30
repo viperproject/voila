@@ -1,0 +1,67 @@
+// Corresponds to:
+//   https://bitbucket.org/logsem/caper/src/a2eacde/demo/buffer/buffer1d.t
+//
+
+struct cell {
+  int value;
+}
+
+predicate resource(int v)
+
+region Buffer(id r, cell buf)
+  guards { duplicable Z; }
+  interpretation { buf.value |-> ?v && (v != 0 ==> resource(v)) }
+  state { v }
+  actions { Z: ?n ~> Int; }
+
+procedure send(id r, cell buf, int x)
+  requires Buffer(r, buf) && resource(x) && x != 0;
+  requires Z@r;
+  ensures  true;
+{
+  bool b;
+
+  use_atomic
+    using Buffer(r, buf) with Z@r;
+  {
+    b := CAS(buf, 0, x);
+  }
+
+  if (!b) {
+    send(r, buf, x);
+  }
+}
+
+procedure recv(id r, cell buf) returns (int ret)
+  requires Buffer(r, buf);
+  requires Z@r;
+  ensures  resource(ret);
+{
+  bool b;
+
+  open_region
+    using Buffer(r, buf);
+  {
+    ret := buf.value;
+  }
+
+  if (ret == 0) {
+    ret := recv(r, buf);
+  } else {
+    use_atomic
+      using Buffer(r, buf) with Z@r;
+    {
+      b := CAS(buf, ret, 0);
+    }
+
+    if (!b) {
+      ret := recv(r, buf);
+    }
+  }
+}
+
+primitive_atomic procedure CAS(cell x, int now, int thn) returns (bool ret)
+  requires x.value |-> ?v;
+  ensures  v == now
+              ? ret && x.value |-> thn
+              : !ret && x.value |-> v;
