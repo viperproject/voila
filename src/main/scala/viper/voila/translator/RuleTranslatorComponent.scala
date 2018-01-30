@@ -82,6 +82,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
           MakeAtomicError(makeAtomic)
             .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
+            .dueTo(hintAtEnclosingLoopInvariants(regionId))
             .dueTo(AdditionalErrorClarification("This could be related to issue #8", regionId))
 
         case e @ vprerr.AssertFailed(_, reason: vprrea.AssertionFalse, _)
@@ -93,10 +94,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
                       "In particular, it cannot be shown that the region is transitioned from a " +
                       "state that is compatible with the procedure's interference specification",
                       regionId))
-            /* TODO: Only append next clarification if rule body contains a loop */
-            .dueTo(AdditionalErrorClarification(
-                      "A common source of this problem are insufficient loop invariants",
-                      regionId))
+            .dueTo(hintAtEnclosingLoopInvariants(regionId))
       }
 
       val vprCheckTo =
@@ -118,10 +116,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
                       "In particular, it cannot be shown that the region is transitioned to a " +
                       "state that is compatible with the procedure's interference specification",
                       regionId))
-            /* TODO: Only append next clarification if rule body contains a loop */
-            .dueTo(AdditionalErrorClarification(
-                      "A common source of this problem are insufficient loop invariants",
-                      regionId))
+            .dueTo(hintAtEnclosingLoopInvariants(regionId))
       }
 
       vpr.Seqn(
@@ -175,10 +170,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         case e: vprerr.ExhaleFailed if e causedBy exhale =>
           MakeAtomicError(makeAtomic)
             .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
-            /* TODO: Only append next clarification if rule body contains a loop */
-            .dueTo(AdditionalErrorClarification(
-                      "A common source of this problem are insufficient loop invariants",
-                      regionId))
+            .dueTo(hintAtEnclosingLoopInvariants(regionId))
       }
 
       exhale
@@ -226,9 +218,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleDiamond =>
-        UpdateRegionError(
-          updateRegion,
-          InsufficientDiamondResourcePermissionError(updateRegion.regionPredicate, regionId))
+        UpdateRegionError(updateRegion)
+          .dueTo(InsufficientDiamondResourcePermissionError(updateRegion.regionPredicate, regionId))
+          .dueTo(hintAtEnclosingLoopInvariants(regionId))
     }
 
     val label = freshLabel("pre_region_update")

@@ -477,6 +477,16 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case p: PExpression => p
     }}
 
+  def enclosingLoops(of: PAstNode): Vector[PWhile] =
+    enclosingLoopsAttr(of, Vector.empty)(of)
+
+  private lazy val enclosingLoopsAttr: ((PAstNode, Vector[PWhile])) => PAstNode => Vector[PWhile] =
+    paramAttr { case (of, loops) => {
+      case p: PMember => loops
+      case tree.parent(p: PWhile) => enclosingLoopsAttr(of, loops :+ p)(p)
+      case tree.parent(p) => enclosingLoopsAttr(of, loops)(p)
+    }}
+
   lazy val isGhost: PStatement => Boolean =
     attr {
       case _: PGhostStatement => true
