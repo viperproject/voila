@@ -495,10 +495,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         semanticAnalyser.atomicity(statement) == AtomicityKind.Nonatomic &&
         semanticAnalyser.expectedAtomicity(statement) == AtomicityKind.Atomic) {
 
-      /* TODO See issue #22 */
-      sys.error( "Direct use of a nonatomic statement " +
-                s"(${statement.statementName}@${statement.lineColumnPosition}) " +
-                 "in an atomic context is not supported. See also issue #22.")
+      sys.error( "Unexpectedly found a non-atomic and non-ghost statement " +
+                s"(${statement.statementName}) in an atomic context " +
+                s"(@${statement.lineColumnPosition})")
     }
 
     val vprStatement = directlyTranslate(statement)

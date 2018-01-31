@@ -1,0 +1,97 @@
+struct memcell {
+  int f;
+}
+
+region Counter(id c, memcell x)
+  guards { duplicable G; }
+  interpretation {
+    x.f |-> ?n
+  }
+  state { n }
+  actions {
+    G: ?m ~> Int;
+  }
+
+abstract_atomic procedure test03(id c, memcell x)
+  interference ?n in Int on c;
+  requires Counter(c, x, n);
+{
+  open_region
+    using Counter(c, x);
+  {
+    //:: ExpectedOutput(typechecker_error)
+    x.f := n;
+    x.f := n;
+  }
+}
+
+abstract_atomic procedure test02(id c, memcell x) returns (int ret)
+  interference ?n in Int on c;
+  requires Counter(c, x, n);
+{
+  //:: ExpectedOutput(typechecker_error)
+  open_region
+    using Counter(c, x);
+  {
+    ret := x.f;
+  }
+
+  skip;
+}
+
+abstract_atomic procedure test10(id c, memcell x) returns (int ret)
+  interference ?n in Int on c;
+  requires Counter(c, x, n);
+{
+  assert true;
+
+  open_region
+    using Counter(c, x);
+  {
+    ret := x.f;
+  }
+
+  assert true;
+}
+
+procedure test01(id c, memcell x)
+  requires Counter(c, x) && G@c;
+{
+  int n;
+
+  use_atomic
+    using Counter(c, x) with G@c;
+  {
+    //:: ExpectedOutput(typechecker_error)
+    n := x.f;
+    x.f := n;
+  }
+}
+
+procedure test05(id c, memcell x)
+  requires Counter(c, x) && G@c;
+{
+  int n;
+
+  update_region
+    using Counter(c, x);
+  {
+    //:: ExpectedOutput(typechecker_error)
+    n := x.f;
+    x.f := n;
+  }
+}
+
+procedure test06(id c, memcell x)
+  requires Counter(c, x);
+{
+  int n;
+
+  open_region
+    using Counter(c, x);
+  {
+    n := x.f;
+    assert x.f |-> ?v;
+    assert v == n;
+  }
+}

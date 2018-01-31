@@ -285,7 +285,9 @@ case class PUseRegionInterpretation(regionPredicate: PPredicateExp) extends PGho
   val statementName = "use-region-interpretation"
 }
 
-sealed trait PRuleStatement extends PStatement
+sealed trait PRuleStatement extends PStatement {
+  def body: PStatement
+}
 
 case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
     extends PRuleStatement with PCompoundStatement

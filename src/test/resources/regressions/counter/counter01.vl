@@ -25,36 +25,3 @@ abstract_atomic procedure read01(id c, memcell x) returns (int ret)
     skip;
   }
 }
-
-/* TODO: See issue #22 */
-//abstract_atomic int read02(id c, memcell x)
-//  interference ?n in Int on c;
-//  requires Counter(c, x, n) && G@c;
-//  ensures ret == n;
-//  //:: ExpectedOutput(postcondition_error:region_state_error)
-//  ensures Counter(c, x, n) && G@c;
-//{
-//  open_region
-//    using Counter(c, x);
-//  {
-//    ret := x.f;
-//  }
-//
-//  skip;
-//}
-
-/* TODO: See issue #22 */
-//abstract_atomic int read03(id c, memcell x)
-//  interference ?n in Int on c;
-//  requires Counter(c, x, n) && G@c;
-//  ensures ret == n;
-//  ensures Counter(c, x) && G@c;
-//{
-//  open_region
-//    using Counter(c, x);
-//  {
-//    ret := x.f;
-//  }
-//
-//  skip;
-//}

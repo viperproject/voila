@@ -54,9 +54,25 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case exp: PExpression if typ(exp) == PUnknownType() =>
         message(exp, s"$exp could not be typed")
 
-      case PProcedure(_, _, _, _, pres, posts, _, _, _) =>
-        (pres.map(_.assertion) ++ posts.map(_.assertion))
-            .flatMap(exp => reportTypeMismatch(exp, PBoolType()))
+      case PProcedure(_, _, _, _, pres, posts, _, optBody, atom) =>
+        val contractMessages =
+          (pres.map(_.assertion) ++ posts.map(_.assertion))
+              .flatMap(exp => reportTypeMismatch(exp, PBoolType()))
+
+        val atomicityMessages =
+          optBody match {
+            case Some(body) =>
+              message(
+                body,
+                "Unexpectedly found a non-atomic and non-ghost statement " +
+                    s"(${body.statementName}) in an atomic context",
+                (atom == PAbstractAtomic() || atom == PPrimitiveAtomic()) &&
+                    atomicity(body) == AtomicityKind.Nonatomic)
+            case None =>
+              Vector.empty
+          }
+
+        contractMessages ++ atomicityMessages
 
       case action: PAction =>
         reportTypeMismatch(action.to, PSetType(typ(action.from)))
@@ -100,6 +116,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case _ =>
             message(call.procedure, s"Cannot call ${call.procedure}")
         }
+
+      case _rule @ (_: POpenRegion | _: PUpdateRegion | _: PUseAtomic) =>
+        val rule = _rule.asInstanceOf[PRuleStatement]
+
+        message(
+          rule.body,
+          s"The body of a ${rule.statementName} block must be atomic",
+          atomicity(rule.body) != AtomicityKind.Atomic)
 
       case exp: PExpression => (
            reportTypeMismatch(exp, expectedType(exp), typ(exp))
@@ -777,15 +801,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     attr {
       case _: PAssign => AtomicityKind.Nonatomic
 
-      case compound @ (_: PIf | _: PWhile | _: PSeqComp) =>
-        // TODO: Cast shouldn't be necessary, but Scala fails to type 'compound' as 'PCompoundStatement'
-        val components = compound.asInstanceOf[PCompoundStatement].components
-
-        components.foldLeft(AtomicityKind.Atomic: AtomicityKind) { case (atom, comp) =>
-          if (atom == AtomicityKind.Nonatomic) atom /* Nonatomicity prevails */
-          else if (isGhost(comp)) atom /* Ghost statements don't affect atomicity */
-          else atomicity(comp) /* Otherwise, take the current component's atomicity */
+      case seq: PSeqComp =>
+        seq.components.filterNot(isGhost) match {
+          case Seq() => AtomicityKind.Atomic
+          case Seq(s) => atomicity(s)
+          case _ => AtomicityKind.Nonatomic
         }
+
+      case _: PIf | _: PWhile => AtomicityKind.Nonatomic
 
       case _: PSkip => AtomicityKind.Atomic
       case _: PHeapWrite => AtomicityKind.Atomic
