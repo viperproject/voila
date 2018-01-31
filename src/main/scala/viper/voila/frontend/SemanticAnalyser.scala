@@ -506,7 +506,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   private lazy val enclosingLoopsAttr: ((PAstNode, Vector[PWhile])) => PAstNode => Vector[PWhile] =
     paramAttr { case (of, loops) => {
-      case p: PMember => loops
+      case _: PMember => loops
       case tree.parent(p: PWhile) => enclosingLoopsAttr(of, loops :+ p)(p)
       case tree.parent(p) => enclosingLoopsAttr(of, loops)(p)
     }}
@@ -558,7 +558,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         }
 
       case PInterferenceClause(`binder`, set, _) =>
-        typ(set).asInstanceOf[PSetType].elementType
+        typ(set) match {
+          case setType: PSetType => setType.elementType
+          case _ => PUnknownType()
+        }
 
       case action @ PAction2(_, `binder`, _) =>
         typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
@@ -652,85 +655,90 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     * What is the type of an expression?
     */
   lazy val typ: PExpression => PType =
-    attr {
-      case _: PIntLit => PIntType()
-      case _: PTrueLit | _: PFalseLit => PBoolType()
-      case _: PNullLit => PNullType()
-      case _: PFullPerm | _: PNoPerm => PFracType()
+    attr(exp =>
+      try {
+        exp match {
+          case _: PIntLit => PIntType()
+          case _: PTrueLit | _: PFalseLit => PBoolType()
+          case _: PNullLit => PNullType()
+          case _: PFullPerm | _: PNoPerm => PFracType()
 
-      case PIdnExp(id) => typeOfIdn(id)
+          case PIdnExp(id) => typeOfIdn(id)
 
-      case op @ (_: PAdd | _: PSub) =>  // TODO: How to type op as PBinOp?
-        val signatures: Signatures =
-          Map((PFracType(), PFracType()) -> PFracType(),
-              (PIntType(),  PIntType())  -> PIntType())
+          case op @ (_: PAdd | _: PSub) =>  // TODO: How to type op as PBinOp?
+            val signatures: Signatures =
+              Map((PFracType(), PFracType()) -> PFracType(),
+                  (PIntType(),  PIntType())  -> PIntType())
 
-        typeOrUnknown(op.asInstanceOf[PBinOp], signatures)
+            typeOrUnknown(op.asInstanceOf[PBinOp], signatures)
 
-      case op: PMul =>
-        val signatures: Signatures =
-          Map((PFracType(), PFracType()) -> PFracType(),
-              (PIntType(),  PFracType()) -> PFracType(),
-              (PIntType(),  PIntType())  -> PIntType())
+          case op: PMul =>
+            val signatures: Signatures =
+              Map((PFracType(), PFracType()) -> PFracType(),
+                  (PIntType(),  PFracType()) -> PFracType(),
+                  (PIntType(),  PIntType())  -> PIntType())
 
-        typeOrUnknown(op, signatures)
+            typeOrUnknown(op, signatures)
 
-      case op: PFrac =>
-        val signatures: Signatures =
-          Map((PFracType(), PIntType()) -> PFracType(),
-              (PIntType(),  PIntType()) -> PFracType())
+          case op: PFrac =>
+            val signatures: Signatures =
+              Map((PFracType(), PIntType()) -> PFracType(),
+                  (PIntType(),  PIntType()) -> PFracType())
 
-        typeOrUnknown(op, signatures)
+            typeOrUnknown(op, signatures)
 
-      case _: PMod | _: PDiv => PIntType()
-      case _: PAnd | _: POr | _: PNot => PBoolType()
-      case _: PEquals => PBoolType()
+          case _: PMod | _: PDiv => PIntType()
+          case _: PAnd | _: POr | _: PNot => PBoolType()
+          case _: PEquals => PBoolType()
 
-      case op @ (_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => // TODO: How to type op as PBinOp?
-        val signatures: Signatures =
-          Map((PFracType(), PFracType()) -> PBoolType(),
-              (PIntType(),  PIntType()) -> PBoolType())
+          case op @ (_: PLess | _: PAtMost | _: PGreater | _: PAtLeast) => // TODO: How to type op as PBinOp?
+            val signatures: Signatures =
+              Map((PFracType(), PFracType()) -> PBoolType(),
+                  (PIntType(),  PIntType()) -> PBoolType())
 
-        typeOrUnknown(op.asInstanceOf[PBinOp], signatures)
+            typeOrUnknown(op.asInstanceOf[PBinOp], signatures)
 
-      case _: PIntSet | _: PNatSet => PSetType(PIntType())
+          case _: PIntSet | _: PNatSet => PSetType(PIntType())
 
-      case explicitCollection: PExplicitCollection =>
-        val typeConstructor: PType => PCollectionType =
-          explicitCollection match {
-            case _: PExplicitSet => PSetType
-            case _: PExplicitSeq => PSeqType
-          }
+          case explicitCollection: PExplicitCollection =>
+            val typeConstructor: PType => PCollectionType =
+              explicitCollection match {
+                case _: PExplicitSet => PSetType
+                case _: PExplicitSeq => PSeqType
+              }
 
-        explicitCollection.typeAnnotation match {
-          case Some(_typ) =>
-            typeConstructor(_typ)
-          case None =>
-            if (explicitCollection.elements.nonEmpty)
-              typeConstructor(typ(explicitCollection.elements.head))
-            else
-              PUnknownType()
+            explicitCollection.typeAnnotation match {
+              case Some(_typ) =>
+                typeConstructor(_typ)
+              case None =>
+                if (explicitCollection.elements.nonEmpty)
+                  typeConstructor(typ(explicitCollection.elements.head))
+                else
+                  PUnknownType()
+            }
+
+          case PSetComprehension(qvar, _, typeAnnotation) =>
+            typeAnnotation match {
+              case Some(_typ) =>
+                PSetType(_typ)
+              case None =>
+                /* TODO: Only works if the set comprehension occurs in an action definition */
+                PSetType(typeOfLogicalVariable(qvar))
+            }
+
+          case _: PSetContains => PBoolType()
+          case _: PSeqSize => PIntType()
+          case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
+          case tailExp: PSeqTail => typ(tailExp.seq)
+          case conditional: PConditional => typ(conditional.thn)
+          case unfolding: PUnfolding => typ(unfolding.body)
+          case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
+          case binder: PLogicalVariableBinder => typeOfLogicalVariable(binder)
+          case _ => PUnknownType()
         }
-
-      case PSetComprehension(qvar, _, typeAnnotation) =>
-        typeAnnotation match {
-          case Some(_typ) =>
-            PSetType(_typ)
-          case None =>
-            /* TODO: Only works if the set comprehension occurs in an action definition */
-            PSetType(typeOfLogicalVariable(qvar))
-        }
-
-      case _: PSetContains => PBoolType()
-      case _: PSeqSize => PIntType()
-      case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
-      case tailExp: PSeqTail => typ(tailExp.seq)
-      case conditional: PConditional => typ(conditional.thn)
-      case unfolding: PUnfolding => typ(unfolding.body)
-      case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
-      case binder: PLogicalVariableBinder => typeOfLogicalVariable(binder)
-      case _ => PUnknownType()
-    }
+      } catch {
+        case CyclicAttributeEvaluationException(_) => PUnknownType()
+      })
 
   private type Signatures = Map[(PType, PType), PType]
 
@@ -769,8 +777,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           if (e eq lhs) Set(typ(rhs))
           else Set(typ(lhs))
         } catch {
-          case ex: IllegalStateException if ex.getMessage.toLowerCase.startsWith("cycle detected") =>
-            Set(PUnknownType())
+          case CyclicAttributeEvaluationException(_) => Set(PUnknownType())
         }
 
       case tree.parent(_: PAdd | _: PSub | _: PMul) => Set(PIntType(), PFracType())
@@ -924,6 +931,16 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   private implicit def defs2UsesSets(xs: ListSet[PIdnDef]): ListSet[PIdnUse] =
     xs.map(idndef => PIdnUse(idndef.name))
+
+  private object CyclicAttributeEvaluationException {
+    def unapply(exception: Exception): Option[IllegalStateException] = {
+      exception match {
+        case ex: IllegalStateException if ex.getMessage.toLowerCase.startsWith("cycle detected") =>
+          Some(ex)
+        case _ => None
+      }
+    }
+  }
 }
 
 sealed trait LogicalVariableContext

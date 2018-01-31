@@ -1,0 +1,25 @@
+struct cell {
+  int value;
+}
+
+region R(id r, cell x)
+  guards { unique G; }
+  interpretation { x.value |-> ?v }
+  state { v }
+  actions {}
+
+abstract_atomic procedure test01(id r, cell x)
+  //:: ExpectedOutput(typechecker_error)
+  interference ?n in Set(n) on r;
+  requires R(r, x);
+
+procedure test02() {
+  int n;
+  assume n in Set(n);
+}
+
+procedure test03() {
+  set<int> s;
+  //:: ExpectedOutput(typechecker_error)
+  s := Set(?n | n == n);
+}
