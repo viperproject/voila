@@ -1116,7 +1116,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
       case PIntSet() => intSet.withSource(expression)
       case PNatSet() => natSet.withSource(expression)
-      case PIdnExp(id) => translateUseOf(id).withSource(expression)
+      case PIdnExp(id) => translateUseOf(id).withSource(expression, overwrite = true)
 
       case comprehension: PSetComprehension =>
         val vprFunction = recordedSetComprehensions(comprehension)
@@ -1201,10 +1201,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translateUseOf(id: PIdnNode): vpr.Exp = {
     semanticAnalyser.entity(id) match {
-      case entity: LogicalVariableEntity => translateUseOf(id, entity.declaration)
-      case FormalArgumentEntity(decl) => vpr.LocalVar(id.name)(typ = translate(decl.typ))
-      case FormalReturnEntity(decl) => vpr.LocalVar(id.name)(typ = translate(decl.typ))
-      case LocalVariableEntity(decl) => vpr.LocalVar(id.name)(typ = translate(decl.typ))
+      case entity: LogicalVariableEntity =>
+        translateUseOf(id, entity.declaration)
+      case FormalArgumentEntity(decl) =>
+        vpr.LocalVar(id.name)(typ = translate(decl.typ)).withSource(id)
+      case FormalReturnEntity(decl) =>
+        vpr.LocalVar(id.name)(typ = translate(decl.typ)).withSource(id)
+      case LocalVariableEntity(decl) =>
+        vpr.LocalVar(id.name)(typ = translate(decl.typ)).withSource(id)
     }
   }
 
@@ -1216,7 +1220,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val vprType = translate(semanticAnalyser.typeOfLogicalVariable(binder))
 
-        vpr.LocalVar(id.name)(typ = vprType)
+        vpr.LocalVar(id.name)(typ = vprType).withSource(id)
 
       case PPointsTo(_, `binder`) => translateAsHeapAccess(id, binder)
       case PPredicateExp(_, args) if args.exists(_ eq binder) => translateAsHeapAccess(id, binder)

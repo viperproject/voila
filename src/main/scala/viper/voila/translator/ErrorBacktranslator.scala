@@ -46,7 +46,7 @@ class DefaultErrorBacktranslator extends ErrorBacktranslator {
     }
 
   protected val defaultReasonTransformer: ReasonTransformer = {
-    case vprrea.InsufficientPermission(Source(sourceNode: PExpression)) =>
+    case vprrea.InsufficientPermission(Source(sourceNode: PAstNode)) =>
       InsufficientPermissionError(sourceNode)
     case vprrea.AssertionFalse(Source(sourceNode: PExpression)) =>
       AssertionError(sourceNode)

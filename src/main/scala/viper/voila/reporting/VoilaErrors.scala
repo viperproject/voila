@@ -229,12 +229,13 @@ case class OpenRegionError(offendingNode: POpenRegion, detail: Option[Verificati
     copy(offendingNode, detail)
 }
 
-case class InsufficientPermissionError(offendingNode: PExpression, detail: Option[VerificationError] = None)
+case class InsufficientPermissionError(offendingNode: PAstNode, detail: Option[VerificationError] = None)
+        /* TODO: offendingNode's type should allow resources only, not any node */
     extends AbstractVerificationError {
 
-  type OffendingNode = PExpression
+  type OffendingNode = PAstNode
   def localId: String = "permission_error"
-  val localMessage: String = s"Insufficient permission to ${offendingNode.formatForUsers}"
+  val localMessage: String = s"Permission to ${offendingNode.formatForUsers} might not suffice"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)

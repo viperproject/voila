@@ -1,0 +1,31 @@
+struct cell {
+  int value;
+}
+
+procedure test01(cell c) {
+  //:: ExpectedOutput(assignment_error:permission_error)
+  c.value := 0;
+}
+
+procedure test04(cell c) {
+  int v;
+  //:: ExpectedOutput(assignment_error:permission_error)
+  v := c.value;
+}
+
+procedure test05(cell c) {
+  //:: ExpectedOutput(assert_error:permission_error)
+  assert c.value |-> _;
+}
+
+predicate P() { true }
+
+procedure test02() {
+  //:: ExpectedOutput(exhale_error:permission_error)
+  exhale P();
+}
+
+procedure test03() {
+  //:: ExpectedOutput(unfold_error:permission_error)
+  unfold P();
+}

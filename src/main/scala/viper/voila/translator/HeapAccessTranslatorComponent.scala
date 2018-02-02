@@ -13,7 +13,10 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   def toField(declaredBy: PStruct, id: PIdnNode): vpr.Field = {
     val fieldType = declaredBy.fields.find(_.id.name == id.name).get.typ
 
-    vpr.Field(s"$$${declaredBy.id.name}_$$${id.name}", translate(fieldType))()
+    vpr.Field(
+      s"$$${declaredBy.id.name}_$$${id.name}",
+      translate(fieldType)
+    )().withSource(id)
   }
 
   def translate(location: PLocation): vpr.FieldAccess = {
@@ -26,7 +29,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAccess(
       translateUseOf(location.receiver),
       toField(receiverStruct, location.field)
-    )()
+    )().withSource(location)
   }
 
   def translate(read: PHeapRead): vpr.Stmt = {
@@ -83,10 +86,10 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.FuncApp(
             regionOutArgumentFunction(region, idx),
             inArgs map translate
-          )()
+          )().withSource(id)
 
         case PInterferenceClause(`declaration`, _, regionId) =>
-          regionState(semanticAnalyser.usedWithRegionPredicate(regionId))
+          regionState(semanticAnalyser.usedWithRegionPredicate(regionId)).withSource(id)
 
         case other =>
           sys.error(s"Unexpectedly found $other")
@@ -106,16 +109,19 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
       case (LogicalVariableContext.Precondition, _) |
            (LogicalVariableContext.Interference, _) =>
 
-        vpr.Old(vprHeapRead)()
+        vpr.Old(vprHeapRead)().withSource(id)
 
       case (LogicalVariableContext.Procedure, _) =>
         val declAss = semanticAnalyser.enclosingAssertion(declaration)
         val idAss = semanticAnalyser.enclosingAssertion(id)
 
-        if (declAss eq idAss)
+        if (declAss eq idAss) {
           vprHeapRead
-        else
-          vpr.LocalVar(declaration.id.name)(translate(semanticAnalyser.typeOfIdn(declaration.id)))
+        } else {
+          val vprType = translate(semanticAnalyser.typeOfIdn(declaration.id))
+
+          vpr.LocalVar(declaration.id.name)(vprType).withSource(id)
+        }
 
       case _ =>
         sys.error(
