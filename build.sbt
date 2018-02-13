@@ -29,7 +29,7 @@ lazy val voila = {
       libraryDependencies ++= externalDependencies,
 
       /* Make sure Silicon doesn't overflow the stack */
-      javaOptions in run ++= Seq("-Xss64M"),
+      javaOptions in run += "-Xss64M",
       javaOptions in Test += "-Xss64M",
 
       fork := true,
@@ -40,7 +40,7 @@ lazy val voila = {
          */
 
       test in assembly := {},
-      mainClass in assembly := Some("viper.voila.Voila"),
+      mainClass in assembly := Some("viper.voila.VoilaRunner"),
       assemblyJarName in assembly := "voila.jar"
     ))
 
