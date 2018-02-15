@@ -6,7 +6,7 @@ region Cell(id r, cell c)
   guards { unique G; }
   interpretation { c.value |-> ?v }
   state { v }
-  actions { G: ?n ~> Int; }
+  actions { G: ?n ~> ?m; }
 
 procedure test01(id r, cell c)
   requires Cell(r, c, 0);

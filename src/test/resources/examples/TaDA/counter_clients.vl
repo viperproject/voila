@@ -6,7 +6,7 @@ region Counter(id c, cell x)
   guards { unique G; }
   interpretation { x.f |-> ?n }
   state { n }
-  actions { G: ?m ~> Int; }
+  actions { G: ?n ~> ?m; }
 
 abstract_atomic procedure read(id c, cell x) returns (int ret)
   interference ?n in Int on c;
@@ -45,82 +45,80 @@ procedure seq_client(id c, cell x, int n)
  * An encoding of Fig. 7.3 from Pedro's thesis
  *
  * Remarks on the current encoding:
- *
- *   1. Parameterised guards are not yet supported by Voila, see issue #42.
- *      For now, this issue is overcome as follows:
- *        - Guards INC and TOTAL are encoded as abstract predicates with appropriate arguments
- *        - A "fake" guard xINC is used to guard actions where INC should be used.
- *          This is in general not sound since there is no formal coupling between INC and xINC.
- *
- *   2. Complex guard algebras are not yet supported.
+ *   1. Complex guard algebras are not yet supported.
  *      For now, this is overcome by modelling the algebra using lemma procedures and calling
- *      them at the appropriate places. This increases the annotation overhead, but is not more
- *      or less sound than having native support for such algebras.
+ *      them at the appropriate places. This increases the annotation overhead, but is equally
+ *      sound as having special support for declaring arbitrary algebras.
  *
- *   3. Voila doesn't natively support parallel composition (or fork/join statements); it is
+ *   2. Voila doesn't natively support parallel composition (or fork/join statements); it is
  *      encoded using exhales and inhales
  *
- *   4. In Pedro's example, the guard algebra also controls when a region can be disposed.
+ *   3. In Pedro's example, the guard algebra also controls when a region can be disposed.
  *      This aspect is missing from the current Voila encoding.
  */
 
 region CClient(id a, id c, cell x)
   guards {
-//    splitable INC(int k, perm p);
-    duplicable xINC;
-//    unique TOTAL(int n);
+    /* TODO: Neither unique nor duplicable are an ideal choice for the two guards. See also issue #43. */
+    duplicable INC(int k, frac p);
+    duplicable TOTAL(int n);
   }
   interpretation {
-//    Counter(c, x, ?n) && TOTAL(n)@a;
-    Counter(c, x, ?n) && G@c && TOTAL(a, n)
+    Counter(c, x, ?n) && G@c && TOTAL(n)@a
   }
   state { n }
   actions {
-//    INC(?k, ?p): k ~> Set(?kk | k < kk);
-    xINC: ?k ~> Set(?kk | k < kk);
+    ?n, ?m, ?k, ?p | 0f < p && n < m | INC(k, p): n ~> m;
   }
 
-predicate INC(id a, int k, frac p)
-predicate TOTAL(id a, int n)
+/* Model complex guard algebra via lemma procedures *
 
 /* lemma */ procedure INC_split(id a, int k1, int k2, frac p1, frac p2)
-  requires INC(a, k1 + k2, p1 + p2);
+  requires INC(k1 + k2, p1 + p2)@a;
   requires 0f < p1 && 0f < p2;
-  ensures  INC(a, k1, p1) && INC(a, k2, p2);
+  ensures  INC(k1, p1)@a && INC(k2, p2)@a;
 
 /* lemma */ procedure INC_join(id a, int k1, int k2, frac p1, frac p2)
-  requires INC(a, k1, p1) && INC(a, k2, p2);
+  requires INC(k1, p1)@a && INC(k2, p2)@a;
   requires 0f < p1 && 0f < p2;
-  ensures  INC(a, k1 + k2, p1 + p2);
+  ensures  INC(k1 + k2, p1 + p2)@a;
 
 /* lemma */ procedure TOTAL_INC_equality(id a, int n, int k)
-  requires TOTAL(a, n) && INC(a, k, 1f);
+  requires TOTAL(n)@a && INC(k, 1f)@a;
 //  requires TODO: ... and the composition must be defined
-  ensures  TOTAL(a, n) && INC(a, k, 1f);
+  ensures  TOTAL(n)@a && INC(k, 1f)@a;
   ensures  n == k;
-//
+
 /* lemma */ procedure TOTAL_INC_update(id a, int n, int k0, int k1, frac p)
-  requires TOTAL(a, n + k0) && INC(a, k0, p);
+  requires TOTAL(n + k0)@a && INC(k0, p)@a;
   requires 0f < p;
-  ensures  TOTAL(a, n + k1) && INC(a, k1, p);
+  ensures  TOTAL(n + k1)@a && INC(k1, p)@a;
 
 /* Specialised version of (i.e. derived from) TOTAL_INC_update */
 /* lemma */ procedure TOTAL_INC_inc(id a, int n, int k, frac p)
-  requires TOTAL(a, n) && INC(a, k, p) && 0 <= n - k;
+  requires TOTAL(n)@a && INC(k, p)@a && 0 <= n - k;
   requires 0f < p;
-  ensures  TOTAL(a, n + 1) && INC(a, k + 1, p);
+  ensures  TOTAL(n + 1)@a && INC(k + 1, p)@a;
 {
   int m;
   assume n == m + k;
   use TOTAL_INC_update(a, m, k, k + 1, p);
 }
 
-/* The parallelly-composed code of Fig. 7.3 */
+/* Macro single_client's contract for easy reuse when encoding fork/join via ex-/inhales */
+
+macro single_client_Pre(a, c, x, p)
+  CClient(a, c, x, ?v0) && INC( 0, p)@a && 0f < p && 0 <= v0;
+
+macro single_client_Post(a, c, x, p, n)
+  CClient(a, c, x,  _) && INC(n, p)@a && 0 <= n;
+
+/*
+ * The parallelly-composed code of Fig. 7.3
+ */
 procedure single_client(id a, id c, cell x, frac p) returns (int n)
-  requires CClient(a, c, x, ?v0) && INC(a, 0, p) && 0 <= v0;
-  requires 0f < p;
-  requires xINC@a;
-  ensures  CClient(a, c, x,  _) && INC(a, n, p) && 0 <= n;
+  requires single_client_Pre(a, c, x, p);
+  ensures single_client_Post(a, c, x, p, n);
 {
   int i;
 
@@ -133,16 +131,15 @@ procedure single_client(id a, id c, cell x, frac p) returns (int n)
   while (i < n)
     invariant 0 <= i && i <= n;
     invariant CClient(a, c, x, ?vi) && i <= vi;
-    invariant INC(a, i, p);
-    invariant xINC@a;
+    invariant INC(i, p)@a;
   {
     use_atomic
-      using CClient(a, c, x) with xINC@a;
+      using CClient(a, c, x) with INC(i, p)@a;
     {
       assert Counter(c, x, ?v);
       incr(c, x);
       assert Counter(c, x, v + 1); // [DEBUG]
-      assert TOTAL(a, v) && INC(a, i, p); // [DEBUG]
+      assert TOTAL(v)@a && INC(i, p)@a; // [DEBUG]
       use TOTAL_INC_inc(a, v, i, p);
     }
 
@@ -150,7 +147,9 @@ procedure single_client(id a, id c, cell x, frac p) returns (int n)
   }
 }
 
-/* Main code of Fig. 7.3 */
+/*
+ * Main code of Fig. 7.3
+ */
 procedure client() {
   id a, c;
   cell x;
@@ -160,32 +159,28 @@ procedure client() {
   // x := makeCounter();
   inhale Counter(c, x, 0) && G@c;
   // Create a new CClient region
-  inhale TOTAL(a, 0) && INC(a, 0, 1f);
-  inhale xINC@a;
+  inhale TOTAL(0)@a && INC(0, 1f)@a;
   fold CClient(a, c, x, 0);
 
   // Duplicate region assertion
   assert CClient(a, c, x);
   inhale CClient(a, c, x);
-  // Duplicate fake guard xINC
-  assert xINC@a;
-  inhale xINC@a;
-  // Split encoded guard INC
+  // Split guard INC
   use INC_split(a, 0, 0, 1/2, 1/2);
 
-  // Fork two instances of single_client(a, c, x)
-  exhale CClient(a, c, x, ?v01) && INC(a, 0, 1/2) && 0 <= v01 && xINC@a;
-  exhale CClient(a, c, x, ?v02) && INC(a, 0, 1/2) && 0 <= v02 && xINC@a;
+  // Fork two instances of single_client(a, c, x, 1/2)
+  exhale single_client_Pre(a, c, x, 1/2);
+  exhale single_client_Pre(a, c, x, 1/2);
 
   skip; // Account for possible interference between forking and joining
 
   // Join the two forked instances of single_client(a, c, x)
   havoc k1;
-  inhale CClient(a, c, x, _) && INC(a, k1, 1/2) && 0 <= k1;
+  inhale single_client_Post(a, c, x, 1/2, k1);
   havoc k2;
-  inhale CClient(a, c, x, _) && INC(a, k2, 1/2) && 0 <= k2;
+  inhale single_client_Post(a, c, x, 1/2, k2);
 
-  // Join encoded guard INC
+  // Join guard INC
   use INC_join(a, k1, k2, 1/2, 1/2);
   // Transform CClient assertion according to guard algebra (view shift?)
   unfold CClient(a, c, x, _);

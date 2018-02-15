@@ -9,7 +9,7 @@ region Counter(id c, memcell x)
   }
   state { n }
   actions {
-    G: ?m ~> Int;
+    ?n, ?m | G: n ~> m;
   }
 
 abstract_atomic procedure test03(id c, memcell x)

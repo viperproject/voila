@@ -2,7 +2,7 @@ region Counter(id c, memcell x)
   guards { unique INC; }
   interpretation { x.f |-> ?n }
   state { n }
-  actions { INC: ?m ~> Int; }
+  actions { ?n, ?m | n < m | INC: n ~> m; }
 
 /*
  * Corresponds to Fig. 7.5 from Pedro's thesis

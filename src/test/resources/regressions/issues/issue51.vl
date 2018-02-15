@@ -1,0 +1,36 @@
+//:: IgnoreFile(/voila/issue/51/)
+
+struct cell {
+  int value;
+}
+
+region R1(id r, cell x)
+  guards { unique G1; }
+  interpretation { x.value |-> ?v }
+  state { v }
+  actions { ?n | G1: 3*n ~> 3*n + 1; }
+
+procedure test01R1(id r, cell x)
+  requires R1(r, x, 0) && G1@r;
+  ensures  R1(r, x, _);
+{
+  int n;
+  assume 0 <= n <= 1;
+
+  use_atomic
+    using R1(r, x) with G1@r;
+  {
+    x.value := n;
+  }
+}
+
+procedure test02R1(id r, cell x)
+  requires R1(r, x, 0) && G1@r;
+{
+  //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
+  use_atomic
+    using R1(r, x) with G1@r;
+  {
+    x.value := -1;
+  }
+}

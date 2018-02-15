@@ -74,15 +74,25 @@ class DefaultPrettyPrinter
       case location: PLocation => toDoc(location)
     }
 
-  def toDoc(action: PAction): Doc =
-    action match {
-      case PAction1(guard, from, to) =>
-        toDoc(guard) <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
-      case PAction2(guard, from, to) =>
-        toDoc(guard) <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
-      case PAction3(guard, qvar, constraint, to) =>
-        toDoc(guard) <> ":" <+> toDoc(qvar) <+> "if" <+> toDoc(constraint) <+> "~>" <+> toDoc(to)
-    }
+  def toDoc(action: PAction): Doc = {
+    val PAction(binders, condition, guardId, guardArguments, from, to) = action
+
+    val bindersDoc =
+      if (binders.isEmpty) emptyDoc
+      else ssep(binders map toDoc, comma <> space) <+> "|" <> space
+
+    val constraintDoc =
+      condition match {
+        case _: PTrueLit => emptyDoc
+        case _ => toDoc(condition) <+> "|" <> space
+      }
+
+    val guardDoc =
+      toDoc(guardId) <>
+      (if (guardArguments.isEmpty) emptyDoc else asArguments(guardArguments))
+
+    bindersDoc <> constraintDoc <> guardDoc <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
+  }
 
   def toDoc(clause: PSpecificationClause): Doc = {
     clause match {
@@ -145,8 +155,8 @@ class DefaultPrettyPrinter
       case PFormalArgumentDecl(id, typ) => toDoc(typ) <+> toDoc(id)
       case PFormalReturnDecl(id, typ) => toDoc(typ) <+> toDoc(id)
       case PLocalVariableDecl(id, typ) =>  toDoc(typ) <+> toDoc(id)
-      case PGuardDecl(id, modifier) =>  toDoc(modifier) <+> toDoc(id)
       case PNamedBinder(id) =>  "?" <> toDoc(id)
+      case PGuardDecl(id, args, modifier) => toDoc(modifier) <+> toDoc(id) <> asFormalArguments(args)
     }
   }
 
@@ -292,7 +302,7 @@ class DefaultPrettyPrinter
       case PIntLit(value) => value.toString
       case PFullPerm() => "1f"
       case PNoPerm() => "0f"
-
+      case PIdnExp(id) => toDoc(id)
       case PNamedBinder(id) => "?" <> toDoc(id)
       case PAnonymousBinder() => "_"
 
@@ -342,14 +352,14 @@ class DefaultPrettyPrinter
       case PConditional(cond, thn, els) =>
         parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
 
-      case PIdnExp(id) => toDoc(id)
-
       case PPredicateExp(predicate, arguments) =>
         toDoc(predicate) <> "(" <> ssep(arguments map toDoc, comma <> space) <> ")"
 
       case PPointsTo(id, value) => toDoc(id) <+> "|->" <+> toDoc(value)
-      case PGuardExp(guard, regionId) => toDoc(guard) <> "@" <> toDoc(regionId)
       case PDiamond(regionId) => toDoc(regionId) <+> "|=>" <+> "<D>"
+
+      case PGuardExp(guard, arguments) =>
+        toDoc(guard) <> asArguments(arguments.tail) <> "@" <> toDoc(arguments.head)
 
       case PRegionUpdateWitness(regionId, from, to) =>
         toDoc(regionId) <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"

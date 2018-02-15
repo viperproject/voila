@@ -3,8 +3,8 @@ region R(id s)
   interpretation { true }
   state { 0 }
   actions {
-    G: 0 ~> Set(?n | n == 0);
-    G: 1 ~> Set(?n | n == 1);
+    ?n | n == 0 | G: 0 ~> n;
+    ?n | n == 1 | G: 1 ~> n;
   }
 
 procedure test01(id s)

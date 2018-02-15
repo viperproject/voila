@@ -38,4 +38,11 @@ object AstUtils {
 
     collectBinders(statement).flatten
   }
+
+  /** True iff `exp` matches the variable name bound by `binder`. */
+  def isBoundVariable(exp: PExpression, binder: PLogicalVariableBinder): Boolean =
+    (exp, binder) match {
+      case (PIdnExp(PIdnUse(name)), namedBinder: PNamedBinder) => name == namedBinder.id.name
+      case _ => false
+    }
 }

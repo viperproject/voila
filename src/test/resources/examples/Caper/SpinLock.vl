@@ -19,8 +19,8 @@ region SLock(id r, memcell x)
   }
   state { v }
   actions {
-    LOCK:   0 ~> Set(0, 1);
-    UNLOCK: 1 ~> Set(1, 0);
+    LOCK:   0 ~> 1;
+    UNLOCK: 1 ~> 0;
   }
 
 // TODO: Too many issues

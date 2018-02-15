@@ -9,7 +9,7 @@ region Counter(id c, memcell x)
   }
   state { n }
   actions {
-    G: ?m ~> Int;
+    G: ?n ~> ?m;
   }
 
 abstract_atomic procedure read01(id c, memcell x) returns (int ret)

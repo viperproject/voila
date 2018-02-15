@@ -92,10 +92,16 @@ sealed trait PTypedDeclaration extends PDeclaration {
   def typ: PType
 }
 
-case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
-case class PFormalReturnDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
-case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PTypedDeclaration
-case class PGuardDecl(id: PIdnDef, modifier: PGuardModifier) extends PDeclaration
+sealed trait PVariableDeclaration extends PTypedDeclaration
+
+case class PFormalArgumentDecl(id: PIdnDef, typ: PType) extends PVariableDeclaration
+case class PFormalReturnDecl(id: PIdnDef, typ: PType) extends PVariableDeclaration
+case class PLocalVariableDecl(id: PIdnDef, typ: PType) extends PVariableDeclaration
+
+case class PGuardDecl(id: PIdnDef,
+                      formalArguments: Vector[PFormalArgumentDecl],
+                      modifier: PGuardModifier)
+  extends PDeclaration with PScope
 
 sealed trait PLogicalVariableBinder extends PExpression
 case class PNamedBinder(id: PIdnDef) extends PLogicalVariableBinder with PDeclaration
@@ -120,27 +126,17 @@ case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
  * Actions
  */
 
-sealed trait PAction extends PAstNode {
-  def guard: PIdnUse
-  def from: PExpression
-  def to: PExpression
+case class PAction(binders: Vector[PNamedBinder],
+                   condition: PExpression,
+                   guardId: PIdnUse,
+                   guardArguments: Vector[PExpression],
+                   from: PExpression,
+                   to: PExpression)
+    extends PAstNode with PBindingContext with PScope {
+
+  def binds(binder: PLogicalVariableBinder): Boolean =
+    binder.isInstanceOf[PNamedBinder] && binders.exists(_ eq binder)
 }
-
-/* TODO: Try unifying the action nodes */
-
-/* G: 0 ~> Set(0, 1) */
-case class PAction1(guard: PIdnUse, from: PExpression, to: PExpression) extends PAction
-
-/* G: ?n ~> Int */
-case class PAction2(guard: PIdnUse, from: PNamedBinder, to: PExpression)
-    extends PAction with PBindingContext with PScope
-
-/* G: ?n if b(n) ~> Set(?m | c(n, m)) */
-case class PAction3(guard: PIdnUse,
-                    from: PNamedBinder,
-                    constraint: PExpression,
-                    to: PExpression)
-    extends PAction with PBindingContext with PScope
 
 /*
  * Members
@@ -149,6 +145,7 @@ case class PAction3(guard: PIdnUse,
 sealed trait PMember extends PDeclaration with PScope
 
 case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMember
+  // TODO: Introduce PFieldDecl; use instead PFormalArgumentDecl
 
 case class PRegion(id: PIdnDef,
                    formalInArgs: Vector[PFormalArgumentDecl],
@@ -414,7 +411,9 @@ case class PSeqTail(seq: PExpression) extends PSeqExp
 case class PPointsTo(location: PLocation, value: PExpression)
     extends PExpression with PBindingContext
 
-case class PGuardExp(guard: PIdnUse, regionId: PIdnUse) extends PExpression
+case class PGuardExp(guard: PIdnUse, arguments: Vector[PExpression]) extends PExpression {
+  lazy val regionId: PIdnExp = arguments.head.asInstanceOf[PIdnExp]
+}
 
 sealed trait PTrackingResource extends PExpression {
   def regionId: PIdnUse

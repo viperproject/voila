@@ -3,7 +3,7 @@ region FCounter(id r, memcell x)
   interpretation { x.f |-> ?v && 0 <= v <= 2 }
   state { v }
   actions {
-    INCREMENT: ?n if n < 2 ~> Set(?m | n <= m <= 2);
+    ?n, ?m | n < m <= 2 | INCREMENT: n ~> m;
   }
 
 procedure incrOrNothing(id r, memcell x) returns (int ret)

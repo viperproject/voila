@@ -11,8 +11,8 @@ region BCounter(id r, memcell x)
   state { v }
   actions {
     // TODO: Are these action definitions transitively closed?
-    INCREMENT: ?n if n < 2 ~> Set(?m | n <= m <= 2);
-    INCREMENT: 2 ~> Set(2, 0);
+    ?n, ?m | n < m <= 2 | INCREMENT: n ~> m;
+    INCREMENT: 2 ~> 0;
   }
 
 // TODO: implement makeCounter()

@@ -17,4 +17,4 @@ region R(id a, llnode x)
   guards { unique G; }
   interpretation { x.nxt |-> ?n }
   state { n }
-  actions { G: null ~> Set(null); }
+  actions { G: null ~> null; }

@@ -1,0 +1,19 @@
+struct cell {
+  int value;
+}
+
+region R(id r, cell x)
+  guards { unique G(int n); }
+  interpretation { x.value |-> ?v }
+  state { v }
+  actions {}
+
+procedure test100(id r, cell x)
+  requires R(r, x);
+{
+  //:: ExpectedOutput(typechecker_error)
+  inhale G(x)@r;
+  //:: ExpectedOutput(typechecker_error)
+  assert G@r;
+  exhale G(5)@r;
+}

@@ -6,7 +6,7 @@ region Cell(id c, memcell x)
   guards { duplicable G; }
   interpretation { x.f |-> ?n }
   state { n }
-  actions { G: ?m ~> Int; }
+  actions { G: ?n ~> ?m; }
 
 abstract_atomic procedure test02(id c, memcell x)
   requires Cell(c, x, ?v);

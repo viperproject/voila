@@ -9,7 +9,7 @@ region Counter(id c, memcell x)
   }
   state { n }
   actions {
-    G: ?m ~> Int;
+    G: ?n ~> ?m;
   }
 
 
@@ -108,7 +108,7 @@ region SeqCounter(id k, id c, memcell x)
   }
   state { n }
   actions {
-    S: ?m ~> Int;
+    S: ?n ~> ?m;
   }
 
 region ParCounter(id k, id c, memcell x)
@@ -120,7 +120,7 @@ region ParCounter(id k, id c, memcell x)
   }
   state { n }
   actions {
-    P: ?m ~> Int;
+    P: ?n ~> ?m;
   }
 
 procedure read01_seqclient01(id k, id c, memcell x) returns (int ret)
@@ -161,6 +161,7 @@ procedure read02_seqclient01(id k, id c, memcell x) returns (int ret)
   use_atomic
     using SeqCounter(k, c, x) with S@k;
   {
+    //:: UnexpectedOutput(precondition_error:interference_error, /voila/issue/29/)
     ret := read02(c, x); // CALL OK
   }
 }

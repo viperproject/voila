@@ -1,0 +1,253 @@
+domain trigger_functions {  
+  function R_state_T(r: Ref, x: Ref): Bool
+  function R_G_T(r: Ref, k: Int): Bool
+}
+
+domain $AtomicityContexts {
+  
+  function RX(r: Ref, x: Ref): Set[Int]
+}
+
+field $diamond: Int
+
+field $stepFrom_int: Int
+
+field $stepTo_int: Int
+
+field $cell_$value: Int
+
+function IntSet(): Set[Int]
+  ensures (forall n: Int :: (n in result)) 
+
+
+function NatSet(): Set[Int]
+  ensures (forall n: Int :: 0 <= n == (n in result)) 
+
+
+function R_G_potentiallyHeldByEnvironment($r: Ref, $p: Perm): Bool 
+{
+  true
+}
+
+function R_xG_potentiallyHeldByEnvironment($r: Ref, $p: Perm): Bool 
+{
+  true
+}
+
+function R_G_transitiveClosure($r: Ref, $from: Int): Set[Int] 
+{
+  Set($from)
+}
+
+function R_xG_transitiveClosure($r: Ref, $from: Int): Set[Int] 
+{
+  Set($from)
+}
+
+function R_state(r: Ref, x: Ref): Int
+  requires acc(R(r, x), write)
+  ensures [R_state_T(r, x), true] 
+{
+  (unfolding acc(R(r, x), write) in x.$cell_$value)
+}
+
+predicate R_G($r: Ref, n: Int) 
+
+predicate R_xG($r: Ref) 
+
+predicate R(r: Ref, x: Ref) {
+  acc(x.$cell_$value, write) && true
+}
+
+method havoc_Bool() returns ($r: Bool)
+{
+}
+
+method havoc_Ref() returns ($r: Ref)
+{
+}
+
+method havoc_Int() returns ($r: Int)
+{
+}
+
+predicate AbsFp()
+
+function R_n(r: Ref, x: Ref): Int
+  requires AbsFp()
+
+function R_m(r: Ref, x: Ref): Int
+  requires AbsFp()
+
+define stabilise_all_R() {
+  // stabilise_all_R_existentials()
+  stabilise_all_R_skolemised()
+}
+  
+define stabilise_all_R_skolemised() {
+  label pre_havoc
+  exhale forall $r: Ref, $x: Ref :: acc(R($r, $x), perm(R($r, $x)))
+  inhale forall $r: Ref, $x: Ref :: acc(R($r, $x), old[pre_havoc](perm(R($r, $x))))
+  
+  exhale AbsFp()
+  inhale AbsFp()
+  
+  inhale forall $r: Ref, $x: Ref :: {R_state_T($r, $x)} none < perm(R($r, $x)) ==> (
+  // var $r: Ref := r; var $x: Ref := x; inhale none < perm(R($r, $x)) ==> (
+    R_state($r, $x) == old[pre_havoc](R_state($r, $x)) || // Environment didn't change anything
+    (R_n($r, $x) == old[pre_havoc](R_state($r, $x)) &&
+     R_m($r, $x) == R_state($r, $x) &&
+     R_n($r, $x) < R_m($r, $x) &&
+     (forall k: Int :: {R_G_T($r, k)} R_n($r, $x) <= k && k < R_m($r, $x) ==> perm(R_G($r, k)) == none))
+  )
+}
+
+define stabilise_all_R_existentials() {
+  label pre_havoc
+  exhale forall $r: Ref, $x: Ref :: acc(R($r, $x), perm(R($r, $x)))
+  inhale forall $r: Ref, $x: Ref :: acc(R($r, $x), old[pre_havoc](perm(R($r, $x))))
+  
+  inhale forall $r: Ref, $x: Ref :: {R_state_T($r, $x)} none < perm(R($r, $x)) ==> (
+  // var $r: Ref := r; var $x: Ref := x; inhale none < perm(R($r, $x)) ==> (
+    R_state($r, $x) == old[pre_havoc](R_state($r, $x)) || // Environment didn't change anything
+    (exists n: Int, m: Int ::
+      n == old[pre_havoc](R_state($r, $x)) &&
+      m == R_state($r, $x) &&
+      n < m &&
+      (forall k: Int :: {R_G_T($r, k)} n <= k && k < m ==> perm(R_G($r, k)) == none))
+  )
+}
+  
+// method test01alt1(r: Ref, x: Ref)
+  // requires acc(R(r, x), write)
+  // requires acc(R_G(r, R_state(r, x)), write) && R_G_T(r, R_state(r, x))
+// {
+  // inhale AbsFp()
+  
+  // // ------- BEGIN stabilisation ------------
+  
+  // stabilise_all_R()
+
+  // // ------- END stabilisation ------------
+     
+  // // ------- BEGIN stabilisation ------------
+  
+  // stabilise_all_R()
+
+  // // ------- END stabilisation ------------
+  
+  // // ------- assert BEGIN ------------
+  
+  // assert acc(R(r, x), write) && true && R_state(r, x) == old(R_state(r, x))
+  
+  // // ------- assert END --------------
+  
+  
+  // // ------- assert BEGIN ------------
+  
+  // assert false
+  
+  // // ------- assert END --------------
+// }
+
+// method test02alt1(r: Ref, x: Ref)
+  // requires acc(R(r, x), write)
+  // requires acc(R_G(r, R_state(r, x) + 1), write) && R_G_T(r, R_state(r, x) + 1)
+// {
+  // inhale AbsFp()
+  
+  // var v1: Int
+  
+  // // ------- BEGIN stabilisation ------------
+  
+  // stabilise_all_R()
+
+  // // ------- END stabilisation ------------
+     
+  // // ------- BEGIN stabilisation ------------
+  
+  // stabilise_all_R()
+
+  // // ------- END stabilisation ------------
+  
+  
+  // // ------- assert BEGIN ------------
+  
+  // assert acc(R(r, x), write) && true && (old(R_state(r, x)) <= R_state(r, x) && R_state(r, x) <= old(R_state(r, x)) + 1)
+  // v1 := R_state(r, x)
+  
+  // // ------- assert END --------------
+  
+  
+  // // ------- assert BEGIN ------------
+  
+  // assert v1 == old(R_state(r, x))
+  
+  // // ------- assert END --------------
+// }
+
+// method test03alt1(r: Ref, x: Ref)
+  // requires acc(R(r, x), write)
+  // requires acc(R_G(r, R_state(r, x) + 2), write) && R_G_T(r, R_state(r, x) + 2)
+// {
+  // inhale AbsFp()
+  
+  // var v1: Int
+  
+  // // ------- BEGIN stabilisation ------------
+  
+  // stabilise_all_R()
+
+  // // ------- END stabilisation ------------
+     
+  // // ------- BEGIN stabilisation ------------
+  
+  // stabilise_all_R()
+
+  // // ------- END stabilisation ------------
+  
+  
+  // // ------- assert BEGIN ------------
+  
+  // assert acc(R(r, x), write) && true && (old(R_state(r, x)) <= R_state(r, x) && R_state(r, x) <= old(R_state(r, x)) + 2)
+  // v1 := R_state(r, x)
+  
+  // // ------- assert END --------------
+  
+  
+  // // ------- assert BEGIN ------------
+  
+  // assert v1 == old(R_state(r, x)) || v1 == old(R_state(r, x)) + 2
+  
+  // // ------- assert END --------------
+// }
+
+
+
+method test04(r: Ref, x: Ref)
+  requires acc(R(r, x), write)
+  requires acc(R_G(r, R_state(r, x)), write) && R_G_T(r, R_state(r, x))
+{
+  label pre_update
+  unfold R(r, x)
+  x.$cell_$value := x.$cell_$value + 1
+  fold R(r, x)
+  // exhale R(r, x)
+  // inhale R(r, x)
+  // inhale R_state(r, x) == old[pre_update](R_state(r, x)) + 1
+  
+  // Check that the update is allowed when holding a particular guard
+  assert R_G(r, old[pre_update](R_state(r, x))) // Check that the guard is held
+  // TODO: Is it even necessary to know which guard to use?
+  assert 
+    R_state(r, x) == old[pre_update](R_state(r, x)) ||
+    (old[pre_update](R_state(r, x)) < R_state(r, x) &&
+     (forall k: Int :: {R_G_T(r, k)} 
+      old[pre_update](R_state(r, x)) <= k && k < R_state(r, x) ==> perm(R_G(r, k)) == write))
+}
+
+
+
+
+
+

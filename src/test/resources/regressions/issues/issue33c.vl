@@ -2,7 +2,7 @@ region Cell(id r, memcell x)
   guards { unique G; }
   interpretation { x.f |-> ?v }
   state { v }
-  actions { G: ?m ~> Int; }
+  actions { G: ?n ~> ?m; }
 
 abstract_atomic procedure test01(id r, memcell x)
   interference ?v in Set(0) on r;

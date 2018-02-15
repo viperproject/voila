@@ -5,43 +5,11 @@ struct memcell {
 region Counter(id c, memcell x)
   guards { unique G; }
   interpretation {
-    x.f |-> ?n // TODO: n is a Nat (not an Int) in the paper. Here are three ideas:
-             //         - Encode a Nat type in Viper (domain, axioms, (un)boxing)
-             //         - Add n >= 0 here; must be taken into account when havocking region
-             //           Hm ... why? Havocking a region is implemented by ex- & inhaling the region
-             //           predicate, and the region state is returned by a function that unfolds the
-             //           predicate. Hence, the state should be known to be at least zero.
-             //         - Change action for G, s.t. ?m ~> Set(?y | 0 <= y)
-             //
+    x.f |-> ?n /* Note: In the TaDA paper, n is a natural number (i.e. non-negative) */
   }
   state { n }
-  // TODO:
-  //   Considered general syntax:
-  //
-  //     G: ?x if p1(x) ~> Set(?y | q1(x, y))
-  //     G: ?x if p2(x) ~> Set(?y | q2(x, y))
-  //
-  //   Translated as follows, where 'x' translates to 'from':
-  //
-  //     TransClosure_G(from: T): Set[T] { // from actions
-  //       p1(from) ? setcompr1(from) : // TODO: what if guard conditions overlap?
-  //       p2(from) ? setcompr2(from) :
-  //       Set(from)
-  //     }
-  //
-  //     function setcompr1(from: T): Set[T]
-  //       ensures forall y: T :: y in result <==> q1(from, y)
-  //
-  //     function setcompr2(from: T): Set[T]
-  //       ensures forall y: T :: y in result <==> q2(from, y)
-  //
-  //   Syntactic sugar examples:
-  //
-  //     0  ~> Set(0, 1)    |===> ?x if x == 0 ~> Set(?y | y == 0 || y == 1)
-  //     ?x ~> Set(x + 1)   |===> ?x if x == x ~> Set(?y | y == x + 1)
-  //
   actions {
-    G: ?m ~> Int;
+    G: ?n ~> ?m;
   }
 
 

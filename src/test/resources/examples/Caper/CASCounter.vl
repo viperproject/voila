@@ -11,7 +11,7 @@ region Counter(id r, memcell x)
   interpretation { x.f |-> ?v }
   state { v }
   actions {
-    INCREMENT: ?n ~> Set(?m | n <= m);
+    ?n, ?m | n < m | INCREMENT: n ~> m;
   }
 
 // TODO: makeCounter()

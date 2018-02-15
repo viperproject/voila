@@ -16,8 +16,8 @@ region IncDec(id r, memcell x)
   }
   state { n }
   actions {
-    INC: ?m1 ~> Set(?t1 | m1 <= t1);
-    DEC: ?m2 ~> Set(?t2 | t2 <= m2);
+    ?n, ?m | n < m | INC: n ~> m;
+    ?n, ?m | m < n | DEC: n ~> m;
     // not supported yet, but not needed here:
     //INC * DEC : n ~> m;
   }

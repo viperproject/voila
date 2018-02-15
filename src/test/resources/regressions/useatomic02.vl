@@ -8,7 +8,7 @@ region R1(id r, memcell x)
   guards { unique G1; }
   interpretation { x.f |-> ?v && v == 0 }
   state { v }
-  actions { G1: 0 ~> Set(0, 1); }
+  actions { G1: 0 ~> 1; }
 
 procedure test01(id r, memcell x)
   requires R1(r, x, 0) && G1@r;
@@ -30,7 +30,7 @@ region R2(id r, memcell x)
   }
   interpretation { x.f |-> ?v && (v == 0 || v == 1) }
   state { v }
-  actions { G2: 0 ~> Set(0, 1); }
+  actions { G2: 0 ~> 1; }
 
 procedure test02(id r, memcell x)
   requires R2(r, x, 0) && K2@r;
@@ -49,7 +49,7 @@ region R3(id r, memcell x)
   guards { unique G3; }
   interpretation { x.f |-> ?v && (v == 0 || v == 1) }
   state { v }
-  actions { G3: 0 ~> Set(0); }
+  actions { G3: 0 ~> 0; }
 
 procedure test03(id r, memcell x)
   requires R3(r, x, 0) && G3@r;

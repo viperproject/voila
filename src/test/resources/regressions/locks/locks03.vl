@@ -9,8 +9,8 @@ region Lock(id a, memcell x)
   }
   state { v }
   actions {
-    G: 0 ~> Set(0, 1);
-    G: 1 ~> Set(1, 0);
+    G: 0 ~> 1;
+    G: 1 ~> 0;
   }
 
 predicate Inv()
@@ -27,8 +27,8 @@ region CAPLock(id r, id a, memcell x)
   }
   state { v }
   actions {
-    Z: 0 ~> Set(0); // [XXX] Wrong set: should be {0, 1}
-    K: 1 ~> Set(1); // [XXX] Wrong set: should be {0, 1}
+    Z: 0 ~> 0; // [XXX] Wrong transition: should be ~> 1
+    K: 1 ~> 1; // [XXX] Wrong transition: should be ~> 0
   }
 
 

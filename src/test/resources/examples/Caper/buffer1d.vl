@@ -12,7 +12,7 @@ region Buffer(id r, cell buf)
   guards { duplicable Z; }
   interpretation { buf.value |-> ?v && (v != 0 ==> resource(v)) }
   state { v }
-  actions { Z: ?n ~> Int; }
+  actions { Z: ?n ~> ?m; }
 
 procedure send(id r, cell buf, int x)
   requires Buffer(r, buf) && resource(x) && x != 0;

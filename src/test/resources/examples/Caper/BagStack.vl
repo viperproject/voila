@@ -52,7 +52,7 @@ region BagList(id r, node y; int v, node z)
      : false)
   }
   state { a }
-  actions { OWN: 0 ~> Set(0, 1); }
+  actions { OWN: 0 ~> 1; }
 
 procedure push(id r, bag x, int v)
   requires Bag(r, x, 0) && Inv(v) && Z@r;

@@ -6,7 +6,7 @@ region Cell(id r, cell c)
   guards { unique G; }
   interpretation { c.value |-> ?v }
   state { 0 <= v }
-  actions { G: ?b ~> Set(true, false); }
+  actions { ?b1, ?b2 | G: b1 ~> b2; }
 
 procedure test01(id r, cell c)
   requires Cell(r, c);
@@ -69,7 +69,7 @@ region ICell(id r, cell c, int v)
   guards { unique IG; }
   interpretation { c.value |-> v }
   state { 0 <= v }
-  actions { IG: ?b ~> Set(true, false); }
+  actions { ?b1, ?b2 | IG: b1 ~> b2; }
 
 procedure test11(id r, cell c, int v0)
   requires ICell(r, c, v0);

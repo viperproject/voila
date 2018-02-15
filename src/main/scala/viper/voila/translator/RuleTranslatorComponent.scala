@@ -19,26 +19,24 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = makeAtomic.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, vprInArgs, outArgs) =
+    val (region, regionInArgs, regionOutArgs) =
       getAndTranslateRegionPredicateDetails(makeAtomic.regionPredicate)
 
     assert(
-      outArgs.isEmpty,
+      regionOutArgs.isEmpty,
        "Using-clauses expect region assertions without out-arguments, but got " +
       s"${makeAtomic.regionPredicate} at ${makeAtomic.regionPredicate.position}")
 
     val regionType = semanticAnalyser.typ(region.state)
-    val vprRegionIdArg = vprInArgs.head
-
-    val guard =
-      semanticAnalyser.entity(makeAtomic.guard.guard).asInstanceOf[GuardEntity]
-                      .declaration
+    val vprRegionIdArg = regionInArgs.head
 
     val inhaleDiamond =
-      vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId)))()
+      vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId.id)))()
+
+    val guard = translate(makeAtomic.guard)
 
     val exhaleGuard =
-      vpr.Exhale(translate(makeAtomic.guard))().withSource(makeAtomic.guard)
+      vpr.Exhale(guard)().withSource(makeAtomic.guard)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
@@ -46,17 +44,26 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val preHavocLabel1 = freshLabel("pre_havoc")
-    val havoc1 = havocSingleRegionInstance(region, regionArgs, preHavocLabel1, None).asSeqn
+
+    val havoc1 =
+      prependComment(
+        s"Stabilising region ${makeAtomic.regionPredicate}",
+        stabilizeRegionInstance(region, regionInArgs, preHavocLabel1))
+
 
     val preHavocLabel2 = freshLabel("pre_havoc")
-    val havoc2 = havocSingleRegionInstance(region, regionArgs, preHavocLabel2, None).asSeqn
+
+    val havoc2 =
+      prependComment(
+        s"Stabilising region ${makeAtomic.regionPredicate}",
+        stabilizeRegionInstance(region, regionInArgs, preHavocLabel2))
 
     val ruleBody = translate(makeAtomic.body)
 
     val vprAtomicityContextX =
       vpr.DomainFuncApp(
         atomicityContextFunction(regionId),
-        vprInArgs,
+        regionInArgs,
         Map.empty[vpr.TypeVar, vpr.Type]
       )()
 
@@ -98,24 +105,19 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       }
 
       val vprCheckTo =
-        vpr.Assert(
-          vpr.AnySetContains(
-            vprStepTo,
-            vpr.FuncApp(
-              guardTransitiveClosureFunction(guard, region),
-              Vector(vprRegionIdArg, vprStepFrom)
-            )()
-          )()
-        )().withSource(makeAtomic)
+        regionStateChangeAllowedByGuard(
+          region,
+          regionInArgs,
+          makeAtomic.guard.guard.name,
+          guard,
+          vprStepFrom,
+          vprStepTo
+        ).withSource(makeAtomic)
 
       errorBacktranslator.addErrorTransformer {
         case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
           MakeAtomicError(makeAtomic)
             .dueTo(IllegalRegionStateChangeError(makeAtomic.guard))
-            .dueTo(AdditionalErrorClarification(
-                      "In particular, it cannot be shown that the region is transitioned to a " +
-                      "state that is compatible with the procedure's interference specification",
-                      regionId))
             .dueTo(hintAtEnclosingLoopInvariants(regionId))
       }
 
@@ -130,7 +132,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val vprRegionState =
       vpr.FuncApp(
         regionStateFunction(region),
-        vprInArgs
+        regionInArgs
       )()
 
     val assumeCurrentStateIsStepTo =
@@ -149,7 +151,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         )()
       )()
 
-    val inhaleGuard = vpr.Inhale(exhaleGuard.exp)()
+    val inhaleGuard = vpr.Inhale(guard)()
 
     val exhaleTrackingResource = {
       val stepFrom =
@@ -313,16 +315,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(useAtomic: PUseAtomic): vpr.Stmt = {
     val (region, inArgs, outArgs) = getRegionPredicateDetails(useAtomic.regionPredicate)
     val vprInArgs = inArgs map translate
-    val vprRegionId = vprInArgs.head
 
     assert(
       outArgs.isEmpty,
        "Using-clauses expect region assertions without out-arguments, but got " +
       s"${useAtomic.regionPredicate} at ${useAtomic.regionPredicate.position}")
-
-    val guard =
-      semanticAnalyser.entity(useAtomic.guard.guard).asInstanceOf[GuardEntity]
-                      .declaration
 
     val preUseAtomicLabel = freshLabel("pre_use_atomic")
 
@@ -355,20 +352,22 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           .dueTo(ebt.translate(e.reason))
     }
 
+    val guard = translate(useAtomic.guard)
+
     /* Temporarily exhale the guard used in the use-atomic rule so that it is no longer held
      * when stabilising the frame.
      *
      * Note: The guard must be checked in any case! I.e. the check is independent of the
      * technical treatment of frame stabilisation.
      */
-    val exhaleGuard = vpr.Exhale(translate(useAtomic.guard))().withSource(useAtomic.guard)
+    val exhaleGuard = vpr.Exhale(guard)().withSource(useAtomic.guard)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
         UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
     }
 
-    val inhaleGuard = vpr.Inhale(translate(useAtomic.guard))()
+    val inhaleGuard = vpr.Inhale(guard)()
 
     val stabilizationReason = s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}"
 
@@ -390,19 +389,18 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         preUseAtomicLabel.name
       )()
 
-    val stateChangePermitted =
-      vpr.Exhale(
-        vpr.AnySetContains(
-          currentState,
-          vpr.FuncApp(
-            guardTransitiveClosureFunction(guard, region),
-            Vector(vprRegionId, oldState)
-          )()
-        )()
-      )().withSource(useAtomic.regionPredicate)
+    val stateChangeAllowed =
+      regionStateChangeAllowedByGuard(
+        region,
+        vprInArgs,
+        useAtomic.guard.guard.name,
+        guard,
+        oldState,
+        currentState
+      ).withSource(useAtomic)
 
     errorBacktranslator.addErrorTransformer {
-      case e: vprerr.ExhaleFailed if e causedBy stateChangePermitted =>
+      case e: vprerr.AssertFailed if e causedBy stateChangeAllowed =>
         UseAtomicError(useAtomic, IllegalRegionStateChangeError(useAtomic.body))
     }
 
@@ -420,7 +418,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           inhaleGuard,
           ruleBody,
           foldRegionPredicate,
-          stateChangePermitted),
+          stateChangeAllowed),
         Vector.empty
       )()
 

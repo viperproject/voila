@@ -10,7 +10,7 @@ region Join(id r, memcell x)
   guards { unique SET; }
   interpretation { x.f |-> ?v && (v == 0 || v == 1) }
   state { v }
-  actions { SET: 0 ~> Set(0, 1); }
+  actions { SET: 0 ~> 1; }
 
 // TODO: make_join()
 

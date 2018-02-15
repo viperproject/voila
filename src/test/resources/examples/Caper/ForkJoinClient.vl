@@ -12,7 +12,7 @@ region Join(id r, memcell x)
   guards { unique SET; }
   interpretation { x.f |-> ?v && (v == 0 || v == 1) }
   state { v }
-  actions { SET: 0 ~> Set(0, 1); }
+  actions { SET: 0 ~> 1; }
 
 // TODO: make_join()
 procedure make_join(id r) returns (memcell ret)
@@ -61,7 +61,7 @@ region Flag(id r, id s, memcell x, memcell y)
     x.f |-> ?v && (v == 0 ==> Join(s, y, 0) && SET@s)
   }
   state { v }
-  actions { SFLAG: 0 ~> Set(0, 1); }
+  actions { SFLAG: 0 ~> 1; }
 
 procedure thread2(id r, id s, memcell x, memcell y)
   requires Flag(r, s, x, y, 0) && SFLAG@r;

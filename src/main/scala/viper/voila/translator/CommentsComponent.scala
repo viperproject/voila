@@ -22,7 +22,7 @@ trait CommentsComponent { this: PProgramToViperTranslator =>
     val span = 33
     val prefix = s"${pattern * rep} $section $marker"
     val comment = s"$prefix ${pattern * (span - prefix.length - 1)}"
-    val info = vpr.SimpleInfo(Vector("", comment))
+    val info = vpr.SimpleInfo(Vector("", comment, ""))
 
     vpr.Seqn(Vector.empty, Vector.empty)(info = info)
   }
@@ -39,5 +39,15 @@ trait CommentsComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  val BLANK_LINE: vpr.Seqn = vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("")))
+  def prependComment(comment: String, statement: vpr.Stmt): vpr.Seqn = {
+    vpr.Seqn(
+      Vector(
+        vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("", comment))),
+        statement),
+      Vector.empty
+    )()
+  }
+
+  val BLANK_LINE: vpr.Seqn =
+    vpr.Seqn(Vector.empty, Vector.empty)(info = vpr.SimpleInfo(Vector("")))
 }

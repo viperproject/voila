@@ -9,8 +9,8 @@ region Lock(id a, memcell x)
   }
   state { v }
   actions {
-    G: 0 ~> Set(0, 1);
-    G: 1 ~> Set(1, 0);
+    G: 0 ~> 1;
+    G: 1 ~> 0;
   }
 
 /* Original implementation */

@@ -47,7 +47,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 message(receiver, s"Receiver $receiver is not of reference type")
             }
 
-          case _ =>
+          case other =>
             message(use, s"${use.name} is not declared", entity(use) == UnknownEntity())
         }
 
@@ -75,7 +75,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         contractMessages ++ atomicityMessages
 
       case action: PAction =>
-        reportTypeMismatch(action.to, PSetType(typ(action.from)))
+        reportTypeMismatch(action.to, typ(action.from))
 
       case PAssign(lhs, rhs) =>
         val lhsEntity = entity(lhs)
@@ -170,7 +170,27 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     lengthMessages ++ typeMessages
 
                   case _ =>
-                    message(id, s"Cannot call ${id.name} here")
+                    message(id, s"Expected a predicate or a region, but got ${id.name}")
+                }
+
+              case PGuardExp(guardId, arguments) =>
+                checkUse(entity(guardId)) {
+                  case GuardEntity(decl, region) =>
+                    val lengthMessages =
+                      reportArgumentLengthMismatch(exp, decl.id, decl.formalArguments.length + 1, arguments.length)
+
+                    val typeMessages =
+                      if (lengthMessages.isEmpty) {
+                        reportTypeMismatch(arguments.tail, decl.formalArguments) ++
+                        reportTypeMismatch(arguments.head, PRegionIdType(), typ(arguments.head))
+                      } else {
+                        Vector.empty
+                      }
+
+                    lengthMessages ++ typeMessages
+
+                  case _ =>
+                    message(guardId, s"Expected a guard, but got ${guardId.name}")
                 }
           })
     }
@@ -191,7 +211,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     actuals zip formals flatMap { case (actual, formal) => reportTypeMismatch(actual, formal.typ) }
 
   /* TODO: Cannot also declare this method, due to type erase.
-   *       It would not be necessary if PIdnUse would replace PIdnExp everywhere.
+   *       It would not be necessary if PIdnUse replaced PIdnExp everywhere.
    */
   //  private def reportTypeMismatch(actuals: Vector[PIdnUse], formals: Vector[PTypedDeclaration]): Messages =
   //    actuals zip formals flatMap { case (actual, formal) => reportTypeMismatch(actual, formal.typ) }
@@ -328,15 +348,18 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
        * Set(?c | 0 < c), results in adding a new scope (inside the outer environment)
        * that contains the bound variable.
        */
+      var nextEnv = enter(in(bindingContext))
 
-      def add(binder: PNamedBinder): Environment =
-        defineIfNew(enter(in(bindingContext)), binder.id.name, definedEntity(binder.id))
+      def add(binder: PNamedBinder): Unit = {
+        nextEnv = defineIfNew(nextEnv, binder.id.name, definedEntity(binder.id))
+      }
 
       bindingContext match {
-        case PAction2(_, from, _) => add(from)
-        case PAction3(_, from, _, _) => add(from)
+        case action: PAction => action.binders foreach add
         case PSetComprehension(qvar, _, _) => add(qvar)
       }
+
+      nextEnv
 
     case scope@(_: PScope) =>
       enter(in(scope))
@@ -352,8 +375,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           /* Region out args must be bound inside the interpretation; thus, don't add them here */
           out(idef)
 
-        case tree.parent(tree.parent(_: PBindingContext with PScope)) | /* PAction2, PAction3, PSetComprehension */
-             tree.parent(_: PScope) => /* PProcedure etc. */
+        case tree.parent(tree.parent(_: PBindingContext with PScope)) | /* PAction, PSetComprehension */
+             tree.parent(_: PScope) => /* PGuardDecl, PProcedure etc. */
 
           /* Don't add identifiers that have already been added (in defenvin) */
           out(idef)
@@ -374,15 +397,28 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     */
   lazy val entity: PIdnNode => Entity =
     attr {
-      case g @ tree.parent(PGuardExp(guardId, regionId)) if guardId eq g =>
-        val region = usedWithRegion(regionId)
-        val guardAtRegion = s"${guardId.name}@${region.id.name}"
-
-        lookup(env(guardId), guardAtRegion, UnknownEntity())
-
-      case n =>
-        lookup(env(n), n.name, UnknownEntity())
+      case g @ tree.parent(PGuardExp(guardId, _)) if guardId eq g => lookupGuard(guardId)
+      case g @ tree.parent(PAction(_, _, guardId, _, _, _)) if guardId eq g => lookupGuard(guardId)
+      case n => lookup(env(n), n.name, UnknownEntity())
     }
+
+  private def lookupGuard(guardId: PIdnNode): Entity = {
+    /* Guards must currently be globally unique and we can therefore find the region it
+     * belongs to simply by iterating over all regions.
+     *
+     * TODO: The current approach isn't ideal: guards must be globally unique, but are
+     *       nevertheless suffixed in the environment by their region, which is why the
+     *       region is also needed when looking up a guard.
+     *       Either drop the requirement of globally-unique guards or don't suffix them
+     *       with a region in the environment.
+     */
+    tree.root.regions.find(_.guards.exists(_.id.name == guardId.name)) match {
+      case Some(region) =>
+        lookup(env(guardId), s"${guardId.name}@${region.id.name}", UnknownEntity())
+      case None =>
+        UnknownEntity()
+    }
+  }
 
   lazy val usedWithRegion: PIdnNode => PRegion =
     attr(regionIdUsedWith(_)._1)
@@ -563,14 +599,28 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case _ => PUnknownType()
         }
 
-      case action @ PAction2(_, `binder`, _) =>
-        typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
+      case action: PAction if action.binds(binder) =>
+        /* TODO: Replace with a proper type inference. See issue #50. */
 
-      case action @ PAction3(_, `binder`, _, _) =>
-        typ(enclosingMember(action).asInstanceOf[Option[PRegion]].get.state)
+        val region = enclosingMember(action).asInstanceOf[Option[PRegion]].get
+
+        if (AstUtils.isBoundVariable(action.from, binder) ||
+            AstUtils.isBoundVariable(action.to, binder)) {
+
+          typ(region.state)
+        } else if (action.guardArguments.exists(arg => AstUtils.isBoundVariable(arg, binder))) {
+          val guard = region.guards.find(_.id.name == action.guardId.name).get
+          val argIdx = action.guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
+
+          guard.formalArguments(argIdx).typ
+        } else {
+          PUnknownType()
+        }
 
       case comprehension @ PSetComprehension(namedBinder: PNamedBinder, _, _)
            if namedBinder eq binder =>
+
+        /* TODO: Replace with a proper type inference. See issue #50. */
 
         comprehension.typeAnnotation match {
           case Some(_typ) =>
@@ -584,8 +634,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
             val expectedTypes =
               collectOccurrencesOfFreeVariable(comprehension.filter).flatMap(expectedType)
-
-            /* TODO: Implement a proper type inference */
 
             if (expectedTypes.size == 2 &&
                 expectedTypes.contains(PIntType()) &&
@@ -607,8 +655,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val boundBy: PLogicalVariableBinder => PBindingContext =
     attr {
       case tree.parent(interferenceClause: PInterferenceClause) => interferenceClause
-      case tree.parent(action: PAction2) => action
-      case tree.parent(action: PAction3) => action
+      case tree.parent(action: PAction) => action
       case tree.parent(comprehension: PSetComprehension) => comprehension
       case tree.parent(pointsTo: PPointsTo) => pointsTo
 
@@ -653,6 +700,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   /**
     * What is the type of an expression?
+    *
+    * TODO: Replace with a proper type inference. See issue #50.
     */
   lazy val typ: PExpression => PType =
     attr(exp =>
@@ -751,6 +800,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   /**
     * What is the expected type of an expression?
+    *
+    * TODO: Replace with a proper type inference. See issue #50.
     */
   lazy val expectedType: PExpression => Set[PType] =
     attr {
@@ -914,7 +965,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PUnfolding(predicate, body) =>
         freeVariables(predicate) ++ freeVariables(body)
 
-      case PGuardExp(_, regionId) => ListSet(regionId)
+      case exp: PGuardExp => ListSet(exp.regionId.id)
       case PDiamond(regionId) => ListSet(regionId)
 
       case PRegionUpdateWitness(regionId, from, to) =>
