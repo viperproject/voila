@@ -1,5 +1,6 @@
 ===== Iterative =====
   --- Encoded ---
+    BagStack.t
     BoundedCounter.t
       - TODO: makeCounter()
       - TODO: Voila issues #28 and #29
@@ -19,14 +20,13 @@
     IncDec.t
       - TODO: Product guard algebra (one action is not encoded)
       - TODO: makeCounter()
+    Queue.t
+      - TODO: Issue #34
+    ReferenceCount.t
+      - Encoded counting guard algebra via lemmas
     SpinLock.t
       - TODO: makeLock()
-
   --- Not yet encoded ---
-    BagStack.t
-      - TODO: Might need mathematical pairs or predicates with multiple out-arguments,
-              e.g. either BagList(r, x, ?pair) and fst(pair)/snd(pair)
-              or BagList(r, x, ?fst, ?snd)
     Barrier.t
       - TODO: Indexed guard algebra
       - TODO: Counting guard algebra
@@ -37,11 +37,7 @@
       - TODO: Sum guard algebra
     CounterClient.t
       - TODO: Counting guard algebra
-    Queue.t
-      - TODO: Issue #34
     ReadWriteLock.t
-      - TODO: Counting guard algebra
-    ReferenceCount.t
       - TODO: Counting guard algebra
     TicketLock.t
       - TODO: Indexed guard algebra
