@@ -799,10 +799,19 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, result)
 
-      case use @ PLemmaApplication(call) =>
-        // TODO: No need to havoc the frame of this call, which happens by reusing the translation
-        //       of regular method calls
-        directlyTranslate(call)
+      case PLemmaApplication(call) =>
+        val vprMethodStub = translatedProcedureStubs(call.procedure.name)
+        val vprArguments = call.arguments map translate
+        val vprReturns = call.rhs map (id => translateUseOf(id).asInstanceOf[vpr.LocalVar])
+
+        val vprCall =
+          vpr.MethodCall(
+            method = vprMethodStub,
+            args = vprArguments,
+            targets = vprReturns
+          )().withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, vprCall)
 
       case call @ PProcedureCall(procedureId, arguments, rhs) =>
         val callee =
