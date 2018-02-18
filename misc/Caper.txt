@@ -13,6 +13,7 @@
     CASCounter.t
       - TODO: makeCounter()
     CounterClient.t
+      - TODO: Encoded counting guard algebra via lemmas
       - TODO: Issue #52
     ForkJoin.t
       - TODO: make_join()
@@ -25,7 +26,7 @@
     Queue.t
       - TODO: Issue #34
     ReferenceCount.t
-      - Encoded counting guard algebra via lemmas
+      - TODO: Encoded counting guard algebra via lemmas
       - TODO: Issue #52
     SpinLock.t
       - TODO: makeLock()
