@@ -12,6 +12,8 @@
       - Encoded variants (particularly interesting: BoundedReadWriteLock-variants03.vl)
     CASCounter.t
       - TODO: makeCounter()
+    CounterClient.t
+      - TODO: Issue #52
     ForkJoin.t
       - TODO: make_join()
     ForkJoinClient.t
@@ -24,6 +26,7 @@
       - TODO: Issue #34
     ReferenceCount.t
       - Encoded counting guard algebra via lemmas
+      - TODO: Issue #52
     SpinLock.t
       - TODO: makeLock()
   --- Not yet encoded ---
@@ -35,8 +38,6 @@
       - TODO: Indexed guard algebra
       - TODO: Counting guard algebra
       - TODO: Sum guard algebra
-    CounterClient.t
-      - TODO: Counting guard algebra
     ReadWriteLock.t
       - TODO: Counting guard algebra
     TicketLock.t
