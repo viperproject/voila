@@ -345,6 +345,7 @@ class DefaultPrettyPrinter
       case PMod(left, right) => parens(toDoc(left) <+> "mod" <+> toDoc(right))
       case PDiv(left, right) => parens(toDoc(left) <+> "div" <+> toDoc(right))
       case PSetContains(element, set) => parens(toDoc(element) <+> "in" <+> toDoc(set))
+      case PSetUnion(left, right) => parens(toDoc(left) <+> "union" <+> toDoc(left))
       case PSeqSize(seq) => "size" <> parens(toDoc(seq))
       case PSeqHead(seq) => "head" <> parens(toDoc(seq))
       case PSeqTail(seq) => "tail" <> parens(toDoc(seq))

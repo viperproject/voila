@@ -1,0 +1,13 @@
+procedure test01(set<int> xs, set<int> ys) {
+  assume 3 in xs union ys;
+}
+
+procedure test02(set<int> xs, set<bool> ys) {
+  //:: ExpectedOutput(typechecker_error)
+  assume 3 in xs union ys;
+}
+
+procedure test03(set<bool> xs, set<bool> ys) {
+  //:: ExpectedOutput(typechecker_error)
+  assume 3 in xs union ys;
+}

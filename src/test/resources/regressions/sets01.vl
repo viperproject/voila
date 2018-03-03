@@ -1,0 +1,28 @@
+procedure test01(set<int> xs, set<int> ys) {
+  int x, y;
+
+  assume x in xs;
+  assume y in ys;
+  assert x in xs union ys && x in ys union xs;
+  assert y in xs union ys && y in ys union xs;
+}
+
+procedure test02(set<int> xs, set<int> ys, set<int> zs) {
+  int x;
+
+  assume x in xs;
+
+  assert  x in  xs union ys union zs   in Set(true);
+  assert (x in (xs union ys union zs)) in Set(true);
+
+  /* Previous two lines should be equivalent */
+  assert
+     x in  xs union ys union zs   in Set(true)
+      <==>
+    (x in (xs union ys union zs)) in Set(true);
+}
+
+procedure test03() {
+  assert 3 in Set(0,1,2) in Set(false);
+  assert true in Set(true) union Set(false) in Set(true);
+}

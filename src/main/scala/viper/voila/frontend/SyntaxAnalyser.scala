@@ -39,9 +39,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "if", "else", "while", "do", "skip",
     "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation", "use",
     "make_atomic", "update_region", "use_atomic", "open_region",
-    "Int", "Nat", "Set",
-    "Seq", "size", "head", "tail",
     "true", "false", "null",
+    "div", "mod",
+    "Int", "Nat", "Set", "union",
+    "Seq", "size", "head", "tail",
     "unfolding"
   )
 
@@ -411,6 +412,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     exp50 ~ ("/" ~> exp40) ^^ PFrac |
     exp50 ~ ("div" ~> exp40) ^^ PDiv |
     exp50 ~ ("mod" ~> exp40) ^^ PMod |
+    exp50 ~ ("union" ~> exp40) ^^ PSetUnion |
     exp40
 
   lazy val exp40: PackratParser[PExpression] = /* Right-associative */

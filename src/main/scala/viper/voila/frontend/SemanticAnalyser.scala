@@ -775,6 +775,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 PSetType(typeOfLogicalVariable(qvar))
             }
 
+          case PSetUnion(left, right) =>
+            (typ(left), typ(right)) match {
+              case (setType1 @ PSetType(t1), PSetType(t2)) if isCompatible(t1, t2) => setType1 // TODO: Return least common supertype
+              case _ => PUnknownType()
+            }
+
           case _: PSetContains => PBoolType()
           case _: PSeqSize => PIntType()
           case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
@@ -849,6 +855,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case set @ tree.parent(contains: PSetContains) if set eq contains.set =>
         Set(PSetType(typ(contains.element)))
+
+      // case tree.parent(_: PSetUnion) => /* TODO: Should return set<T>, for a fresh T, but that requires unification */
 
       case _ =>
         /* Returning unknown expresses that no particular type is expected */

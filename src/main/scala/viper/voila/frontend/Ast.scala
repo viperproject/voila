@@ -395,6 +395,8 @@ case class PSetContains(element: PExpression, set: PExpression) extends PSetExp 
   val right: PExpression = set
 }
 
+case class PSetUnion(left: PExpression, right: PExpression) extends PSetExp with PBinOp
+
 sealed trait PSeqExp extends PCollectionExp
 
 case class PExplicitSeq(elements: Vector[PExpression], typeAnnotation: Option[PType])
