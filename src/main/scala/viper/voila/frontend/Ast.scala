@@ -182,6 +182,14 @@ sealed trait PMacro extends PMember {
   def body: Body
 }
 
+case class PTypeMacro(id: PIdnDef,
+                      formalArguments: Option[Vector[PIdnDef]],
+                      body: PType)
+    extends PMacro {
+
+  type Body = PType
+}
+
 case class PExpressionMacro(id: PIdnDef,
                             formalArguments: Option[Vector[PIdnDef]],
                             body: PExpression)

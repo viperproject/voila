@@ -153,8 +153,16 @@ class PositionedRewriter(override val positions: Positions)
 
       val expander =
         everywherebu(rule[PAstNode] {
+          case typ @ PRefType(PIdnUse(name)) if mm.contains(name) =>
+            /* Found an application of a type macro without arguments, e.g. HEAP */
+
+            val makro = mm(name).asInstanceOf[PTypeMacro]
+
+            instantiateMacroBody(
+              Vector.empty, Vector.empty, Map.empty, makro.body, makro.id.name, typ.position)
+
           case exp @ PIdnExp(PIdnUse(name)) if mm.contains(name) =>
-            /* Found a macro application without arguments, e.g. LEN */
+            /* Found an application of an expression macro without arguments, e.g. LEN */
 
             val makro = mm(name).asInstanceOf[PExpressionMacro]
 
@@ -176,10 +184,17 @@ class PositionedRewriter(override val positions: Positions)
               formals, arguments, localReplacements, makro.body, makro.id.name, call.position)
 
           case exp @ PPredicateExp(PIdnUse(name), arguments) if mm.contains(name) =>
-            /* Found an application of an expression macro, e.g. MAX(x, y) */
+            /* Found an application of macro with arguments, e.g. MAX(x, y) */
 
-            val makro = mm(name).asInstanceOf[PExpressionMacro]
-            val formals = makro.formalArguments.getOrElse(Vector.empty)
+            val (makro, formals) =
+              mm(name) match {
+                case tm: PTypeMacro => (tm, tm.formalArguments.getOrElse(Vector.empty))
+                case em: PExpressionMacro => (em, em.formalArguments.getOrElse(Vector.empty))
+                case other =>
+                  sys.error(
+                    s"Unexpectedly found the application of a macro of class " +
+                        "${other.getClass.getSimpleName} (at ${exp.lineColumnPosition})")
+              }
 
             instantiateMacroBody(
               formals, arguments, Map.empty, makro.body, makro.id.name, exp.position)

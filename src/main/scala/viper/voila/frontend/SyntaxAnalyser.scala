@@ -159,6 +159,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val makro: Parser[PMacro] =
+    ("macro" ~> idndef) ~ ("(" ~> repsep(idndef, ",") <~ ")").? ~ typ <~ ";" ^^ PTypeMacro |
     ("macro" ~> idndef) ~ ("(" ~> repsep(idndef, ",") <~ ")").? ~ expression <~ ";" ^^ PExpressionMacro |
     ("macro" ~> idndef) ~ ("(" ~> repsep(idndef, ",") <~ ")") ~ procedureBody ^^ {
       case id ~ args ~ (locals ~ stmts) => PStatementMacro(id, args, locals, stmts)
