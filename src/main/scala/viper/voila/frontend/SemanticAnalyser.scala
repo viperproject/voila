@@ -766,6 +766,18 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   PUnknownType()
             }
 
+          case explicitPair: PExplicitPair =>
+            explicitPair.typeAnnotation match {
+              case Some((typ1, typ2)) =>
+                PPairType(typ1, typ2)
+
+              case None =>
+                val typ1 = typ(explicitPair.element1)
+                val typ2 = typ(explicitPair.element2)
+
+                PPairType(typ1, typ2)
+            }
+
           case PSetComprehension(qvar, _, typeAnnotation) =>
             typeAnnotation match {
               case Some(_typ) =>
@@ -785,6 +797,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case _: PSeqSize => PIntType()
           case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
           case tailExp: PSeqTail => typ(tailExp.seq)
+          case fstExp: PPairFirst => typ(fstExp.pair).asInstanceOf[PPairType].elementType1
+          case sndExp: PPairSecond => typ(sndExp.pair).asInstanceOf[PPairType].elementType2
           case conditional: PConditional => typ(conditional.thn)
           case unfolding: PUnfolding => typ(unfolding.body)
           case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
@@ -856,7 +870,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case set @ tree.parent(contains: PSetContains) if set eq contains.set =>
         Set(PSetType(typ(contains.element)))
 
-      // case tree.parent(_: PSetUnion) => /* TODO: Should return set<T>, for a fresh T, but that requires unification */
+      /* TODO: Unification is needed for handling the next cases, which require type variables */
+      // case tree.parent(_: PSetUnion) => /* TODO: Return set<T> */
+      // case tree.parent(_: PPairFirst | _: PPairSecond) => /* TODO: Return pair<T1, T2> */
 
       case _ =>
         /* Returning unknown expresses that no particular type is expected */

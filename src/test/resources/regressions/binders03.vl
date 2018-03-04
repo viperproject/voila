@@ -1,32 +1,32 @@
-region Pair(id r, pair x; int v, int w)
+region Tuple2(id r, tuple2 x; int v, int w)
   guards { unique G; }
-  interpretation { x.fst |-> ?v && x.snd |-> ?w }
+  interpretation { x._1 |-> ?v && x._2 |-> ?w }
   state { v + w }
   actions {}
 
-procedure makePair() returns (id r, pair x)
-  ensures Pair(r, x);
+procedure makeTuple2() returns (id r, tuple2 x)
+  ensures Tuple2(r, x);
 
 procedure test01() {
   id r;
-  pair x;
+  tuple2 x;
 
-  r, x := makePair();
+  r, x := makeTuple2();
 
-  assert Pair(r, x, ?v1, ?w1, ?abs1);
+  assert Tuple2(r, x, ?v1, ?w1, ?abs1);
   havoc x;
   assert abs1 == v1 + w1;
 }
 
-procedure test02(id r, pair x) {
-  inhale Pair(r, x, ?v1, ?w1, ?abs1) && v1 < w1;
+procedure test02(id r, tuple2 x) {
+  inhale Tuple2(r, x, ?v1, ?w1, ?abs1) && v1 < w1;
   assert abs1 < 2*w1;
 
-  exhale Pair(r, x, ?v2, ?w2, ?abs2) && v2 < w2;
+  exhale Tuple2(r, x, ?v2, ?w2, ?abs2) && v2 < w2;
   assert v1 == v2 && w1 == w2 && abs1 == abs2;
 }
 
-struct pair {
-  int fst;
-  int snd;
+struct tuple2 {
+  int _1;
+  int _2;
 }

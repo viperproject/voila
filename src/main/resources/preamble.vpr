@@ -4,3 +4,16 @@ function IntSet(): Set[Int]
 function NatSet(): Set[Int]
   ensures forall n: Int :: 0 <= n <==> n in result
 
+domain Pair[T1, T2] {
+  function pair(e1: T1, e2: T2): Pair[T1, T2]
+  function fst(p: Pair[T1, T2]): T1
+  function snd(p: Pair[T1, T2]): T2
+
+  axiom fst_snd_over_pair {
+    forall e1: T1, e2: T2 :: {pair(e1, e2)} fst(pair(e1, e2)) == e1 && snd(pair(e1, e2)) == e2
+  }
+
+  axiom pair_over_fst_snd {
+    forall p: Pair[T1, T2] :: {fst(p)}{snd(p)} pair(fst(p), snd(p)) == p
+  }
+}

@@ -309,16 +309,23 @@ class DefaultPrettyPrinter
       case PUnfolding(predicate, body) =>
         "unfolding" <+> toDoc(predicate) <+> "in" <+> toDoc(body)
 
+      /* TODO: Unify cases for PExplicitSet, PExplicitSeq and PExplicitPair */
+
       case PExplicitSet(args, typeAnnotation) =>
         "Set" <>
         typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
         "(" <> ssep(args map toDoc, comma <> space) <> ")"
 
-      /* TODO: Unify with case for PExplicitSet */
       case PExplicitSeq(args, typeAnnotation) =>
         "Seq" <>
         typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
         "(" <> ssep(args map toDoc, comma <> space) <> ")"
+
+      case PExplicitPair(elem1, elem2, typeAnnotation) =>
+        "Pair" <>
+        typeAnnotation.fold(emptyDoc)(ta =>
+          "[" <> ssep(Vector(ta._1, ta._2) map toDoc, comma <> space) <> "]") <>
+        "(" <> ssep(Vector(elem1, elem2) map toDoc, comma <> space) <> ")"
 
       case PSetComprehension(qvar, filter, typeAnnotation) =>
         "Set" <>
@@ -349,6 +356,8 @@ class DefaultPrettyPrinter
       case PSeqSize(seq) => "size" <> parens(toDoc(seq))
       case PSeqHead(seq) => "head" <> parens(toDoc(seq))
       case PSeqTail(seq) => "tail" <> parens(toDoc(seq))
+      case PPairFirst(pair) => "fst" <> parens(toDoc(pair))
+      case PPairSecond(pair) => "snd" <> parens(toDoc(pair))
 
       case PConditional(cond, thn, els) =>
         parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
@@ -373,6 +382,8 @@ class DefaultPrettyPrinter
       case PFracType() => "frac"
       case PSetType(elementType) => "set" <> angles(toDoc(elementType))
       case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
+      case PPairType(elementType1, elementType2) =>
+        "pair" <> angles(toDoc(elementType1) <> "," <+> toDoc(elementType2))
       case PRefType(referencedType) => toDoc(referencedType)
       case PRegionIdType() => "id"
       case PUnknownType() => "<unknown>"

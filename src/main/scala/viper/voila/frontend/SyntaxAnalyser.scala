@@ -31,7 +31,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   val reservedWords = Set(
     "true", "false",
-    "int", "bool", "id", "set", "frac", "seq",
+    "int", "bool", "id", "set", "frac", "seq", "pair",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
@@ -41,8 +41,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "make_atomic", "update_region", "use_atomic", "open_region",
     "true", "false", "null",
     "div", "mod",
-    "Int", "Nat", "Set", "union",
+    "Set", "Int", "Nat", "union",
     "Seq", "size", "head", "tail",
+    "Pair", "fst", "snd",
     "unfolding"
   )
 
@@ -431,9 +432,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "1f" ^^^ PFullPerm() |
     "0f" ^^^ PNoPerm() |
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
-    setExpression |
-    seqLiteral |
-    seqOperation |
+    setExp0 |
+    seqExp0 |
+    pairExp0 |
     applicationLikeExp |
     (location <~ "|->") ~ (binder | exp70) ^^ PPointsTo |
     (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
@@ -462,7 +463,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case guardId ~ regionId => PGuardExp(guardId, Vector(regionId))
     }
 
-  lazy val setExpression: Parser[PSetExp] =
+  lazy val setExp0: Parser[PSetExp] =
     setLiteral | setComprehension
 
   lazy val setLiteral: Parser[PSetExp with PLiteral] =
@@ -477,15 +478,29 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case typeAnnotation ~ qvar ~ filter => PSetComprehension(qvar, filter, typeAnnotation)
     }
 
+  lazy val seqExp0: Parser[PSeqExp] =
+    seqLiteral |
+    "size" ~> "(" ~> expression <~ ")" ^^ PSeqSize |
+    "head" ~> "(" ~> expression <~ ")" ^^ PSeqHead |
+    "tail" ~> "(" ~> expression <~ ")" ^^ PSeqTail
+
   lazy val seqLiteral: Parser[PExplicitSeq] =
     "Seq" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
       case typeAnnotation ~ elements => PExplicitSeq(elements, typeAnnotation)
     }
 
-  lazy val seqOperation: Parser[PSeqExp] =
-    "size" ~> "(" ~> expression <~ ")" ^^ PSeqSize |
-    "head" ~> "(" ~> expression <~ ")" ^^ PSeqHead |
-    "tail" ~> "(" ~> expression <~ ")" ^^ PSeqTail
+  lazy val pairExp0: Parser[PPairExp] =
+    pairLiteral |
+    "fst" ~> "(" ~> expression <~ ")" ^^ PPairFirst |
+    "snd" ~> "(" ~> expression <~ ")" ^^ PPairSecond
+
+  lazy val pairLiteral: Parser[PExplicitPair] =
+    "Pair" ~>
+    ("[" ~> (typ <~ ",") ~ typ <~ "]").? ~
+    ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ {
+      case typeAnnotation ~ (element1 ~ element2) =>
+        PExplicitPair(element1, element2, typeAnnotation map { case t1 ~ t2 => (t1, t2) })
+    }
 
   lazy val binder: Parser[PNamedBinder] =
     "?" ~> idndef ^^ (id => PNamedBinder(id))
@@ -509,6 +524,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "frac" ^^^ PFracType() |
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
+    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PPairType |
     idnuse ^^ PRefType
 
   lazy val idndef: Parser[PIdnDef] =

@@ -2,7 +2,7 @@ struct cell {
   int f;
 }
 
-struct pair {
+struct tuple2 {
   bool f;
   bool g;
 }
@@ -77,7 +77,7 @@ procedure test05(cell x, cell y) {
 macro XDotF x.f |-> ?v0;
 macro YDotF y.f |-> ?v0;
 
-procedure test06(cell x, pair y) {
+procedure test06(cell x, tuple2 y) {
   inhale x.f |-> 0;
   inhale y.f |-> false;
   exhale XDotF;
