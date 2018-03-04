@@ -46,7 +46,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAccessPredicate(diamondLocation(rcvr), vpr.FullPerm()())()
 
   def stepFromField(typ: PType): vpr.Field =
-    vpr.Field(s"$$stepFrom_$typ", translate(typ))()
+    vpr.Field(nameSanitizer.sanitize(s"$$stepFrom_$typ"), translate(typ))()
 
   def stepFromLocation(rcvr: vpr.Exp, typ: PType): vpr.FieldAccess =
     vpr.FieldAccess(rcvr, stepFromField(typ))()
@@ -55,7 +55,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vpr.FieldAccessPredicate(stepFromLocation(rcvr, typ), vpr.FullPerm()())()
 
   def stepToField(typ: PType): vpr.Field =
-    vpr.Field(s"$$stepTo_$typ", translate(typ))()
+    vpr.Field(nameSanitizer.sanitize(s"$$stepTo_$typ"), translate(typ))()
 
   def stepToLocation(rcvr: vpr.Exp, typ: PType): vpr.FieldAccess =
     vpr.FieldAccess(rcvr, stepToField(typ))()
