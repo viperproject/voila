@@ -1189,10 +1189,27 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PMod(left, right) => vpr.Mod(go(left), go(right))().withSource(expression)
       case PDiv(left, right) => vpr.Div(go(left), go(right))().withSource(expression)
       case PConditional(cond, thn, els) => vpr.CondExp(go(cond), go(thn), go(els))().withSource(expression)
-      case PExplicitSet(elements, _) => vpr.ExplicitSet(elements map translate)().withSource(expression)
+
+      /* TODO: Unify cases for PExplicitSet and PExplicitSeq */
+
+      case PExplicitSet(elements, _) =>
+        if (elements.isEmpty) {
+          val elemType = semanticAnalyser.typ(expression).asInstanceOf[PSetType].elementType
+          vpr.EmptySet(translate(elemType))().withSource(expression)
+        } else {
+          vpr.ExplicitSet(elements map translate)().withSource(expression)
+        }
+
+      case PExplicitSeq(elements, _) =>
+        if (elements.isEmpty) {
+          val elemType = semanticAnalyser.typ(expression).asInstanceOf[PSeqType].elementType
+          vpr.EmptySeq(translate(elemType))().withSource(expression)
+        } else {
+          vpr.ExplicitSeq(elements map translate)().withSource(expression)
+        }
+
       case PSetContains(element, set) => vpr.AnySetContains(go(element), go(set))().withSource(expression)
       case PSetUnion(left, right) => vpr.AnySetUnion(go(left), go(right))().withSource(expression)
-      case PExplicitSeq(elements, _) => vpr.ExplicitSeq(elements map translate)().withSource(expression)
       case PSeqSize(seq) => vpr.SeqLength(go(seq))().withSource(expression)
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
