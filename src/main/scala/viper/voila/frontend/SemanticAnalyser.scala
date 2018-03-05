@@ -581,75 +581,81 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     })
 
   lazy val typeOfLogicalVariable: PLogicalVariableBinder => PType =
-    attr(binder => boundBy(binder) match {
-      case PPointsTo(location, _) =>
-        typeOfLocation(location)
+    attr(binder => {
+      binder match {
+        case PNamedBinder(_, Some(tipe)) => tipe
+        case _ =>
+          boundBy(binder) match {
+            case PPointsTo(location, _) =>
+              typeOfLocation(location)
 
-      case predicateExp @ PPredicateExp(id, _) =>
-        val region = entity(id).asInstanceOf[RegionEntity].declaration
+            case predicateExp @ PPredicateExp(id, _) =>
+              val region = entity(id).asInstanceOf[RegionEntity].declaration
 
-        outArgumentIndexOf(predicateExp)(binder) match {
-          case Some(idx) => region.formalOutArgs(idx).typ
-          case None => typ(region.state)
-        }
+              outArgumentIndexOf(predicateExp)(binder) match {
+                case Some(idx) => region.formalOutArgs(idx).typ
+                case None => typ(region.state)
+              }
 
-      case PInterferenceClause(`binder`, set, _) =>
-        typ(set) match {
-          case setType: PSetType => setType.elementType
-          case _ => PUnknownType()
-        }
+            case PInterferenceClause(`binder`, set, _) =>
+              typ(set) match {
+                case setType: PSetType => setType.elementType
+                case _ => PUnknownType()
+              }
 
-      case action: PAction if action.binds(binder) =>
-        /* TODO: Replace with a proper type inference. See issue #50. */
+            case action: PAction if action.binds(binder) =>
+              /* TODO: Replace with a proper type inference. See issue #50. */
 
-        val region = enclosingMember(action).asInstanceOf[Option[PRegion]].get
+              val region = enclosingMember(action).asInstanceOf[Option[PRegion]].get
 
-        if (AstUtils.isBoundVariable(action.from, binder) ||
-            AstUtils.isBoundVariable(action.to, binder)) {
+              if (AstUtils.isBoundVariable(action.from, binder) ||
+                  AstUtils.isBoundVariable(action.to, binder)) {
 
-          typ(region.state)
-        } else if (action.guardArguments.exists(arg => AstUtils.isBoundVariable(arg, binder))) {
-          val guard = region.guards.find(_.id.name == action.guardId.name).get
-          val argIdx = action.guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
+                typ(region.state)
+              } else if (action.guardArguments.exists(arg => AstUtils.isBoundVariable(arg, binder))) {
+                val guard = region.guards.find(_.id.name == action.guardId.name).get
+                val argIdx = action.guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
 
-          guard.formalArguments(argIdx).typ
-        } else {
-          PUnknownType()
-        }
+                guard.formalArguments(argIdx).typ
+              } else {
+                PUnknownType()
+              }
 
-      case comprehension @ PSetComprehension(namedBinder: PNamedBinder, _, _)
-           if namedBinder eq binder =>
+            case comprehension @ PSetComprehension(namedBinder: PNamedBinder, _, _)
+              if namedBinder eq binder =>
 
-        /* TODO: Replace with a proper type inference. See issue #50. */
+              /* TODO: Replace with a proper type inference. See issue #50. */
 
-        comprehension.typeAnnotation match {
-          case Some(_typ) =>
-            _typ
+              comprehension.typeAnnotation match {
+                case Some(_typ) =>
+                  _typ
 
-          case None =>
-            val name = namedBinder.id.name
+                case None =>
+                  val name = namedBinder.id.name
 
-            val collectOccurrencesOfFreeVariable =
-              collect[Set, PIdnExp] { case exp @ PIdnExp(PIdnUse(`name`)) => exp }
+                  val collectOccurrencesOfFreeVariable =
+                    collect[Set, PIdnExp] { case exp @ PIdnExp(PIdnUse(`name`)) => exp }
 
-            val expectedTypes =
-              collectOccurrencesOfFreeVariable(comprehension.filter).flatMap(expectedType)
+                  val expectedTypes =
+                    collectOccurrencesOfFreeVariable(comprehension.filter).flatMap(expectedType)
 
-            if (expectedTypes.size == 2 &&
-                expectedTypes.contains(PIntType()) &&
-                expectedTypes.contains(PFracType())) {
+                  if (expectedTypes.size == 2 &&
+                      expectedTypes.contains(PIntType()) &&
+                      expectedTypes.contains(PFracType())) {
 
-              /* Resolve the choice between int and frac by preferring int */
+                    /* Resolve the choice between int and frac by preferring int */
 
-              PIntType()
-            } else if (expectedTypes.size != 1) {
-              PUnknownType()
-            } else {
-              expectedTypes.head
-            }
-        }
+                    PIntType()
+                  } else if (expectedTypes.size != 1) {
+                    PUnknownType()
+                  } else {
+                    expectedTypes.head
+                  }
+              }
 
-      case other => sys.error(s"Unexpectedly found $other as the binding context of $binder")
+            case other => sys.error(s"Unexpectedly found $other as the binding context of $binder")
+          }
+      }
     })
 
   lazy val boundBy: PLogicalVariableBinder => PBindingContext =
@@ -1000,7 +1006,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val boundVariables: PExpression => ListSet[PIdnDef] =
     attr {
-      case PNamedBinder(id) => ListSet(id)
+      case PNamedBinder(id, _) => ListSet(id)
       case _ => ListSet.empty
     }
 

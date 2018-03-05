@@ -104,7 +104,10 @@ case class PGuardDecl(id: PIdnDef,
   extends PDeclaration with PScope
 
 sealed trait PLogicalVariableBinder extends PExpression
-case class PNamedBinder(id: PIdnDef) extends PLogicalVariableBinder with PDeclaration
+
+case class PNamedBinder(id: PIdnDef, typeAnnotation: Option[PType])
+    extends PLogicalVariableBinder with PDeclaration
+
 case class PAnonymousBinder() extends PLogicalVariableBinder
 
 sealed trait PBindingContext extends PAstNode

@@ -503,7 +503,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val binder: Parser[PNamedBinder] =
-    "?" ~> idndef ^^ (id => PNamedBinder(id))
+    typ.? ~ ("?" ~> idndef) ^^ { case optType ~ id => PNamedBinder(id, optType) }
 
   lazy val listOfBinders: Parser[Vector[PNamedBinder]] =
     repsep(binder, ",")

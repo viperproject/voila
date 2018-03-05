@@ -155,8 +155,10 @@ class DefaultPrettyPrinter
       case PFormalArgumentDecl(id, typ) => toDoc(typ) <+> toDoc(id)
       case PFormalReturnDecl(id, typ) => toDoc(typ) <+> toDoc(id)
       case PLocalVariableDecl(id, typ) =>  toDoc(typ) <+> toDoc(id)
-      case PNamedBinder(id) =>  "?" <> toDoc(id)
-      case PGuardDecl(id, args, modifier) => toDoc(modifier) <+> toDoc(id) <> asFormalArguments(args)
+      case PNamedBinder(id, typeAnnotation) =>
+        typeAnnotation.fold(emptyDoc)(typ => toDoc(typ) <> space) <> "?" <> toDoc(id)
+      case PGuardDecl(id, args, modifier) =>
+        toDoc(modifier) <+> toDoc(id) <> asFormalArguments(args)
     }
   }
 
@@ -303,7 +305,7 @@ class DefaultPrettyPrinter
       case PFullPerm() => "1f"
       case PNoPerm() => "0f"
       case PIdnExp(id) => toDoc(id)
-      case PNamedBinder(id) => "?" <> toDoc(id)
+      case binder: PNamedBinder => toDoc(binder: PDeclaration)
       case PAnonymousBinder() => "_"
 
       case PUnfolding(predicate, body) =>
