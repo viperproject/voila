@@ -1,0 +1,76 @@
+//:: IgnoreFile(/voila/issue/53/)
+
+struct mcas {
+//  int value;
+  // Ghost fields:
+  heap _h1; // Witness existentials in
+  heap _h2; // ... region interpretation
+}
+
+//macro heap set<pair<cell, int>>;
+macro heap set<cell>; // [PAPER] A "real" heap with values, i.e. a set of points-to predicates
+
+///* TODO: Try to get rid of dom_h. Maybe support a set comprehension along the lines of
+// *       Set(?x | Pair(x, _) in h)
+// */
+
+predicate QPAcc(set<cell> h) // TODO: Predicate models quantified permissions to x.value for each x in h
+
+region MCAS(id r, mcas m, id a, cell l)
+  guards {
+    duplicable Z;
+    /* TODO: Neither unique nor duplicable are an ideal choice for the next guards. See also issue #43. */
+    duplicable OWN(cell x);
+    duplicable OWNED(heap xs);
+    duplicable LOCKED(heap h);
+    duplicable KEY(heap h);
+    duplicable UNLOCKED;
+  }
+  interpretation {
+    m._h1 |-> ?h1 && m._h2 |-> ?h2 && // Ghost
+    OWNED(h1 union h2)@r &&
+    Lock(a, l, ?v) && G@a && // Contained in U(l) and L(l) (from the locks library)
+    (v == 0
+        ? UNLOCKED@r   && QPAcc(h1 union h2)
+        : LOCKED(h2)@r && QPAcc(h1))
+  }
+  state { h1 union h2 }
+  actions {
+    // [PAPER] Heap values; here omitted
+    ?h, cell ?x | Z: h ~> Set(x) union h;
+  }
+
+/*
+ * Locks library
+ */
+
+struct cell {
+  int value;
+}
+
+region Lock(id a, cell x)
+  guards { unique G; }
+  interpretation {
+    x.value |-> ?v && (v == 0 || v == 1)
+  }
+  state { v }
+  actions {
+    G: 0 ~> 1;
+    G: 1 ~> 0;
+  }
+
+abstract_atomic procedure unlock(id a, cell x)
+  interference ?s in Set(1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures Lock(a, x, 0) && G@a;
+
+abstract_atomic procedure lock(id a, cell x)
+  interference ?s in Set(0, 1) on a;
+  requires Lock(a, x, s) && G@a;
+  ensures Lock(a, x, 1) && G@a && s == 0;
+
+primitive_atomic procedure CAS(cell x, int now, int thn) returns (bool ret)
+  requires x.value |-> ?v;
+  ensures  v == now
+              ? ret && x.value |-> thn
+              : !ret && x.value |-> v;
