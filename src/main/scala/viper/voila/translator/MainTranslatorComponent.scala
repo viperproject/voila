@@ -926,7 +926,23 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 callee.inters.map (inter => {
                   val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
                   val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
-                  val vprRegionArguments = regionArguments map translate
+
+                  /* TODO: We should have a more systematic - and also easily reusable - way of
+                   *       instantiating formals with actual during translations
+                   */
+
+                  val subst: Map[String, vpr.Exp] =
+                    callee.formalArgs
+                      .zip(vprArguments)
+                      .map{case (formal, actual) => formal.id.name -> actual}(breakOut)
+
+                  val vprRegionArguments =
+                    regionArguments map (argument => {
+                      translateWith(argument) {
+                        case idn: PIdnExp if subst.contains(idn.id.name) => subst(idn.id.name)
+                        case idn: PIdnUse if subst.contains(idn.name) => subst(idn.name)
+                      }
+                    })
 
                   /* See issue #29 */
                   // val vprRegionPredicateAccess =
