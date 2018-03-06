@@ -43,7 +43,7 @@ class PositionedRewriter(override val positions: Positions)
       useReplacements.map { case (from, to) => from.name -> to }
 
     val cloner =
-      alltd(rule[PAstNode] {
+      everywheretd(rule[PAstNode] {
         case declaration: PDeclaration if fullDeclarationReplacements.contains(declaration) =>
           deepclone(fullDeclarationReplacements(declaration))
         case id @ PIdnUse(name) if fullDeclarationRenamings.contains(name) =>
