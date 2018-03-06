@@ -139,7 +139,6 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
       assert UNLOCKED@r; // [DEBUG]
       assert m._h1 |-> ?h1_0 && m._h2 |-> ?h2_0;
       havoc h; assume h == h1_0 union h2_0; // Make h a short-hand for h1_0 union h2_0
-//      assert h == h1 union h2; // [DEBUG]
       assert QPAcc(h); // [DEBUG]
       assume x in h; // TODO: We hold OWN(x); thus, nobody can take x out of the region.
                      //       However, guard OWN is currently marked as duplicable, and we therefore
@@ -211,7 +210,102 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
   }
 }
 
-// TODO: function write
+// TODO: 'write' clashes with Viper's keyword; need to sanitise identifiers
+abstract_atomic procedure _write(id r, mcas m, id a, cell l, cell x, int w)
+//  interference ?v in Int on r; // TODO: See comment above
+  requires MCAS(r, m, a, l, ?hPre) && x in hPre && OWN(x)@r;
+  ensures  MCAS(r, m, a, l, ?hPost) && x in hPost && OWN(x)@r;
+//  ensures  (x.value |-> w) in hPost; // TODO: Not yet posible
+{
+  heap h; // ghost
+
+  make_atomic
+    using MCAS(r, m, a, l) with OWN(x)@r;
+  {
+    // ---------- lock(a, l); ----------
+    open_region
+      using MCAS(r, m, a, l);
+    {
+      assert Lock(a, l, ?s); // [DEBUG]
+      use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
+
+      lock(a, l);
+
+      assert s == 0; // [DEBUG]
+      assert UNLOCKED@r; // [DEBUG]
+      assert m._h1 |-> ?h1_0 && m._h2 |-> ?h2_0;
+      havoc h; assume h == h1_0 union h2_0; // Make h a short-hand for h1_0 union h2_0
+      assert QPAcc(h); // [DEBUG]
+      assume x in h; // TODO: We hold OWN(x); thus, nobody can take x out of the region.
+                     //       However, guard OWN is currently marked as duplicable, and we therefore
+                     //       have to manually assume that x is still in h.
+      assert x in h; // [DEBUG]
+      // Next: Take permissions to x.value out of the region. Encoded in three steps.
+      // 1st step: Use guard algebra definition
+      use UNLOCKED_lock(r, Set(x));
+      assert LOCKED(Set(x))@r && KEY(Set(x))@r; // [DEBUG]
+      // 2nd step: Update ghost state m._h1 and m._h2
+      exhale m._h1 |-> _; inhale m._h1 |-> ?h1_9;
+      exhale m._h2 |-> _; inhale m._h2 |-> ?h2_9;
+      inhale h1_9 == Set(x);
+      inhale h1_9 union h2_9 == h; // TODO: We want h2_9 := h \ h1_9, but that's not yet supported.
+                                   //       Note that we overapproximate h2_9 here because the
+                                   //       assume allows h2_9 to overlap with h1_9. This should be
+                                   //       sound, however.
+      // 3rd step: Manipulate modelled quantified permissions; take out permissions to x.value
+      QPAcc_unpack(h, x, h2_9);
+      assert QPAcc(h2_9); // [DEBUG]
+    }
+
+    // ---------- [x] := w; ----------
+    update_region
+      using MCAS(r, m, a, l);
+    {
+      x.value := w;
+      assert m._h1 |-> ?h1_8 && m._h2 |-> ?h2_8;      // TODO: The next three lines account for issue #8 again.
+    }
+    exhale r |=> <D>;                                 // This time, however, the assignment to x.value could
+    inhale r |=> (h1_8 union h2_8,  h1_8 union h2_8); // change the abstract state *if* values were a part of it.
+
+    // ----------  unlock(a, l); ----------
+    open_region
+      using MCAS(r, m, a, l);
+    {
+      assert Lock(a, l, ?s1);
+      use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
+      if (s1 == 0) { // Cannot help; but we need ghost code to prune this proof branch.
+        assert UNLOCKED@r; // [DEBUG]
+        assert KEY(Set(x))@r; // [DEBUG]
+        use UNLOCKED_KEY_exclusivity(r, Set(x));
+      }
+
+      unlock(a, l);
+
+      // Next: Put permissions to x.value back into the region.
+      // So far, we know that
+      //   (1) x.value |-> _ ⚹ KEY({x})
+      //   (2) ∃ h1_1, h2_1 :: LOCKED(h1_1) ⚹ QPAcc(h2_1) ⚹ h == h1_1 ∪ h2_1
+      assert m._h1 |-> ?h1_1;
+      assert m._h2 |-> ?h2_1;
+      havoc h; assume h == h1_1 union h2_1; // Make h a short-hand for h1_1 union h2_1
+      // Learn that h1_1 == {x}
+      assert KEY(Set(x))@r && LOCKED(h1_1)@r; // [DEBUG]
+      use LOCKED_KEY_argument_equality(r, h1_1, Set(x));
+      // Learn that h2_1 == h \ {x}
+      assert h == h1_1 union h2_1 && h1_1 == Set(x); // [DEBUG] We know this, but that is not enough ...
+      assume !(x in h2_1); // TODO: Would follow from disjoint set union
+      // Exchange LOCKED and KEY for UNLOCKED
+      assert LOCKED(Set(x))@r; // [DEBUG]
+      use UNLOCKED_unlock(r, Set(x));
+      // Update ghost state m._h1 and m._h2
+      exhale m._h1 |-> _; inhale m._h1 |-> Set[cell]();
+      exhale m._h2 |-> _; inhale m._h2 |-> h;
+      // Manipulate modelled quantified permissions; give back permissions to x.value
+      QPAcc_pack(h2_1, x);
+    }
+  }
+}
+
 // TODO: function cas
 // TODO: function dcas
 
