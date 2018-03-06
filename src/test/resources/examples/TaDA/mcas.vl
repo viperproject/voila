@@ -126,7 +126,7 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
   make_atomic
     using MCAS(r, m, a, l) with Z@r; // TODO: Which guard should be used here?
   {
-    // lock(a, l);
+    // ---------- lock(a, l); ----------
     open_region // Open-region suffices since we don't change the region's abstract state
       using MCAS(r, m, a, l);
     {
@@ -161,18 +161,18 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
       QPAcc_unpack(h, x, h2_9);
       assert QPAcc(h2_9); // [DEBUG]
     }
-/*
-    // ret := [x];
+
+    // ---------- ret := [x]; ----------
     update_region // Open would suffice, but we need to use update-region somewhere in the proof
       using MCAS(r, m, a, l);
     {
       ret := x.value;
+      assert m._h1 |-> ?h1_8 && m._h2 |-> ?h2_8;      // TODO: The next three lines account ...
     }
-    // TODO: This accounts for issue #8 by manually exchanging the diamond for the tracking resource
-//    exhale r |=> <D>;
-//    inhale r |=> (???, ???);
+    exhale r |=> <D>;                                 // ... for issue #8 by manually exchanging
+    inhale r |=> (h1_8 union h2_8,  h1_8 union h2_8); // ... the diamond for the tracking resource
 
-    // unlock(a, l);
+    // ----------  unlock(a, l); ----------
     open_region // No abstract state change
       using MCAS(r, m, a, l);
     {
@@ -192,6 +192,7 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
       //   (2) ∃ h1_1, h2_1 :: LOCKED(h1_1) ⚹ QPAcc(h2_1) ⚹ h == h1_1 ∪ h2_1
       assert m._h1 |-> ?h1_1;
       assert m._h2 |-> ?h2_1;
+      havoc h; assume h == h1_1 union h2_1; // Make h a short-hand for h1_1 union h2_1
       // Learn that h1_1 == {x}
       assert KEY(Set(x))@r && LOCKED(h1_1)@r; // [DEBUG]
       use LOCKED_KEY_argument_equality(r, h1_1, Set(x));
@@ -207,7 +208,6 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
       // Manipulate modelled quantified permissions; give back permissions to x.value
       QPAcc_pack(h2_1, x);
     }
-*/
   }
 }
 
