@@ -105,6 +105,18 @@ region MCAS(id r, mcas m, id a, cell l)
 //  MCAS(r, m, a, l, h)
 //}
 
+
+/* Learn from KEY(h)@r that we hold Lock(a, l) */
+macro learn_lock_held_from_KEY(r, h, a, l) {
+  assert Lock(a, l, ?s1);
+  use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
+  if (s1 == 0) { // Cannot help; but we need ghost code to prune this proof branch.
+    assert UNLOCKED@r; // [DEBUG]
+    assert KEY(h)@r; // [DEBUG]
+    use UNLOCKED_KEY_exclusivity(r, h);
+  }
+}
+
 // TODO: function makeMCL
 // TODO: function makeMCP
 // TODO: function unmakeMCP
@@ -175,13 +187,7 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
     open_region // No abstract state change
       using MCAS(r, m, a, l);
     {
-      assert Lock(a, l, ?s1);
-      use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
-      if (s1 == 0) { // Cannot help; but we need ghost code to prune this proof branch.
-        assert UNLOCKED@r; // [DEBUG]
-        assert KEY(Set(x))@r; // [DEBUG]
-        use UNLOCKED_KEY_exclusivity(r, Set(x));
-      }
+      learn_lock_held_from_KEY(r, Set(x), a, l);
 
       unlock(a, l);
 
@@ -271,13 +277,7 @@ abstract_atomic procedure _write(id r, mcas m, id a, cell l, cell x, int w)
     open_region
       using MCAS(r, m, a, l);
     {
-      assert Lock(a, l, ?s1);
-      use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
-      if (s1 == 0) { // Cannot help; but we need ghost code to prune this proof branch.
-        assert UNLOCKED@r; // [DEBUG]
-        assert KEY(Set(x))@r; // [DEBUG]
-        use UNLOCKED_KEY_exclusivity(r, Set(x));
-      }
+      learn_lock_held_from_KEY(r, Set(x), a, l);
 
       unlock(a, l);
 
