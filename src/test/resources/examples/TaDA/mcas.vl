@@ -1,43 +1,42 @@
 //:: IgnoreFile(/voila/issue/53/)
 
 // Misc TODOs. File issues or investigate further.
-// TODO: Are (type) macros not transitively expanded? Does "macro T int; macro S() {T t; ...}" work?
 // TODO: "macro Foo(r, m, a, l, h) MCAS(r, m, a, l, ?h);" parses, but does it work as expected?
 // TODO: Change syntax for collection type annotations: from Set[T] to Set<T> (etc.)
 // TODO: Support set subtraction, i.e. xs \ ys
 // TODO: Support set intersection; with it, we can encode disjoint set union
 // TODO: Support predicates with out-args
 
-// NOTES:
-//  - Heap unions should actually be disjoint heap unions!
+// Local TODOs:
+// TODO: Heap unions should actually be disjoint heap unions!
 
 struct mcas {
-//  int value;
-  // Ghost fields:
-  heap _h1; // Witness existentials in
-  heap _h2; // ... region interpretation
+  heap _h1; // Witness existentially quantified heap partitions h1, h2 ...
+  heap _h2; // ... in the interpretation of the MCAS region
 }
 
 //macro heap set<pair<cell, int>>;
-macro heap set<cell>; // [PAPER] A "real" heap with values, i.e. a set of points-to predicates
+macro heap set<cell>;
+    // TODO: The paper uses a "real" heap, i.e. a set of points-to predicates, with values
+
 
 /* TODO: QPAcc represents quantified permissions to x.value for each x in h.
  *       Use actual quantified permissions instead, once supported.
  */
-predicate QPAcc(heap h)
+predicate QPAcc(id r, heap h)
 
-macro QPAcc_unpack(h, x, h2) { // TODO: h2 would not be necessary if Voila supported set-minus
-  set<cell> h2;
-
-  exhale QPAcc(h) && x in h;
-  inhale Set(x) union h2 == h; // Thus, h2 == h \ {x}
-  inhale QPAcc(h2) && x.value |-> _;
+/* Unpack permissions to x.value by splitting QPAcc(r, {x} ∪ h2) into x.value |-> _ ⚹ QPAcc(r, h2) */
+macro QPAcc_unpack(r, x, h2) {
+  exhale QPAcc(r, Set(x) union h2);
+  inhale x.value |-> _ && QPAcc(r, h2);
 }
 
-macro QPAcc_pack(h, x) {
-  exhale QPAcc(h) && !(x in h) && x.value |-> _;
-  inhale QPAcc(h union Set(x));
+/* Re-pack permissions to x.value by joining x.value |-> _ ⚹ QPAcc(r, h2) into QPAcc(r, {x} ∪ h2) */
+macro QPAcc_pack(r, x, h2) {
+  exhale x.value |-> _ && QPAcc(r, h2);
+  inhale QPAcc(r, Set(x) union h2);
 }
+
 
 region MCAS(id r, mcas m, id a, cell l)
   guards {
@@ -50,12 +49,12 @@ region MCAS(id r, mcas m, id a, cell l)
     unique UNLOCKED;
   }
   interpretation {
-    m._h1 |-> ?h1 && m._h2 |-> ?h2 && // Ghost
+    m._h1 |-> ?h1 && m._h2 |-> ?h2 && // Ghost: Existentially quantified h1, h2
     OWNED(h1 union h2)@r &&
     Lock(a, l, ?s) && G@a && // Contained in U(l) and L(l) (from the locks library)
     (s == 0
-        ? UNLOCKED@r   && QPAcc(h1 union h2)
-        : LOCKED(h1)@r && QPAcc(h2))
+        ? UNLOCKED@r   && QPAcc(r, h1 union h2)
+        : LOCKED(h1)@r && QPAcc(r, h2))
   }
   state { h1 union h2 }
   actions {
@@ -101,21 +100,12 @@ region MCAS(id r, mcas m, id a, cell l)
   ensures  LOCKED(h1)@r && KEY(h2)@r;
   ensures  h1 == h2;
 
-//predicate MCL(id r, mcas m, id a, cell l; heap h) { // TODO: Support predicates with out-args
+
+// TODO: Support predicates (or macros) with out-args
+//predicate MCL(id r, mcas m, id a, cell l; heap h) {
 //  MCAS(r, m, a, l, h)
 //}
 
-
-/* Learn from KEY(h)@r that we hold Lock(a, l) */
-macro learn_lock_held_from_KEY(r, h, a, l) {
-  assert Lock(a, l, ?s1);
-  use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
-  if (s1 == 0) { // Cannot help; but we need ghost code to prune this proof branch.
-    assert UNLOCKED@r; // [DEBUG]
-    assert KEY(h)@r; // [DEBUG]
-    use UNLOCKED_KEY_exclusivity(r, h);
-  }
-}
 
 // TODO: function makeMCL
 // TODO: function makeMCP
@@ -128,90 +118,39 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
       // TODO: Quantifying over int v currently results in a malformed Viper program because the
       //       encoding assumes that the interference variable quantifies over the abstract state
       //       of the (here: MCAS) region. That's not the case in this example, however.
-  requires MCAS(r, m, a, l, ?hPre) && x in hPre && OWN(x)@r;
-  requires Z@r; // TODO: See issue #19
+  interference ?hPre in Set[heap](?h | true) on r; // Allow maximal interference
+  requires MCAS(r, m, a, l, hPre) && x in hPre && OWN(x)@r;
+  requires Z@r; // TODO: Should not be necessary, see issue #19
   ensures  MCAS(r, m, a, l, ?hPost) && x in hPost && OWN(x)@r;
 //  ensures  ret == v; // TODO: Not yet possible
 {
-  heap h; // ghost
-
   make_atomic
-    using MCAS(r, m, a, l) with Z@r; // TODO: Which guard should be used here?
+    using MCAS(r, m, a, l) with Z@r;
+      // Note: We cannot use OWN(x)@r here since we need it in the body of the rule
   {
-    // ---------- lock(a, l); ----------
+    /* ########## lock(a, l); ########## */
     open_region // Open-region suffices since we don't change the region's abstract state
       using MCAS(r, m, a, l);
     {
-      assert Lock(a, l, ?s); // [DEBUG]
-      use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
-
-      lock(a, l);
-
-      assert s == 0; // [DEBUG]
-      assert UNLOCKED@r; // [DEBUG]
-      assert m._h1 |-> ?h1_0 && m._h2 |-> ?h2_0;
-      havoc h; assume h == h1_0 union h2_0; // Make h a short-hand for h1_0 union h2_0
-      assert QPAcc(h); // [DEBUG]
-      assume x in h; // TODO: We hold OWN(x); thus, nobody can take x out of the region.
-                     //       However, guard OWN is currently marked as duplicable, and we therefore
-                     //       have to manually assume that x is still in h.
-      assert x in h; // [DEBUG]
-      // Next: Take permissions to x.value out of the region. Encoded in three steps.
-      // 1st step: Use guard algebra definition
-      use UNLOCKED_lock(r, Set(x));
-      assert LOCKED(Set(x))@r && KEY(Set(x))@r; // [DEBUG]
-      // 2nd step: Update ghost state m._h1 and m._h2
-      exhale m._h1 |-> _; inhale m._h1 |-> ?h1_9;
-      exhale m._h2 |-> _; inhale m._h2 |-> ?h2_9;
-      inhale h1_9 == Set(x);
-      inhale h1_9 union h2_9 == h; // TODO: We want h2_9 := h \ h1_9, but that's not yet supported.
-                                   //       Note that we overapproximate h2_9 here because the
-                                   //       assume allows h2_9 to overlap with h1_9. This should be
-                                   //       sound, however.
-      // 3rd step: Manipulate modelled quantified permissions; take out permissions to x.value
-      QPAcc_unpack(h, x, h2_9);
-      assert QPAcc(h2_9); // [DEBUG]
+      /* Acquire the lock at Lock(a, l) and take permissions to x.value out of the MCAS region */
+      lock_and_take_permissions(r, m, a, l, x);
     }
 
-    // ---------- ret := [x]; ----------
+    /* ########## ret := [x]; ########## */
     update_region // Open would suffice, but we need to use update-region somewhere in the proof
       using MCAS(r, m, a, l);
     {
       ret := x.value;
-      assert m._h1 |-> ?h1_8 && m._h2 |-> ?h2_8;      // TODO: The next three lines account ...
     }
-    exhale r |=> <D>;                                 // ... for issue #8 by manually exchanging
-    inhale r |=> (h1_8 union h2_8,  h1_8 union h2_8); // ... the diamond for the tracking resource
+    /* Exchange diamond for tracking resource (a work-around for issue #8) */
+    fix_issue8_updateregion_noop(r, m, a, l);
 
-    // ----------  unlock(a, l); ----------
+    /* ########## unlock(a, l); ########## */
     open_region // No abstract state change
       using MCAS(r, m, a, l);
     {
-      learn_lock_held_from_KEY(r, Set(x), a, l);
-
-      unlock(a, l);
-
-      // Next: Put permissions to x.value back into the region.
-      // So far, we know that
-      //   (1) x.value |-> _ ⚹ KEY({x})
-      //   (2) ∃ h1_1, h2_1 :: LOCKED(h1_1) ⚹ QPAcc(h2_1) ⚹ h == h1_1 ∪ h2_1
-      assert m._h1 |-> ?h1_1;
-      assert m._h2 |-> ?h2_1;
-      havoc h; assume h == h1_1 union h2_1; // Make h a short-hand for h1_1 union h2_1
-      // Learn that h1_1 == {x}
-      assert KEY(Set(x))@r && LOCKED(h1_1)@r; // [DEBUG]
-      use LOCKED_KEY_argument_equality(r, h1_1, Set(x));
-      // Learn that h2_1 == h \ {x}
-      assert h == h1_1 union h2_1 && h1_1 == Set(x); // [DEBUG] We know this, but that is not enough ...
-      assume !(x in h2_1); // TODO: Would follow from disjoint set union
-      // Exchange LOCKED and KEY for UNLOCKED
-      assert LOCKED(Set(x))@r; // [DEBUG]
-      use UNLOCKED_unlock(r, Set(x));
-      // Update ghost state m._h1 and m._h2
-      exhale m._h1 |-> _; inhale m._h1 |-> Set[cell]();
-      exhale m._h2 |-> _; inhale m._h2 |-> h;
-      // Manipulate modelled quantified permissions; give back permissions to x.value
-      QPAcc_pack(h2_1, x);
+      /* Release the lock at Lock(a, l) and put permissions to x.value back into the MCAS region */
+      unlock_and_return_permissions(r, m, a, l, x);
     }
   }
 }
@@ -219,95 +158,168 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
 // TODO: 'write' clashes with Viper's keyword; need to sanitise identifiers
 abstract_atomic procedure _write(id r, mcas m, id a, cell l, cell x, int w)
 //  interference ?v in Int on r; // TODO: See comment above
-  requires MCAS(r, m, a, l, ?hPre) && x in hPre && OWN(x)@r;
+  interference ?hPre in Set[heap](?h | true) on r; // Allow maximal interference
+  requires MCAS(r, m, a, l, hPre) && x in hPre && OWN(x)@r;
+  requires Z@r; // TODO: Should not be necessary, see issue #19
   ensures  MCAS(r, m, a, l, ?hPost) && x in hPost && OWN(x)@r;
 //  ensures  (x.value |-> w) in hPost; // TODO: Not yet posible
 {
-  heap h; // ghost
-
   make_atomic
-    using MCAS(r, m, a, l) with OWN(x)@r;
+    using MCAS(r, m, a, l) with Z@r;
   {
-    // ---------- lock(a, l); ----------
-    open_region
+    /* ########## lock(a, l); ########## */
+    open_region // Open-region suffices since we don't change the region's abstract state
       using MCAS(r, m, a, l);
     {
-      assert Lock(a, l, ?s); // [DEBUG]
-      use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
-
-      lock(a, l);
-
-      assert s == 0; // [DEBUG]
-      assert UNLOCKED@r; // [DEBUG]
-      assert m._h1 |-> ?h1_0 && m._h2 |-> ?h2_0;
-      havoc h; assume h == h1_0 union h2_0; // Make h a short-hand for h1_0 union h2_0
-      assert QPAcc(h); // [DEBUG]
-      assume x in h; // TODO: We hold OWN(x); thus, nobody can take x out of the region.
-                     //       However, guard OWN is currently marked as duplicable, and we therefore
-                     //       have to manually assume that x is still in h.
-      assert x in h; // [DEBUG]
-      // Next: Take permissions to x.value out of the region. Encoded in three steps.
-      // 1st step: Use guard algebra definition
-      use UNLOCKED_lock(r, Set(x));
-      assert LOCKED(Set(x))@r && KEY(Set(x))@r; // [DEBUG]
-      // 2nd step: Update ghost state m._h1 and m._h2
-      exhale m._h1 |-> _; inhale m._h1 |-> ?h1_9;
-      exhale m._h2 |-> _; inhale m._h2 |-> ?h2_9;
-      inhale h1_9 == Set(x);
-      inhale h1_9 union h2_9 == h; // TODO: We want h2_9 := h \ h1_9, but that's not yet supported.
-                                   //       Note that we overapproximate h2_9 here because the
-                                   //       assume allows h2_9 to overlap with h1_9. This should be
-                                   //       sound, however.
-      // 3rd step: Manipulate modelled quantified permissions; take out permissions to x.value
-      QPAcc_unpack(h, x, h2_9);
-      assert QPAcc(h2_9); // [DEBUG]
+      /* Acquire the lock at Lock(a, l) and take permissions to x.value out of the MCAS region */
+      lock_and_take_permissions(r, m, a, l, x);
     }
 
-    // ---------- [x] := w; ----------
+    /* ########## [x] := w; ########## */
     update_region
       using MCAS(r, m, a, l);
     {
       x.value := w;
-      assert m._h1 |-> ?h1_8 && m._h2 |-> ?h2_8;      // TODO: The next three lines account for issue #8 again.
     }
-    exhale r |=> <D>;                                 // This time, however, the assignment to x.value could
-    inhale r |=> (h1_8 union h2_8,  h1_8 union h2_8); // change the abstract state *if* values were a part of it.
+    /* Exchange diamond for tracking resource (a work-around for issue #8).
+     * Note: if values were part of the region's abstract state (as they eventually should), then
+     * the previous update might have changed the region's abstract state.
+     */
+    fix_issue8_updateregion_noop(r, m, a, l);
 
-    // ----------  unlock(a, l); ----------
-    open_region
+    /* ########## unlock(a, l); ########## */
+    open_region // No abstract state change
       using MCAS(r, m, a, l);
     {
-      learn_lock_held_from_KEY(r, Set(x), a, l);
-
-      unlock(a, l);
-
-      // Next: Put permissions to x.value back into the region.
-      // So far, we know that
-      //   (1) x.value |-> _ ⚹ KEY({x})
-      //   (2) ∃ h1_1, h2_1 :: LOCKED(h1_1) ⚹ QPAcc(h2_1) ⚹ h == h1_1 ∪ h2_1
-      assert m._h1 |-> ?h1_1;
-      assert m._h2 |-> ?h2_1;
-      havoc h; assume h == h1_1 union h2_1; // Make h a short-hand for h1_1 union h2_1
-      // Learn that h1_1 == {x}
-      assert KEY(Set(x))@r && LOCKED(h1_1)@r; // [DEBUG]
-      use LOCKED_KEY_argument_equality(r, h1_1, Set(x));
-      // Learn that h2_1 == h \ {x}
-      assert h == h1_1 union h2_1 && h1_1 == Set(x); // [DEBUG] We know this, but that is not enough ...
-      assume !(x in h2_1); // TODO: Would follow from disjoint set union
-      // Exchange LOCKED and KEY for UNLOCKED
-      assert LOCKED(Set(x))@r; // [DEBUG]
-      use UNLOCKED_unlock(r, Set(x));
-      // Update ghost state m._h1 and m._h2
-      exhale m._h1 |-> _; inhale m._h1 |-> Set[cell]();
-      exhale m._h2 |-> _; inhale m._h2 |-> h;
-      // Manipulate modelled quantified permissions; give back permissions to x.value
-      QPAcc_pack(h2_1, x);
+      /* Release the lock at Lock(a, l) and put permissions to x.value back into the MCAS region */
+      unlock_and_return_permissions(r, m, a, l, x);
     }
   }
 }
 
 // TODO: function cas
 // TODO: function dcas
+
+/* Acquire the lock at Lock(a, l) and take permissions to x.value out of region MCAS(r, ...) */
+macro lock_and_take_permissions(r, m, a, l, x) {
+  /* Learn that the lock's state is in {0, 1} */
+  use_region_interpretation Lock(a, l);
+
+  lock(a, l);
+
+  /* OWN(x)@r ensures that x is still protected by MCAS(r, ..., h), i.e. that x in h */
+  fix_duplicable_OWN_guard(r, m, x);
+
+  /* Exchange UNLOCKED@r for LOCKED(Set(x))@r and KEY(Set(x))@r */
+  use UNLOCKED_lock(r, Set(x));
+
+  /* Take permissions to x.value out of the MCAS region */
+  take_permissions_out(r, m, x);
+}
+
+/* Release the lock at Lock(a, l) and put permissions to x.value back into region MCAS(r, ...) */
+macro unlock_and_return_permissions(r, m, a, l, x) {
+  learn_lock_held_from_KEY(r, Set(x), a, l);
+
+  unlock(a, l);
+
+  /* At this point we know that
+   *   (1) x.value |-> _ ⚹ KEY({x})@r
+   *   (2) ∃ h1, h2 :: LOCKED(h1)@r ⚹ QPAcc(r, h2) ⚹ h == h1 ∪ h2
+   * where h is the abstract state of the region.
+   */
+
+  /* Recover that permissions to x.value have been taken out of the region.
+   * I.e. learn from from KEY(Set(x))@r ⚹ LOCKED(h1)@r that h1 == {x}.
+   */
+  assert m._h1 |-> ?h1_1;
+  use LOCKED_KEY_argument_equality(r, h1_1, Set(x));
+
+  /* Exchange LOCKED(Set(x))@r ⚹ KEY(Set(x))@r for UNLOCKED@r */
+  use UNLOCKED_unlock(r, Set(x));
+
+  /* Give permissions to x.value back to the MCAS region*/
+  give_permissions_back(r, m, x);
+}
+
+/* Take permissions to x.value out of region MCAS(r, ..., h). This requires partitioning h into
+ * {x} and h2, and splitting QPAcc(h) into x.value |-> _ ⚹ QPAcc(h2).
+ */
+macro take_permissions_out(r, m, x) {
+  /* Havoc ghost fields (existential heap partition witnesses) and bind pre- and post-havoc values */
+  exhale m._h1 |-> ?h1_0;
+  exhale m._h2 |-> ?h2_0;
+  inhale m._h1 |-> ?h1_1;
+  inhale m._h2 |-> ?h2_1;
+
+  /* Check that permissions to x are still in the region */
+  assert x in h1_0 union h2_0;
+  assert QPAcc(r, h1_0 union h2_0);
+
+  /* The region holds permissions to all y.value in h, via QPAcc(r, h). Permissions to x.value can
+   * be taken out by partitioning h into h1 := {x} and h2 := h \ {x}. This requires constraining
+   * the new values of the existential witnesses appropriately.
+   */
+  inhale h1_1 == Set(x);
+  inhale h1_1 union h2_1 == h1_0 union h2_0;
+    /* TODO: We want h2_1 := h2_0 \ Set(x), but set minus is not yet supported.
+     *       Note that we overapproximate h2_1 here because the constrain allows h2_1 to overlap
+     *       with h1_1. This is sound, however, since we don't know for sure that the two overlap.
+     */
+
+  /* Finally, unpack permissions to x.value from QPAcc */
+  QPAcc_unpack(r, x, h2_1);
+}
+
+/* Give permissions to x.value back to region MCAS(r, ..., {x} ∪ h2). This requires changing the
+ * partitioning of h from {x} and h2 to {} and {x} ∪ h2, and combining x.value |-> _ ⚹ QPAcc(h2)
+ * into QPAcc({x} ∪ h2).
+ */
+macro give_permissions_back(r, m, x) {
+  /* Havoc existential heap partition witnesses and bind their pre- and post-havoc values */
+  exhale m._h1 |-> ?h1_1;
+  inhale m._h1 |-> ?h1_2;
+  exhale m._h2 |-> ?h2_1;
+  inhale m._h2 |-> ?h2_2;
+
+  /* Constraint witnesses */
+  inhale h1_2 == Set[cell]();
+  inhale h2_2 == h1_1 union h2_1;
+
+  /* Finally, pack permissions to x.value back into QPAcc */
+  QPAcc_pack(r, x, h2_1);
+}
+
+/* Learn from KEY(h)@r that we hold Lock(a, l) */
+macro learn_lock_held_from_KEY(r, h, a, l) {
+  assert Lock(a, l, ?s1);
+  use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
+  if (s1 == 0) { // Cannot hold; but we need ghost code to prune this proof branch.
+    use UNLOCKED_KEY_exclusivity(r, h);
+  }
+}
+
+/* Holding OWN(x)@r guarantees that no other thread can remove x from the protection of
+ * MCAS(r, m, ...). OWN is currently marked as duplicable, however (although OWN(x)@r, for a given
+ * x and r, is unique) and to account for this, we assert that OWN(x)@r is held and then add the
+ * assumption that x is still protected.
+ */
+macro fix_duplicable_OWN_guard(r, m, x) {
+  assert OWN(x)@r;
+  assert m._h1 |-> ?h1 && m._h2 |-> ?h2;
+  assume x in h1 union h2;
+}
+
+/* Work around issue #8 by manually exchanging the diamond resource r |=> <D> for the tracking
+ * resource r |=> (h, h), where h is the abstract state of MCAS(r, ...).
+ */
+macro fix_issue8_updateregion_noop(r, m, a, l) {
+  unfold MCAS(r, m, a, l);
+  assert m._h1 |-> ?h1 && m._h2 |-> ?h2;
+  exhale r |=> <D>;
+  inhale r |=> (h1 union h2, h1 union h2);
+  fold MCAS(r, m, a, l);
+}
 
 /*
  * Locks library
