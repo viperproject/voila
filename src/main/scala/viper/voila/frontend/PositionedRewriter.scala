@@ -193,7 +193,7 @@ class PositionedRewriter(override val positions: Positions)
                 case other =>
                   sys.error(
                     s"Unexpectedly found the application of a macro of class " +
-                        "${other.getClass.getSimpleName} (at ${exp.lineColumnPosition})")
+                        s"${other.getClass.getSimpleName} (at ${exp.lineColumnPosition})")
               }
 
             instantiateMacroBody(
