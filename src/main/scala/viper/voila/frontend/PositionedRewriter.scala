@@ -141,10 +141,11 @@ class PositionedRewriter(override val positions: Positions)
         useReplacements = formalReplacements)
     }
 
-    def expandMacros(in: PMember): PMember = {
+    def expandMacros(member: PMember): PMember = {
       var additionalLocals = Vector.empty[PLocalVariableDecl]
+      var expanded = false
 
-      /* Traverse the AST (`in`) bottom-up and expand each macro application that is found,
+      /* Traverse the AST (`in`) and expand each macro application that is found,
        * while simultaneously renaming - and, in the case of local variables - aggregating
        * variables that are declared inside macro bodies. Such variables are renamed to avoid
        * name clashes, and in the case of local variable declarations (e.g. `int v`) also
@@ -152,10 +153,11 @@ class PositionedRewriter(override val positions: Positions)
        */
 
       val expander =
-        everywherebu(rule[PAstNode] {
+        everywheretd(rule[PAstNode] {
           case typ @ PRefType(PIdnUse(name)) if mm.contains(name) =>
             /* Found an application of a type macro without arguments, e.g. HEAP */
 
+            expanded = true
             val makro = mm(name).asInstanceOf[PTypeMacro]
 
             instantiateMacroBody(
@@ -164,6 +166,7 @@ class PositionedRewriter(override val positions: Positions)
           case exp @ PIdnExp(PIdnUse(name)) if mm.contains(name) =>
             /* Found an application of an expression macro without arguments, e.g. LEN */
 
+            expanded = true
             val makro = mm(name).asInstanceOf[PExpressionMacro]
 
             instantiateMacroBody(
@@ -172,6 +175,7 @@ class PositionedRewriter(override val positions: Positions)
           case call @ PProcedureCall(PIdnUse(name), arguments, Seq()) if mm.contains(name) =>
             /* Found a call to a statement macro, e.g. SWAP(x, y) */
 
+            expanded = true
             val makro = mm(name).asInstanceOf[PStatementMacro]
             val formals = makro.formalArguments
 
@@ -185,6 +189,8 @@ class PositionedRewriter(override val positions: Positions)
 
           case exp @ PPredicateExp(PIdnUse(name), arguments) if mm.contains(name) =>
             /* Found an application of macro with arguments, e.g. MAX(x, y) */
+
+            expanded = true
 
             val (makro, formals) =
               mm(name) match {
@@ -210,7 +216,28 @@ class PositionedRewriter(override val positions: Positions)
             dup(proc, newChildren)
         })
 
-      rewrite(expander)(in)
+      /* Repeatedly expand macro applications */
+
+      var counter = 0
+      val max = 100
+      var in = member
+      var exp = false
+
+      do {
+        counter += 1
+        if (counter > max) {
+          sys.error(
+            s"Macro expansion didn't terminate within $max iterations. " +
+                "This could be due to cyclic macro definitions.")
+        }
+
+        in = rewrite(expander)(in)
+
+        exp = expanded
+        expanded = false
+      } while(exp)
+
+      in
     }
 
     members map expandMacros
