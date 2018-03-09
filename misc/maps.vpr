@@ -1,0 +1,120 @@
+/* Axioms taken from Dafny
+ * Source: dafny/Binaries/DafnyPrelude.bpl
+ * Revision: 6270caf234d41ea82501ccade147a1d56c31cf21
+ */
+ 
+domain Map[U, V] {
+  // A Map is defined by three functions, Map#Domain, Map#Elements, and #Map#Card.
+
+  function Map_domain(m: Map[U, V]): Set[U]
+  // function Map#Elements<U,V>(Map U V) : [U]V;
+  function Map_card(m: Map[U, V]): Int
+  function Map_lookup(m: Map[U, V], u: U): V
+
+  // TODO: axiomatise Map_lookup
+  
+  axiom Map_card_non_neg {
+    forall m: Map[U, V] :: { Map_card(m) } 0 <= Map_card(m)
+  }
+  
+  // The set of Keys of a Map are available by Map#Domain, and the cardinality of that
+  // set is given by Map#Card.
+
+  axiom Map_card_domain {
+    forall m: Map[U, V] :: { |Map_domain(m)| }
+      |Map_domain(m)| == Map_card(m)
+  }
+  
+  // The set of Values of a Map can be obtained by the function Map#Values, which is
+  // defined as follows.  Remember, a Set is defined by membership (using Boogie's
+  // square brackets) and Map#Card, so we need to define what these mean for the Set
+  // returned by Map#Values.
+
+  function Map_values(m: Map[U, V]): Set[V];
+
+  axiom Map_values_def {
+    forall m: Map[U, V], v: V :: { v in Map_values(m) }
+      v in Map_values(m) <==>
+      (exists u: U :: //{ u in Map_domain(m) } { Map_lookup(m, u) }	
+        u in Map_domain(m) &&
+        v == Map_lookup(m, u))
+  }
+  
+  // // The set of Items--that is, (key,value) pairs--of a Map can be obtained by the
+  // // function Map#Items.  Again, we need to define membership of Set#Card for this
+  // // set.  Everywhere else in this axiomatization, Map is parameterized by types U V,
+  // // even though Dafny only ever instantiates U V with Box Box.  This makes the
+  // // axiomatization more generic.  Function Map#Items, however, returns a set of
+  // // pairs, and the axiomatization of pairs is Dafny specific.  Therefore, the
+  // // definition of Map#Items here is to be considered Dafny specific.  Also, note
+  // // that it relies on the two destructors for 2-tuples.
+
+  // function Map#Items<U,V>(Map U V) : Set Box;
+
+  // function _System.__tuple_h2._0(DatatypeType) : Box;
+
+  // function _System.__tuple_h2._1(DatatypeType) : Box;
+
+  // axiom (forall<U,V> m: Map U V :: { Set#Card(Map#Items(m)) }
+    // Set#Card(Map#Items(m)) == Map#Card(m));
+
+  // axiom (forall m: Map Box Box, item: Box :: { Map#Items(m)[item] }
+    // Map#Items(m)[item] <==>
+      // Map#Domain(m)[_System.__tuple_h2._0($Unbox(item))] &&
+      // Map#Elements(m)[_System.__tuple_h2._0($Unbox(item))] == _System.__tuple_h2._1($Unbox(item)));
+
+  // // Here are the operations that produce Map values.
+
+  // function Map#Empty<U, V>(): Map U V;
+  // axiom (forall<U, V> u: U ::
+          // { Map#Domain(Map#Empty(): Map U V)[u] }
+          // !Map#Domain(Map#Empty(): Map U V)[u]);
+  // axiom (forall<U, V> m: Map U V :: { Map#Card(m) }
+   // (Map#Card(m) == 0 <==> m == Map#Empty()) &&
+   // (Map#Card(m) != 0 ==> (exists x: U :: Map#Domain(m)[x])));
+
+  // function Map#Glue<U, V>([U] bool, [U]V, Ty): Map U V;
+  // axiom (forall<U, V> a: [U] bool, b:[U]V, t:Ty ::
+          // { Map#Domain(Map#Glue(a, b, t)) }
+          // Map#Domain(Map#Glue(a, b, t)) == a);
+  // axiom (forall<U, V> a: [U] bool, b:[U]V, t:Ty ::
+          // { Map#Elements(Map#Glue(a, b, t)) }
+          // Map#Elements(Map#Glue(a, b, t)) == b);
+  // axiom (forall<U, V> a: [U] bool, b:[U]V, t:Ty ::
+          // { $Is(Map#Glue(a, b, t), t) }
+          // $Is(Map#Glue(a, b, t), t));
+
+
+  // //Build is used in displays, and for map updates
+  // function Map#Build<U, V>(Map U V, U, V): Map U V;
+  // /*axiom (forall<U, V> m: Map U V, u: U, v: V ::
+    // { Map#Domain(Map#Build(m, u, v))[u] } { Map#Elements(Map#Build(m, u, v))[u] }
+    // Map#Domain(Map#Build(m, u, v))[u] && Map#Elements(Map#Build(m, u, v))[u] == v);*/
+
+  // axiom (forall<U, V> m: Map U V, u: U, u': U, v: V ::
+    // { Map#Domain(Map#Build(m, u, v))[u'] } { Map#Elements(Map#Build(m, u, v))[u'] }
+    // (u' == u ==> Map#Domain(Map#Build(m, u, v))[u'] &&
+                 // Map#Elements(Map#Build(m, u, v))[u'] == v) &&
+    // (u' != u ==> Map#Domain(Map#Build(m, u, v))[u'] == Map#Domain(m)[u'] &&
+                 // Map#Elements(Map#Build(m, u, v))[u'] == Map#Elements(m)[u']));
+  // axiom (forall<U, V> m: Map U V, u: U, v: V :: { Map#Card(Map#Build(m, u, v)) }
+    // Map#Domain(m)[u] ==> Map#Card(Map#Build(m, u, v)) == Map#Card(m));
+  // axiom (forall<U, V> m: Map U V, u: U, v: V :: { Map#Card(Map#Build(m, u, v)) }
+    // !Map#Domain(m)[u] ==> Map#Card(Map#Build(m, u, v)) == Map#Card(m) + 1);
+
+  // //equality for maps
+  // function Map#Equal<U, V>(Map U V, Map U V): bool;
+  // axiom (forall<U, V> m: Map U V, m': Map U V::
+    // { Map#Equal(m, m') }
+      // Map#Equal(m, m') <==> (forall u : U :: Map#Domain(m)[u] == Map#Domain(m')[u]) &&
+                            // (forall u : U :: Map#Domain(m)[u] ==> Map#Elements(m)[u] == Map#Elements(m')[u]));
+  // // extensionality
+  // axiom (forall<U, V> m: Map U V, m': Map U V::
+    // { Map#Equal(m, m') }
+      // Map#Equal(m, m') ==> m == m');
+
+  // function Map#Disjoint<U, V>(Map U V, Map U V): bool;
+  // axiom (forall<U, V> m: Map U V, m': Map U V ::
+    // { Map#Disjoint(m, m') }
+      // Map#Disjoint(m, m') <==> (forall o: U :: {Map#Domain(m)[o]} {Map#Domain(m')[o]} !Map#Domain(m)[o] || !Map#Domain(m')[o]));
+}
