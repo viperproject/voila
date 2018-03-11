@@ -1,8 +1,16 @@
+/*
+ * Predefined sets
+ */
+
 function IntSet(): Set[Int]
   ensures forall n: Int :: n in result
 
 function NatSet(): Set[Int]
   ensures forall n: Int :: 0 <= n <==> n in result
+
+/*
+ * Pairs
+ */
 
 domain Pair[T1, T2] {
   function pair(e1: T1, e2: T2): Pair[T1, T2]
@@ -15,5 +23,167 @@ domain Pair[T1, T2] {
 
   axiom pair_over_fst_snd {
     forall p: Pair[T1, T2] :: {fst(p)}{snd(p)} pair(fst(p), snd(p)) == p
+  }
+}
+
+/* Maps
+ *
+ * Axioms adopted from Dafny
+ * Sources:  dafny/Binaries/DafnyPrelude.bpl, dafny/Test/dafny0/Maps.dfy
+ * Revision: 6270caf234d41ea82501ccade147a1d56c31cf21
+ */
+
+domain Map[U, V] {
+  function Map_keys(m: Map[U, V]): Set[U]
+  // function Map#Elements<U,V>(Map U V) : [U]V;
+  function Map_card(m: Map[U, V]): Int
+  function Map_lookup(m: Map[U, V], u: U): V
+
+  // TODO: Further axioms for Map_lookup?
+
+  axiom Map_card_non_neg {
+    forall m: Map[U, V] :: { Map_card(m) } 0 <= Map_card(m)
+  }
+
+  axiom Map_card_domain {
+    forall m: Map[U, V] :: { |Map_keys(m)| }
+      |Map_keys(m)| == Map_card(m)
+  }
+
+
+  function Map_values(m: Map[U, V]): Set[V];
+
+  axiom Map_values_def {
+    forall m: Map[U, V], v: V :: { v in Map_values(m) }
+      v in Map_values(m) <==>
+      (exists u: U :: //{ u in Map_keys(m) } { Map_lookup(m, u) }
+        u in Map_keys(m) &&
+        v == Map_lookup(m, u))
+  }
+
+  // // The set of Items--that is, (key,value) pairs--of a Map can be obtained by the
+  // // function Map#Items.  Again, we need to define membership of Set#Card for this
+  // // set.  Everywhere else in this axiomatization, Map is parameterized by types U V,
+  // // even though Dafny only ever instantiates U V with Box Box.  This makes the
+  // // axiomatization more generic.  Function Map#Items, however, returns a set of
+  // // pairs, and the axiomatization of pairs is Dafny specific.  Therefore, the
+  // // definition of Map#Items here is to be considered Dafny specific.  Also, note
+  // // that it relies on the two destructors for 2-tuples.
+
+  // function Map#Items<U,V>(Map U V) : Set Box;
+
+  // function _System.__tuple_h2._0(DatatypeType) : Box;
+
+  // function _System.__tuple_h2._1(DatatypeType) : Box;
+
+  // axiom (forall<U,V> m: Map U V :: { Set#Card(Map#Items(m)) }
+    // Set#Card(Map#Items(m)) == Map#Card(m));
+
+  // axiom (forall m: Map Box Box, item: Box :: { Map#Items(m)[item] }
+    // Map#Items(m)[item] <==>
+      // Map#Domain(m)[_System.__tuple_h2._0($Unbox(item))] &&
+      // Map#Elements(m)[_System.__tuple_h2._0($Unbox(item))] == _System.__tuple_h2._1($Unbox(item)));
+
+
+  function Map_empty(): Map[U, V]
+
+  axiom Map_empty_1 {
+    forall u: U :: { u in Map_keys(Map_empty()) }
+      !(u in Map_keys(Map_empty()))
+  }
+
+  axiom Map_empty_2 {
+    forall m: Map[U, V] :: { Map_card(m) }
+      (Map_card(m) == 0 <==> m == Map_empty()) &&
+      (Map_card(m) != 0 ==> (exists u: U :: u in Map_keys(m)))
+  }
+
+
+  // function Map#Glue<U, V>([U] bool, [U]V, Ty): Map U V;
+  // axiom (forall<U, V> a: [U] bool, b:[U]V, t:Ty ::
+          // { Map#Domain(Map#Glue(a, b, t)) }
+          // Map#Domain(Map#Glue(a, b, t)) == a);
+  // axiom (forall<U, V> a: [U] bool, b:[U]V, t:Ty ::
+          // { Map#Elements(Map#Glue(a, b, t)) }
+          // Map#Elements(Map#Glue(a, b, t)) == b);
+  // axiom (forall<U, V> a: [U] bool, b:[U]V, t:Ty ::
+          // { $Is(Map#Glue(a, b, t), t) }
+          // $Is(Map#Glue(a, b, t), t));
+
+
+  function Map_build(m: Map[U, V], u: U, v: V): Map[U, V]
+
+  /*axiom (forall<U, V> m: Map U V, u: U, v: V ::
+    { Map#Domain(Map#Build(m, u, v))[u] } { Map#Elements(Map#Build(m, u, v))[u] }
+    Map#Domain(Map#Build(m, u, v))[u] && Map#Elements(Map#Build(m, u, v))[u] == v);*/
+
+  axiom Map_build_1 {
+    forall m: Map[U, V], u1: U, u2: U, v: V ::
+      { u2 in Map_keys(Map_build(m, u1, v)) } //{ Map_elements(Map#Build(m, u, v))[u'] }
+      (u2 == u1 ==> u2 in Map_keys(Map_build(m, u1, v)) /* &&
+                    Map#Elements(Map#Build(m, u1, v))[u2] == v*/ &&
+                    Map_lookup(Map_build(m, u1, v), u1) == v)  &&
+      (u2 != u1 ==> u2 in Map_keys(Map_build(m, u1, v)) <==> u2 in Map_keys(m) /* &&
+                    Map#Elements(Map#Build(m, u1, v))[u2] <==> Map#Elements(m)[u2]*/ &&
+                    Map_lookup(Map_build(m, u1, v), u2) == Map_lookup(m, u2))
+  }
+
+  axiom Map_build_2 {
+    forall m: Map[U, V], u: U, v: V :: { Map_card(Map_build(m, u, v)) }
+      u in Map_keys(m) ==> Map_card(Map_build(m, u, v)) == Map_card(m)
+  }
+
+  axiom Map_build_3 {
+    forall m: Map[U, V], u: U, v: V :: { Map_card(Map_build(m, u, v)) }
+      !(u in Map_keys(m)) ==> Map_card(Map_build(m, u, v)) == Map_card(m) + 1
+  }
+
+
+  function Map_equal(m1: Map[U, V], m2: Map[U, V]): Bool
+
+  axiom Map_equality {
+    forall m1: Map[U, V], m2: Map[U, V] ::
+      { Map_equal(m1, m2) }
+        Map_equal(m1, m2) <==> (forall u: U :: { u in Map_keys(m1) }{ u in Map_keys(m2) } u in Map_keys(m1) <==> u in Map_keys(m2)) /*&&
+                               (forall u: U :: u in Map_keys(m) ==> Map#Elements(m)[u] == Map#Elements(m')[u])*/
+  }
+
+  axiom Map_extensionality {
+    forall m1: Map[U, V], m2: Map[U, V] :: { Map_equal(m1, m2) }
+      Map_equal(m1, m2) ==> m1 == m2
+  }
+
+
+  function Map_disjoint(m1: Map[U, V], m2: Map[U, V]): Bool
+
+  axiom Map_disjoint_def {
+    forall m1: Map[U, V], m2: Map[U, V]:: { Map_disjoint(m1, m2) }
+      Map_disjoint(m1, m2) <==>
+      (forall u: U :: { u in Map_keys(m1) } { u in Map_keys(m2) } !(u in Map_keys(m1)) || !(u in Map_keys(m2)))
+  }
+
+
+  function Map_union(m1: Map[U, V], m2: Map[U, V]): Map[U, V]
+
+  axiom Map_union_1 {
+    forall m1: Map[U, V], m2: Map[U, V], u: U ::
+      { u in Map_keys(Map_union(m1, m2)) }
+      { u in (Map_keys(m1) union Map_keys(m2)) }
+      Map_disjoint(m1, m2) ==>
+        (u in Map_keys(Map_union(m1, m2)) <==> u in (Map_keys(m1) union Map_keys(m2)))
+  }
+
+  axiom Map_union_2 {
+    forall m1: Map[U, V], m2: Map[U, V], u: U ::
+      { Map_lookup(Map_union(m1, m2), u) }
+      Map_disjoint(m1, m2) && u in Map_keys(m1) ==>
+        Map_lookup(Map_union(m1, m2), u) == Map_lookup(m1, u)
+  }
+
+  axiom Map_union_3 {
+    forall m1: Map[U, V], m2: Map[U, V], u: U ::
+      { Map_lookup(Map_union(m1, m2), u) }
+      Map_disjoint(m1, m2) && u in Map_keys(m2) ==>
+        Map_lookup(Map_union(m1, m2), u) == Map_lookup(m2, u)
   }
 }

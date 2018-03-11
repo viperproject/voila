@@ -63,61 +63,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def stepToAccess(rcvr: vpr.Exp, typ: PType): vpr.FieldAccessPredicate =
     vpr.FieldAccessPredicate(stepToLocation(rcvr, typ), vpr.FullPerm()())()
 
-  val intSet: vpr.FuncApp =
-    vpr.FuncApp.apply(
-      "IntSet",
-      Vector.empty
-    )(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
-
-  val natSet: vpr.FuncApp =
-    vpr.FuncApp(
-      "NatSet",
-      Vector.empty
-    )(vpr.NoPosition, vpr.NoInfo, vpr.SetType(vpr.Int), Vector.empty, vpr.NoTrafos)
-
-  val pairDomainStub: vpr.Domain = {
-    /* TODO: Brittle due to string identifiers.
-     *       Use Silicon's code for reading domains from Viper files (here: preamble.vpr) instead.
-     */
-
-    val t1 = vpr.TypeVar("T1")
-    val t2 = vpr.TypeVar("T2")
-    val typeVars = Vector(t1, t2)
-    val pairType = vpr.DomainType("Pair", Map.empty[vpr.TypeVar, vpr.Type])(typeVars)
-
-    val pairFunction =
-      vpr.DomainFunc(
-        name = "pair",
-        formalArgs = Vector(vpr.LocalVarDecl("e1", t1)(), vpr.LocalVarDecl("e2", t2)()),
-        typ = pairType
-      )(domainName = "Pair")
-
-    val fstFunction =
-      vpr.DomainFunc(
-        name = "fst",
-        formalArgs = Vector(vpr.LocalVarDecl("p", pairType)()),
-        typ = t1
-      )(domainName = "Pair")
-
-    val sndFunction =
-      vpr.DomainFunc(
-        name = "snd",
-        formalArgs = Vector(vpr.LocalVarDecl("p", pairType)()),
-        typ = t2
-      )(domainName = "Pair")
-
-    vpr.Domain(
-      name = "Pair",
-      functions = Vector(pairFunction, fstFunction, sndFunction),
-      axioms = Vector.empty,
-      typVars = typeVars
-    )()
-  }
-
-  val pairPairFunction: vpr.DomainFunc = pairDomainStub.functions.find(_.name == "pair").get
-  val pairFirstFunction: vpr.DomainFunc = pairDomainStub.functions.find(_.name == "fst").get
-  val pairSecondFunction: vpr.DomainFunc = pairDomainStub.functions.find(_.name == "snd").get
-
   val atomicityContextsDomainName: String = "$AtomicityContexts"
 
   def atomicityContextsDomain(regions: Vector[PRegion]): vpr.Domain =
@@ -1230,8 +1175,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
       case pairExp: PPairExp => translatePairExpression(pairExp)
-      case PIntSet() => intSet.withSource(expression)
-      case PNatSet() => natSet.withSource(expression)
+      case PIntSet() => preamble.sets.int.withSource(expression)
+      case PNatSet() => preamble.sets.nat.withSource(expression)
       case PIdnExp(id) => translateUseOf(id).withSource(expression, overwrite = true)
 
       case comprehension: PSetComprehension =>
@@ -1331,15 +1276,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   s"(at ${expression.lineColumnPosition})")
         }
 
-      assert(
-        pairDomainStub.typVars.lengthCompare(2) == 0,
-        "Expected Pair domain to have 2 type parameters, but got " +
-            s"${pairDomainStub.typVars.length}: ${pairDomainStub.typVars}")
-
-      val typeVarMap =
-        Map(
-          pairDomainStub.typVars(0) -> elementType1,
-          pairDomainStub.typVars(1) -> elementType2)
+      val typeVarMap = preamble.pairs.typeVarMap(elementType1, elementType2)
 
       vpr.DomainFuncApp(
         func = pairFunction,
@@ -1350,13 +1287,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     expression match {
       case pair @ PExplicitPair(element1, element2, _) =>
-        apply(pair, pairPairFunction, Vector(translate(element1), translate(element2)))
+        apply(pair, preamble.pairs.pair, Vector(translate(element1), translate(element2)))
 
       case PPairFirst(pair) =>
-        apply(pair, pairFirstFunction, Vector(translate(pair)))
+        apply(pair, preamble.pairs.first, Vector(translate(pair)))
 
       case PPairSecond(pair) =>
-        apply(pair, pairSecondFunction, Vector(translate(pair)))
+        apply(pair, preamble.pairs.second, Vector(translate(pair)))
     }
   }
 
@@ -1452,12 +1389,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PSeqType(elementType) => vpr.SeqType(translate(elementType))
 
     case PPairType(elementType1, elementType2) =>
-      val typeVarMap =
-        Map(
-          pairDomainStub.typVars(0) -> translate(elementType1),
-          pairDomainStub.typVars(1) -> translate(elementType2))
-
-      vpr.DomainType(pairDomainStub, typeVarMap)
+      vpr.DomainType(
+        preamble.pairs.domain,
+        preamble.pairs.typeVarMap(translate(elementType1), translate(elementType2)))
 
     case PRefType(_) => vpr.Ref
     case PRegionIdType() => vpr.Ref

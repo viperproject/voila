@@ -9,7 +9,6 @@ package viper.voila
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path, Paths}
-
 import scala.collection.breakOut
 import scala.util.{Left, Right}
 import ch.qos.logback.classic.{Level, Logger}
@@ -18,7 +17,7 @@ import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
-import viper.voila.backends.{MockViperFrontend, Silicon, ViperNameSanitizer}
+import viper.voila.backends.{MockViperFrontend, Silicon, ViperNameSanitizer, ViperPreamble}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
@@ -26,7 +25,7 @@ import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
 object VoilaConstants {
   val toolName = "Voila"
   val toolVersion = "0.1"
-  val toolCopyright = "(c) Copyright ETH Zurich 2016"
+  val toolCopyright = "(c) Copyright ETH Zurich 2016 - 2018"
 
   val versionMessage = s"${VoilaConstants.toolName} ${VoilaConstants.toolVersion} ${VoilaConstants.toolCopyright}"
 
@@ -154,9 +153,6 @@ class Voila extends StrictLogging {
 
         val nameSanitizer = new ViperNameSanitizer()
 
-        val translator = new PProgramToViperTranslator(config, semanticAnalyser, nameSanitizer)
-        val (translatedProgram, errorBacktranslator) = translator.translate(tree)
-
         logger.debug(s"Taking Viper preamble from ${defaultPreambleFile.toString}")
 
         val preambleProgram =
@@ -166,9 +162,16 @@ class Voila extends StrictLogging {
 
               return Some(Failure(Vector(ResourceError(msg))))
 
-            case Some(preamble) =>
-              preamble
+            case Some(_preambleProgram) =>
+              _preambleProgram
           }
+
+        val preamble = new ViperPreamble(preambleProgram)
+
+        val translator =
+          new PProgramToViperTranslator(config, semanticAnalyser, preamble, nameSanitizer)
+
+        val (translatedProgram, errorBacktranslator) = translator.translate(tree)
 
         val programToVerify =
           translatedProgram.copy(
