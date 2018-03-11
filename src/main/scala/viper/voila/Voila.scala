@@ -272,7 +272,6 @@ class Voila extends StrictLogging {
                     logger.debug(s"    reason off. node = ${viperError.reason.offendingNode}")
                     logger.debug(s"    reason off. node src = ${translator.Source.unapply(viperError.reason.offendingNode)}")
 
-
                     None
 
                   case Some(voilaError) =>

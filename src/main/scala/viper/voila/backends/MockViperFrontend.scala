@@ -16,11 +16,11 @@ class MockViperFrontend extends SilFrontend {
 
   def configureVerifier(args: Seq[String]): SilFrontendConfig = ???
 
-  def translate(silverFile: Path): (Option[Program], Seq[AbstractError]) = {
+  def translate(viperFile: Path): (Option[Program], Seq[AbstractError]) = {
     _verifier = None
     _state = TranslatorState.Initialized
 
-    reset(silverFile)
+    reset(viperFile)
     translate()
 
     (_program, _errors)
