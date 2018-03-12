@@ -1,23 +1,39 @@
 //:: IgnoreFile(/voila/issue/53/)
 
+
+
 // Misc TODOs. File issues or investigate further.
+
 // TODO: "macro Foo(r, m, a, l, h) MCAS(r, m, a, l, ?h);" parses, but does it work as expected?
 // TODO: Change syntax for collection type annotations: from Set[T] to Set<T> (etc.)
 // TODO: Support set subtraction, i.e. xs \ ys
 // TODO: Support set intersection; with it, we can encode disjoint set union
 // TODO: Support predicates with out-args
 
-// Local TODOs:
-// TODO: Heap unions should actually be disjoint heap unions!
+// TODO: Proper syntax for map operations
+// TODO: When equating two map-typed expressions, Map_equal is to be used instead of Viper's built-in equality
+// TODO: The next example shouldn't fail:
+//            procedure map_TODO01() {
+//              map<int, int> m1, m2, m3, m4;
+//
+//              inhale m3 == Map[int, int]();
+//              inhale m4 == uni(m1, m2);
+//              assert disj(m3, m4);
+//              assert m4 == uni(m3, m4); // Fails, but shouldn't! Could be related to map equality.
+//            }
+
+// TODO: It seems that the procedures are not forced to release the lock at Lock(a, l).
+//       Could that also happen in the paper proofs? I think so - maybe Pedro's thesis says sth. about that?
+//       Could we include the lock state in the abstract state of the MCAS region to prevent this?
+
+
+
+macro heap map<cell, int>;
 
 struct mcas {
   heap _h1; // Witness existentially quantified heap partitions h1, h2 ...
   heap _h2; // ... in the interpretation of the MCAS region
 }
-
-//macro heap set<pair<cell, int>>;
-macro heap set<cell>;
-    // TODO: The paper uses a "real" heap, i.e. a set of points-to predicates, with values
 
 
 /* TODO: QPAcc represents quantified permissions to x.value for each x in h.
@@ -26,15 +42,15 @@ macro heap set<cell>;
 predicate QPAcc(id r, heap h)
 
 /* Unpack permissions to x.value by splitting QPAcc(r, {x} ∪ h2) into x.value |-> _ ⚹ QPAcc(r, h2) */
-macro QPAcc_unpack(r, x, h2) {
-  exhale QPAcc(r, Set(x) union h2);
-  inhale x.value |-> _ && QPAcc(r, h2);
+macro QPAcc_unpack(r, x, v, h2) {
+  exhale QPAcc(r, uni(Map(x := v), h2));
+  inhale x.value |-> v && QPAcc(r, h2);
 }
 
 /* Re-pack permissions to x.value by joining x.value |-> _ ⚹ QPAcc(r, h2) into QPAcc(r, {x} ∪ h2) */
-macro QPAcc_pack(r, x, h2) {
-  exhale x.value |-> _ && QPAcc(r, h2);
-  inhale QPAcc(r, Set(x) union h2);
+macro QPAcc_pack(r, x, v, h2) {
+  exhale x.value |-> v && QPAcc(r, h2);
+  inhale QPAcc(r, uni(Map(x := v), h2));
 }
 
 
@@ -43,29 +59,38 @@ region MCAS(id r, mcas m, id a, cell l)
     duplicable Z;
     /* TODO: Neither unique nor duplicable are an ideal choice for the *four* next guards. See also issue #43. */
       duplicable OWN(cell x);
-      duplicable OWNED(heap xs);
+      duplicable OWNED(set<cell> xs);
       duplicable LOCKED(heap h);
       duplicable KEY(heap h);
     unique UNLOCKED;
   }
   interpretation {
-    m._h1 |-> ?h1 && m._h2 |-> ?h2 && // Ghost: Existentially quantified h1, h2
-    OWNED(h1 union h2)@r &&
+    m._h1 |-> ?h1 && m._h2 |-> ?h2 && disj(h1, h2) && // Ghost: Existentially quantified h1, h2
+    OWNED(keys(h1) union keys(h2))@r &&
     Lock(a, l, ?s) && G@a && // Contained in U(l) and L(l) (from the locks library)
     (s == 0
-        ? UNLOCKED@r   && QPAcc(r, h1 union h2)
+        ? UNLOCKED@r   && QPAcc(r, uni(h1, h2))
         : LOCKED(h1)@r && QPAcc(r, h2))
   }
-  state { h1 union h2 }
+  state { uni(h1, h2) }
   actions {
     // Actions from the paper:
-      //  ?h, ?x | Z: h ~> h ⚹ x.value |-> v;
+      // ?h, ?x, ?v | Z: h ~> h ⚹ x.value |-> v;
       // ?h, ?v, ?w, ?x | OWN(x): x.value |-> v ⚹ h ~> x.value |-> w ⚹ h
       // ?h, ?v, ?x | OWN(x): x.value |-> v ⚹ h ~> h
-    // Voila actions:
-      // ?h, cell ?x | Z: h ~> Set(x) union h; // TODO: Not yet supported, see issue #51
-      // TODO: What about the second action?
-      ?h, ?x | OWN(x): Set(x) union h ~> h;
+    // Corresponding Voila actions:
+      // heap ?h, cell ?x, int ?v | Z: h ~> uni(Map(x := v), h); // TODO: Not yet supported, see issue #51
+      // heap ?h, cell ?x, int ?v, int ?w | OWN(x): uni(Map(x := v), h) ~> uni(Map(x := w), h); // TODO: Not yet supported, see issue #51
+      // heap ?h, cell ?x, int ?v | OWN(x): uni(Map(x := v), h) ~> h; // TODO: Not yet supported, see issue #51
+      //
+      // TODO: The next action could (yet untested!) be an alternative encoding of action 2 from above
+      //       that would not require fully supporting injective actions. However, it does require
+      //       support for Map_items.
+      // heap ?h0, heap ?h1, cell ?x |
+      //   x in keys(h0) && keys(h1) == keys(h0) && items(h1) == Set(pair<cell, int> ?p | fst(p) != x ==> snd(p) == lkup(h0, fst(p))) |
+      //     OWN(x): h0 ~> h1;
+    // Since we cannot yet encode the actual actions, we work around it by allowing arbitrary state
+    // changes and "fixing" this with additional proof code in the procedures to verify ...
   }
 
 
@@ -73,8 +98,8 @@ region MCAS(id r, mcas m, id a, cell l)
   requires OWN(x)@r && OWN(x)@r;
   ensures  false;
 
-/* lemma */ procedure OWNED_exclusivity(id r, heap h1, heap h2)
-  requires OWNED(h1)@r && OWNED(h2)@r;
+/* lemma */ procedure OWNED_exclusivity(id r, set<cell> cs1, set<cell> cs2)
+  requires OWNED(cs1)@r && OWNED(cs2)@r;
   ensures  false;
 
 /* lemma */ procedure UNLOCKED_lock(id r, heap h)
@@ -114,15 +139,15 @@ region MCAS(id r, mcas m, id a, cell l)
 // TODO: Contract from the paper states that the returned value is the value of x.
 //       This might be possible if the MCAS region's heap were a mapping from locations to values.
 abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int ret)
-//  interference ?v in Int on r;
-      // TODO: Quantifying over int v currently results in a malformed Viper program because the
-      //       encoding assumes that the interference variable quantifies over the abstract state
-      //       of the (here: MCAS) region. That's not the case in this example, however.
-  interference ?hPre in Set[heap](?h | true) on r; // Allow maximal interference
-  requires MCAS(r, m, a, l, hPre) && x in hPre && OWN(x)@r;
+  interference ?h0 in Set[heap](?u | true) on r;
+    // TODO: Allow anonymous binder (Set[heap](_ | true)), or, even better, predefine sets that
+    //       correspond to types, e.g. Set[heap]. The latter would allow dropping the currently
+    //       built-in set Int (and Nat could be replaced by an appropriate macro).
+  requires MCAS(r, m, a, l, h0) && x in keys(h0) && OWN(x)@r;
   requires Z@r; // TODO: Should not be necessary, see issue #19
-  ensures  MCAS(r, m, a, l, ?hPost) && x in hPost && OWN(x)@r;
-//  ensures  ret == v; // TODO: Not yet possible because values aren't specified by MCAS
+  ensures  MCAS(r, m, a, l, ?h1) && x in keys(h1) && OWN(x)@r;
+  ensures  lkup(h1, x) == lkup(h0, x);
+  ensures  ret == lkup(h0, x);
 {
   make_atomic
     using MCAS(r, m, a, l) with Z@r;
@@ -133,7 +158,7 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
       using MCAS(r, m, a, l);
     {
       /* Acquire the lock at Lock(a, l) and take permissions to x.value out of the MCAS region */
-      lock_and_take_permissions(r, m, a, l, x);
+      lock_and_take_permissions(r, m, a, l, x, lkup(h0, x));
     }
 
     /* ########## ret := [x]; ########## */
@@ -150,117 +175,114 @@ abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int 
       using MCAS(r, m, a, l);
     {
       /* Release the lock at Lock(a, l) and put permissions to x.value back into the MCAS region */
-      unlock_and_return_permissions(r, m, a, l, x);
+      unlock_and_return_permissions(r, m, a, l, x, lkup(h0, x), lkup(h0, x));
     }
   }
 }
 
 // TODO: 'write' clashes with Viper's keyword; need to sanitise identifiers
 abstract_atomic procedure _write(id r, mcas m, id a, cell l, cell x, int w)
-//  interference ?v in Int on r; // TODO: See read's comment
-  interference ?hPre in Set[heap](?h | true) on r; // Allow maximal interference
-  requires MCAS(r, m, a, l, hPre) && x in hPre && OWN(x)@r;
+  interference ?h0 in Set[heap](?u | true) on r; // TODO: See read's comment
+  requires MCAS(r, m, a, l, h0) && x in keys(h0) && OWN(x)@r;
   requires Z@r; // TODO: Should not be necessary, see issue #19
-  ensures  MCAS(r, m, a, l, ?hPost) && x in hPost && OWN(x)@r;
-//  ensures  (x.value |-> w) in hPost; // TODO: See read's comment
+  ensures  MCAS(r, m, a, l, ?h1) && x in keys(h1) && OWN(x)@r;
+  ensures  lkup(h1, x) == w;
+    // TODO: Consider supporting syntax "x := w in h1", or "x -> w in h1", or "Pair(x, w) in h1"
+    //       as a more concise replacement for "x in keys(h1) && lkup(h1, x) == w"
 {
   make_atomic
     using MCAS(r, m, a, l) with Z@r;
   {
     /* ########## lock(a, l); ########## */
-    open_region // Open-region suffices since we don't change the region's abstract state
-      using MCAS(r, m, a, l);
-    {
-      /* Acquire the lock at Lock(a, l) and take permissions to x.value out of the MCAS region */
-      lock_and_take_permissions(r, m, a, l, x);
-    }
-
-    /* ########## [x] := w; ########## */
-    update_region
-      using MCAS(r, m, a, l);
-    {
-      x.value := w;
-    }
-    /* Exchange diamond for tracking resource (a work-around for issue #8).
-     * Note: if values were part of the region's abstract state (as they eventually should), then
-     * the previous update might have changed the region's abstract state.
-     */
-    fix_issue8_updateregion_noop(r, m, a, l);
-
-    /* ########## unlock(a, l); ########## */
-    open_region // No abstract state change
-      using MCAS(r, m, a, l);
-    {
-      /* Release the lock at Lock(a, l) and put permissions to x.value back into the MCAS region */
-      unlock_and_return_permissions(r, m, a, l, x);
-    }
-  }
-}
-
-// TODO: function cas
-
-abstract_atomic procedure cas1(id r, mcas m, id a, cell l, cell x, int v1, int v2) returns (bool b)
-//  interference ?v in Int on r; // TODO: See read's comment
-  interference ?hPre in Set[heap](?h | true) on r; // Allow maximal interference
-  requires MCAS(r, m, a, l, hPre) && x in hPre && OWN(x)@r;
-  requires Z@r; // TODO: Should not be necessary, see issue #19
-  ensures  MCAS(r, m, a, l, ?hPost) && x in hPost && OWN(x)@r;
-//  ensures  v == v1 ? b && (x.value |-> v1) in hPost : !b && (x.value |-> v) in hPost // TODO: See read's comment
-{
-  int v0;
-
-  make_atomic
-    using MCAS(r, m, a, l) with Z@r;
-  {
-    /* ########## lock(a, l); ########## */
-    open_region // Open-region suffices since we don't change the region's abstract state
-      using MCAS(r, m, a, l);
-    {
-      /* Acquire the lock at Lock(a, l) and take permissions to x.value out of the MCAS region */
-      lock_and_take_permissions(r, m, a, l, x);
-    }
-
-    /* ########## v0 := [x]; ########## */
     open_region
       using MCAS(r, m, a, l);
     {
-      v0 := x.value;
+      lock_and_take_permissions(r, m, a, l, x, lkup(h0, x));
     }
 
-    if (v0 == v1) {
-      /* ########## [x] := v2; ########## */
-      update_region
-        using MCAS(r, m, a, l);
-      {
-        x.value := v2;
-      }
-      /* Exchange diamond for tracking resource (a work-around for issue #8).
-       * Note: if values were part of the region's abstract state (as they eventually should), then
-       * the previous update might have changed the region's abstract state.
-       */
-      fix_issue8_updateregion_noop(r, m, a, l);
-
-      b := true;
-    } else {
-      b := false;
-      /* Exchange diamond for tracking resource (a work-around for issue #8) */
-      fix_issue8_updateregion_noop(r, m, a, l);
+    /* ########## [x] := w; ########## */
+    use_atomic
+      using MCAS(r, m, a, l) with OWN(x)@r;
+    {
+      x.value := w;
     }
+//    /* Exchange diamond for tracking resource (a work-around for issue #8).
+//     * Note: if values were part of the region's abstract state (as they eventually should), then
+//     * the previous update might have changed the region's abstract state.
+//     */
+//    fix_issue8_updateregion_noop(r, m, a, l);
 
     /* ########## unlock(a, l); ########## */
-    open_region // No abstract state change
+    update_region
       using MCAS(r, m, a, l);
     {
-      /* Release the lock at Lock(a, l) and put permissions to x.value back into the MCAS region */
-      unlock_and_return_permissions(r, m, a, l, x);
+      unlock_and_return_permissions(r, m, a, l, x, lkup(h0, x), w);
     }
   }
 }
 
+//abstract_atomic procedure cas1(id r, mcas m, id a, cell l, cell x, int v1, int v2) returns (bool b)
+////  interference ?v in Int on r; // TODO: See read's comment
+//  interference ?hPre in Set[heap](?h | true) on r; // Allow maximal interference
+//  requires MCAS(r, m, a, l, hPre) && x in hPre && OWN(x)@r;
+//  requires Z@r; // TODO: Should not be necessary, see issue #19
+//  ensures  MCAS(r, m, a, l, ?hPost) && x in hPost && OWN(x)@r;
+////  ensures  v == v1 ? b && (x.value |-> v1) in hPost : !b && (x.value |-> v) in hPost // TODO: See read's comment
+//{
+//  int v0;
+//
+//  make_atomic
+//    using MCAS(r, m, a, l) with Z@r;
+//  {
+//    /* ########## lock(a, l); ########## */
+//    open_region // Open-region suffices since we don't change the region's abstract state
+//      using MCAS(r, m, a, l);
+//    {
+//      /* Acquire the lock at Lock(a, l) and take permissions to x.value out of the MCAS region */
+//      lock_and_take_permissions(r, m, a, l, x);
+//    }
+//
+//    /* ########## v0 := [x]; ########## */
+//    open_region
+//      using MCAS(r, m, a, l);
+//    {
+//      v0 := x.value;
+//    }
+//
+//    if (v0 == v1) {
+//      /* ########## [x] := v2; ########## */
+//      update_region
+//        using MCAS(r, m, a, l);
+//      {
+//        x.value := v2;
+//      }
+//      /* Exchange diamond for tracking resource (a work-around for issue #8).
+//       * Note: if values were part of the region's abstract state (as they eventually should), then
+//       * the previous update might have changed the region's abstract state.
+//       */
+//      fix_issue8_updateregion_noop(r, m, a, l);
+//
+//      b := true;
+//    } else {
+//      b := false;
+//      /* Exchange diamond for tracking resource (a work-around for issue #8) */
+//      fix_issue8_updateregion_noop(r, m, a, l);
+//    }
+//
+//    /* ########## unlock(a, l); ########## */
+//    open_region // No abstract state change
+//      using MCAS(r, m, a, l);
+//    {
+//      /* Release the lock at Lock(a, l) and put permissions to x.value back into the MCAS region */
+//      unlock_and_return_permissions(r, m, a, l, x);
+//    }
+//  }
+//}
+
 // TODO: function dcas
 
-/* Acquire the lock at Lock(a, l) and take permissions to x.value out of region MCAS(r, ...) */
-macro lock_and_take_permissions(r, m, a, l, x) {
+/* Acquire the lock at Lock(a, l) and take x.value |-> v out of region MCAS(r, ...) */
+macro lock_and_take_permissions(r, m, a, l, x, v) {
   /* Learn that the lock's state is in {0, 1} */
   use_region_interpretation Lock(a, l);
 
@@ -270,15 +292,15 @@ macro lock_and_take_permissions(r, m, a, l, x) {
   fix_duplicable_OWN_guard(r, m, x);
 
   /* Exchange UNLOCKED@r for LOCKED(Set(x))@r and KEY(Set(x))@r */
-  use UNLOCKED_lock(r, Set(x));
+  use UNLOCKED_lock(r, Map(x := v));
 
   /* Take permissions to x.value out of the MCAS region */
-  take_permissions_out(r, m, x);
+  take_permissions_out(r, m, x, v);
 }
 
 /* Release the lock at Lock(a, l) and put permissions to x.value back into region MCAS(r, ...) */
-macro unlock_and_return_permissions(r, m, a, l, x) {
-  learn_lock_held_from_KEY(r, Set(x), a, l);
+macro unlock_and_return_permissions(r, m, a, l, x, v0, v1) {
+  learn_lock_held_from_KEY(r, Map(x := v0), a, l);
 
   unlock(a, l);
 
@@ -292,19 +314,19 @@ macro unlock_and_return_permissions(r, m, a, l, x) {
    * I.e. learn from from KEY(Set(x))@r ⚹ LOCKED(h1)@r that h1 == {x}.
    */
   assert m._h1 |-> ?h1_1;
-  use LOCKED_KEY_argument_equality(r, h1_1, Set(x));
+  use LOCKED_KEY_argument_equality(r, h1_1, Map(x := v0));
 
   /* Exchange LOCKED(Set(x))@r ⚹ KEY(Set(x))@r for UNLOCKED@r */
-  use UNLOCKED_unlock(r, Set(x));
+  use UNLOCKED_unlock(r, Map(x := v0));
 
   /* Give permissions to x.value back to the MCAS region*/
-  give_permissions_back(r, m, x);
+  give_permissions_back(r, m, x, v0, v1);
 }
 
 /* Take permissions to x.value out of region MCAS(r, ..., h). This requires partitioning h into
  * {x} and h2, and splitting QPAcc(h) into x.value |-> _ ⚹ QPAcc(h2).
  */
-macro take_permissions_out(r, m, x) {
+macro take_permissions_out(r, m, x, v) {
   /* Havoc ghost fields (existential heap partition witnesses) and bind pre- and post-havoc values */
   exhale m._h1 |-> ?h1_0;
   exhale m._h2 |-> ?h2_0;
@@ -312,29 +334,32 @@ macro take_permissions_out(r, m, x) {
   inhale m._h2 |-> ?h2_1;
 
   /* Check that permissions to x are still in the region */
-  assert x in h1_0 union h2_0;
-  assert QPAcc(r, h1_0 union h2_0);
+  assert x in keys(h1_0) union keys(h2_0);
+  assert QPAcc(r, uni(h1_0, h2_0));
 
   /* The region holds permissions to all y.value in h, via QPAcc(r, h). Permissions to x.value can
    * be taken out by partitioning h into h1 := {x} and h2 := h \ {x}. This requires constraining
    * the new values of the existential witnesses appropriately.
    */
-  inhale h1_1 == Set(x);
-  inhale h1_1 union h2_1 == h1_0 union h2_0;
-    /* TODO: We want h2_1 := h2_0 \ Set(x), but set minus is not yet supported.
-     *       Note that we overapproximate h2_1 here because the constrain allows h2_1 to overlap
-     *       with h1_1. This is sound, however, since we don't know for sure that the two overlap.
-     */
+  inhale h1_1 == Map(x := v);
+  /* TODO: We want h2_1 := h2_0 \ Map(x := v), but map subtraction is not yet supported. */
+  inhale uni(h1_1, h2_1) == uni(h1_0, h2_0);
+
+  /* TODO: We know h1_0 and h2_0 are disjoint, but we curently don't know that h1_1 and h2_1 are
+   *       as well. This might no longer be an issue once map subtraction is used above.
+   */
+  assert disj(h1_0, h2_0); // This we know
+  assume disj(h1_1, h2_1); // This should follow
 
   /* Finally, unpack permissions to x.value from QPAcc */
-  QPAcc_unpack(r, x, h2_1);
+  QPAcc_unpack(r, x, v, h2_1);
 }
 
 /* Give permissions to x.value back to region MCAS(r, ..., {x} ∪ h2). This requires changing the
  * partitioning of h from {x} and h2 to {} and {x} ∪ h2, and combining x.value |-> _ ⚹ QPAcc(h2)
  * into QPAcc({x} ∪ h2).
  */
-macro give_permissions_back(r, m, x) {
+macro give_permissions_back(r, m, x, v0, v1) {
   /* Havoc existential heap partition witnesses and bind their pre- and post-havoc values */
   exhale m._h1 |-> ?h1_1;
   inhale m._h1 |-> ?h1_2;
@@ -342,11 +367,19 @@ macro give_permissions_back(r, m, x) {
   inhale m._h2 |-> ?h2_2;
 
   /* Constraint witnesses */
-  inhale h1_2 == Set[cell]();
-  inhale h2_2 == h1_1 union h2_1;
+  inhale h1_2 == Map[cell, int]();
+  inhale h2_2 == uni(Map(x := v1), h2_1);
+
+  assert h1_1 == Map(x := v0); // [DEBUG]
+  assert h1_2 == Map[cell, int](); // [DEBUG]
+  assert h2_2 == uni(Map(x := v1), h2_1); // [DEBUG]
+  assert disj(h1_2, h2_2); // [DEBUG]
+  assume h2_2 == uni(h1_2, h2_2); // TODO: Should follow from previous assertions, but currently doesn't
 
   /* Finally, pack permissions to x.value back into QPAcc */
-  QPAcc_pack(r, x, h2_1);
+  QPAcc_pack(r, x, v1, h2_1);
+
+  assert QPAcc(r, uni(h1_2, h2_2)); // [DEBUG]
 }
 
 /* Learn from KEY(h)@r that we hold Lock(a, l) */
@@ -366,7 +399,7 @@ macro learn_lock_held_from_KEY(r, h, a, l) {
 macro fix_duplicable_OWN_guard(r, m, x) {
   assert OWN(x)@r;
   assert m._h1 |-> ?h1 && m._h2 |-> ?h2;
-  assume x in h1 union h2;
+  assume x in keys(h1) union keys(h2);
 }
 
 /* Work around issue #8 by manually exchanging the diamond resource r |=> <D> for the tracking
@@ -376,7 +409,7 @@ macro fix_issue8_updateregion_noop(r, m, a, l) {
   unfold MCAS(r, m, a, l);
   assert m._h1 |-> ?h1 && m._h2 |-> ?h2;
   exhale r |=> <D>;
-  inhale r |=> (h1 union h2, h1 union h2);
+  inhale r |=> (uni(h1, h2), uni(h1, h2));
   fold MCAS(r, m, a, l);
 }
 
