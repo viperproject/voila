@@ -123,7 +123,7 @@ domain Map[U, V] {
       (u2 == u1 ==> u2 in Map_keys(Map_build(m, u1, v)) /* &&
                     Map#Elements(Map#Build(m, u1, v))[u2] == v*/ &&
                     Map_lookup(Map_build(m, u1, v), u1) == v)  &&
-      (u2 != u1 ==> u2 in Map_keys(Map_build(m, u1, v)) <==> u2 in Map_keys(m) /* &&
+      (u2 != u1 ==> (u2 in Map_keys(Map_build(m, u1, v)) <==> u2 in Map_keys(m)) /* &&
                     Map#Elements(Map#Build(m, u1, v))[u2] <==> Map#Elements(m)[u2]*/ &&
                     Map_lookup(Map_build(m, u1, v), u2) == Map_lookup(m, u2))
   }
