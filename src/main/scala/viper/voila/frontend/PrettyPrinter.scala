@@ -329,6 +329,15 @@ class DefaultPrettyPrinter
           "[" <> ssep(Vector(ta._1, ta._2) map toDoc, comma <> space) <> "]") <>
         "(" <> ssep(Vector(elem1, elem2) map toDoc, comma <> space) <> ")"
 
+      case PExplicitMap(elements, typeAnnotation) =>
+        val elementsDoc =
+          elements map { case (key, value) => toDoc(key) <+> ":=" <+> toDoc(value) }
+
+        "Map" <>
+        typeAnnotation.fold(emptyDoc)(ta =>
+          "[" <> ssep(Vector(ta._1, ta._2) map toDoc, comma <> space) <> "]") <>
+        "(" <> ssep(elementsDoc, comma <> space) <> ")"
+
       case PSetComprehension(qvar, filter, typeAnnotation) =>
         "Set" <>
         typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
@@ -360,6 +369,10 @@ class DefaultPrettyPrinter
       case PSeqTail(seq) => "tail" <> parens(toDoc(seq))
       case PPairFirst(pair) => "fst" <> parens(toDoc(pair))
       case PPairSecond(pair) => "snd" <> parens(toDoc(pair))
+      case PMapUnion(left, right) => "uni" <> parens(toDoc(left) <> comma <+> toDoc(right))
+      case PMapDisjoint(left, right) => "disj" <> parens(toDoc(left) <> comma <+> toDoc(right))
+      case PMapKeys(map) => "keys" <> parens(toDoc(map))
+      case PMapLookup(map, key) => "lkup" <> parens(toDoc(map) <> comma <+> toDoc(key))
 
       case PConditional(cond, thn, els) =>
         parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
@@ -386,6 +399,8 @@ class DefaultPrettyPrinter
       case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
       case PPairType(elementType1, elementType2) =>
         "pair" <> angles(toDoc(elementType1) <> "," <+> toDoc(elementType2))
+      case PMapType(elementType1, elementType2) =>
+        "map" <> angles(toDoc(elementType1) <> "," <+> toDoc(elementType2))
       case PRefType(referencedType) => toDoc(referencedType)
       case PRegionIdType() => "id"
       case PUnknownType() => "<unknown>"

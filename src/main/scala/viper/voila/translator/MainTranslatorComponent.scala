@@ -1175,6 +1175,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
       case pairExp: PPairExp => translatePairExpression(pairExp)
+      case mapExp: PMapExp => translateMapExpression(mapExp)
       case PIntSet() => preamble.sets.int.withSource(expression)
       case PNatSet() => preamble.sets.nat.withSource(expression)
       case PIdnExp(id) => translateUseOf(id).withSource(expression, overwrite = true)
@@ -1260,14 +1261,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     customTranslationScheme.applyOrElse(expression, defaultTranslationScheme)
   }
 
+  /* TODO: Unify translatePairExpression and translateMapExpression */
+
   private def translatePairExpression(expression: PPairExp): vpr.Exp = {
-    def apply(pair: PExpression,
+    def apply(pairTypedExpression: PExpression,
               pairFunction: vpr.DomainFunc,
               arguments: Vector[vpr.Exp])
              : vpr.DomainFuncApp = {
 
       val (elementType1, elementType2) =
-        semanticAnalyser.typ(pair) match {
+        semanticAnalyser.typ(pairTypedExpression) match {
           case pairType: PPairType =>
             (translate(pairType.elementType1), translate(pairType.elementType2))
           case other =>
@@ -1294,6 +1297,57 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       case PPairSecond(pair) =>
         apply(pair, preamble.pairs.second, Vector(translate(pair)))
+    }
+  }
+
+  private def translateMapExpression(expression: PMapExp): vpr.Exp = {
+    def apply(mapTypedExpression: PExpression,
+              mapFunction: vpr.DomainFunc,
+              arguments: Vector[vpr.Exp])
+             : vpr.DomainFuncApp = {
+
+      val (keyType, valueType) =
+        semanticAnalyser.typ(mapTypedExpression) match {
+          case mapType: PMapType =>
+            (translate(mapType.keyType), translate(mapType.valueType))
+          case other =>
+            sys.error(
+              s"Expected $expression to be of type map, but got $other " +
+                  s"(at ${expression.lineColumnPosition})")
+        }
+
+      val typeVarMap = preamble.maps.typeVarMap(keyType, valueType)
+
+      vpr.DomainFuncApp(
+        func = mapFunction,
+        args = arguments,
+        typVarMap = typeVarMap
+      )().withSource(expression)
+    }
+
+    expression match {
+      case explicitMap @ PExplicitMap(elements, _) =>
+        val emp = apply(explicitMap, preamble.maps.empty, Vector.empty)
+
+        elements.foldLeft(emp){ case (map, (key, value)) =>
+          vpr.DomainFuncApp(
+            func = preamble.maps.build,
+            args = Vector(map, translate(key), translate(value)),
+            typVarMap = emp.typVarMap
+          )().withSource(expression)
+        }
+
+      case union @ PMapUnion(map1, map2) =>
+        apply(union, preamble.maps.union, Vector(translate(map1), translate(map2)))
+
+      case PMapDisjoint(map1, map2) =>
+        apply(map1, preamble.maps.disjoint, Vector(translate(map1), translate(map2)))
+
+      case PMapKeys(map) =>
+        apply(map, preamble.maps.keys, Vector(translate(map)))
+
+      case PMapLookup(map, key) =>
+        apply(map, preamble.maps.lookup, Vector(translate(map), translate(key)))
     }
   }
 
@@ -1392,6 +1446,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.DomainType(
         preamble.pairs.domain,
         preamble.pairs.typeVarMap(translate(elementType1), translate(elementType2)))
+
+    case PMapType(elementType1, elementType2) =>
+      vpr.DomainType(
+        preamble.maps.domain,
+        preamble.maps.typeVarMap(translate(elementType1), translate(elementType2)))
 
     case PRefType(_) => vpr.Ref
     case PRegionIdType() => vpr.Ref

@@ -8,7 +8,7 @@ package viper.voila.frontend
 
 import scala.annotation.switch
 import scala.collection.breakOut
-import scala.language.postfixOps
+import scala.language.implicitConversions
 import org.bitbucket.inkytonik.kiama.parsing.Parsers
 import org.bitbucket.inkytonik.kiama.util.Positions
 
@@ -31,7 +31,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   val reservedWords = Set(
     "true", "false",
-    "int", "bool", "id", "set", "frac", "seq", "pair",
+    "int", "bool", "id", "set", "frac", "seq", "pair", "map",
     "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
@@ -44,6 +44,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Set", "Int", "Nat", "union",
     "Seq", "size", "head", "tail",
     "Pair", "fst", "snd",
+    "Map", "keys", "vals", "lkup", "upd", "disj",
     "unfolding"
   )
 
@@ -435,6 +436,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     setExp0 |
     seqExp0 |
     pairExp0 |
+    mapExp0 |
     applicationLikeExp |
     (location <~ "|->") ~ (binder | exp70) ^^ PPointsTo |
     (idnuse <~ "|=>") ~ ("(" ~> expression) ~ ("," ~> expression <~ ")") ^^ PRegionUpdateWitness |
@@ -502,6 +504,22 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         PExplicitPair(element1, element2, typeAnnotation map { case t1 ~ t2 => (t1, t2) })
     }
 
+  lazy val mapExp0: Parser[PMapExp] =
+    mapLiteral |
+    "keys" ~> "(" ~> expression <~ ")" ^^ PMapKeys |
+    "vals" ~> "(" ~> expression <~ ")" ^^ PMapValues |
+    "lkup" ~> ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ PMapLookup |
+    "disj" ~> ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ PMapDisjoint |
+    "uni" ~> ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ PMapUnion |
+    "upd" ~> ("(" ~> (expression <~ ",") ~ (expression <~ ",") ~ expression <~ ")") ^^ PMapUpdate
+
+  lazy val mapLiteral: Parser[PExplicitMap] =
+    "Map" ~>
+    ("[" ~> (typ <~ ",") ~ typ <~ "]").? ~
+    ("(" ~> repsep((expression <~ ":=") ~ expression, ",") <~ ")") ^^ {
+      case typeAnnotation ~ elements => PExplicitMap(elements, typeAnnotation)
+    }
+
   lazy val binder: Parser[PNamedBinder] =
     typ.? ~ ("?" ~> idndef) ^^ { case optType ~ id => PNamedBinder(id, optType) }
 
@@ -525,6 +543,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
     "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PPairType |
+    "map" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PMapType |
     idnuse ^^ PRefType
 
   lazy val idndef: Parser[PIdnDef] =
@@ -550,4 +569,13 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       positions.dupRangePos(from, to, node)
     }
   }
+
+  implicit def parseResultToTuple2[A, B](result: A~B): (A, B) =
+    (result._1, result._2)
+
+  implicit def parseResultToTuple2[A, B](result: Option[A~B]): Option[(A, B)] =
+    result map (r => (r._1, r._2))
+
+  implicit def parseResultsToTuple2s[A, B](results: Vector[A~B]): Vector[(A, B)] =
+    results map (r => (r._1, r._2))
 }

@@ -784,6 +784,18 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 PPairType(typ1, typ2)
             }
 
+          case explicitMap: PExplicitMap =>
+            explicitMap.typeAnnotation match {
+              case Some((typ1, typ2)) =>
+                PMapType(typ1, typ2)
+
+              case None =>
+                if (explicitMap.elements.nonEmpty)
+                  PMapType(typ(explicitMap.elements.head._1), typ(explicitMap.elements.head._2))
+                else
+                  PUnknownType()
+            }
+
           case PSetComprehension(qvar, _, typeAnnotation) =>
             typeAnnotation match {
               case Some(_typ) =>
@@ -805,6 +817,26 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case tailExp: PSeqTail => typ(tailExp.seq)
           case fstExp: PPairFirst => typ(fstExp.pair).asInstanceOf[PPairType].elementType1
           case sndExp: PPairSecond => typ(sndExp.pair).asInstanceOf[PPairType].elementType2
+
+          case PMapUnion(left, right) =>
+            (typ(left), typ(right)) match {
+              case (mapType1 @ PMapType(t1, t2), PMapType(t3, t4)) if isCompatible(t1, t3) && isCompatible(t2, t4) => mapType1 // TODO: Return least common supertype
+              case _ => PUnknownType()
+            }
+
+          case PMapKeys(map) =>
+            typ(map) match {
+              case PMapType(t, _) => PSetType(t)
+              case _ => PUnknownType()
+            }
+
+          case PMapLookup(map, _) =>
+            typ(map) match {
+              case PMapType(_, t) => t
+              case _ => PUnknownType()
+            }
+
+          case _: PMapDisjoint => PBoolType()
           case conditional: PConditional => typ(conditional.thn)
           case unfolding: PUnfolding => typ(unfolding.body)
           case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
@@ -879,6 +911,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       /* TODO: Unification is needed for handling the next cases, which require type variables */
       // case tree.parent(_: PSetUnion) => /* TODO: Return set<T> */
       // case tree.parent(_: PPairFirst | _: PPairSecond) => /* TODO: Return pair<T1, T2> */
+      // case tree.parent(_: PMapDisjoint | _: PMapUnion) => /* TODO: Return map<T1, T2> */
+      // case tree.parent(_: PMapKeys) => /* TODO: Return set<T> */
+      // case tree.parent(_: PMapLookup) => /* TODO: Return map<key-type, T> */
 
       case _ =>
         /* Returning unknown expresses that no particular type is expected */

@@ -432,6 +432,20 @@ case class PPairSecond(pair: PExpression) extends PPairExp with PUnOp {
   val operand: PExpression = pair
 }
 
+sealed trait PMapExp extends PExpression
+
+case class PExplicitMap(elements: Vector[(PExpression, PExpression)],
+                        typeAnnotation: Option[(PType, PType)])
+    extends PMapExp
+
+case class PMapUnion(left: PExpression, right: PExpression) extends PMapExp with PBinOp
+case class PMapDisjoint(left: PExpression, right: PExpression) extends PMapExp with PBinOp
+case class PMapUpdate(map: PExpression, key: PExpression, value: PExpression) extends PMapExp
+case class PMapKeys(map: PExpression) extends PMapExp
+case class PMapValues(map: PExpression) extends PMapExp
+case class PMapContains(map: PExpression, key: PExpression) extends PMapExp
+case class PMapLookup(map: PExpression, key: PExpression) extends PMapExp
+
 /*
  * Miscellaneous expressions
  */
@@ -469,14 +483,16 @@ case class PUnknownType() extends PInternalType
 
 case class PRefType(id: PIdnUse) extends PType
 
+/* TODO: Is it worth having PCollectionType, given that pairs and maps don't extend it? Can this be changed? */
+
 sealed trait PCollectionType extends PType {
   def elementType: PType
 }
 
 case class PSetType(elementType: PType) extends PCollectionType
 case class PSeqType(elementType: PType) extends PCollectionType
-
 case class PPairType(elementType1: PType, elementType2: PType) extends PType
+case class PMapType(keyType: PType, valueType: PType) extends PType
 
 /*
  * Miscellaneous
