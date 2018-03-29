@@ -32,7 +32,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   val reservedWords = Set(
     "true", "false",
     "int", "bool", "id", "set", "frac", "seq", "pair", "map",
-    "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
+    "region", "guards", "unique", "duplicable", "divisible", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", "non_atomic",
@@ -95,18 +95,25 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case mod ~ id ~ args => PGuardDecl(id, args, mod)
     } |
     guardModifier ~ idndef <~ ";" ^^ {
-      case mod ~ id => PGuardDecl(id, Vector.empty, mod)
+      case mod ~ id => mod match {
+        case _: PUniqueGuard | _: PDuplicableGuard => PGuardDecl(id, Vector.empty, mod)
+        case _: PDivisibleGuard => PGuardDecl(id, Vector(PFormalArgumentDecl(PIdnDef("perm").at(id),PFracType().at(id)).at(id)), mod)
+
+      }
     }
 
   lazy val guardModifier: Parser[PGuardModifier] =
     "unique" ^^^ PUniqueGuard() |
     "duplicable" ^^^ PDuplicableGuard() |
+    "divisible" ^^^ PDivisibleGuard() |
     success(PUniqueGuard())
 
   private lazy val guardPrefix: Parser[~[PIdnUse, Vector[PExpression]]] =
-    idnuse ~ ("(" ~> listOfExpressions <~ ")").? ^^ {
-      case guardId ~ optArgs => new ~(guardId, optArgs.getOrElse(Vector.empty))
-    }
+    idnuse ~ ("(" ~> listOfExpressions <~ ")") ^^ {
+      case guardId ~ args => new ~(guardId, args)
+    } |
+    idnuse ^^ (guardId => new ~(guardId, Vector.empty))
+
 
   lazy val action: Parser[PAction] =
     /* Matches

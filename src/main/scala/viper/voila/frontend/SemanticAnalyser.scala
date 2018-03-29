@@ -43,7 +43,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                    case other if !other.isInstanceOf[ErrorEntity] =>
                      message(receiver, s"Receiver $receiver is not of struct type")
                 }
-              case other if !other.isInstanceOf[PUnknownType] =>
+              case other if !other.isInstanceOf[PUnknownType] => // FIXME: looks wrong
                 message(receiver, s"Receiver $receiver is not of reference type")
             }
 
@@ -74,8 +74,30 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         contractMessages ++ atomicityMessages
 
-      case action: PAction =>
-        reportTypeMismatch(action.to, typ(action.from))
+      case action: PAction => // TODO: add guard type check and it seems that condition type check is missing
+        reportTypeMismatch(action.to, typ(action.from)) ++
+        checkUse(entity(action.guardId)) {
+          case GuardEntity(decl, region) => decl.modifier match {
+            case _: PUniqueGuard | _: PDuplicableGuard =>
+              reportArgumentLengthMismatch(action.guardId, decl.id, 0, action.guardArguments.length)
+
+            case _: PDivisibleGuard =>
+              val lengthMessages =
+                reportArgumentLengthMismatch(action.guardId, decl.id, 1, action.guardArguments.length)
+
+              val typeMessages =
+                if (lengthMessages.isEmpty) {
+                  reportTypeMismatch(action.guardArguments.head, PFracType(), typ(action.guardArguments.head))
+                } else {
+                  Vector.empty
+                }
+
+              lengthMessages ++ typeMessages
+          }
+
+          case _ =>
+            message(action.guardId, s"Expected a guard, but got ${action.guardId.name}")
+        }
 
       case PAssign(lhs, rhs) =>
         val lhsEntity = entity(lhs)
@@ -423,6 +445,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val usedWithRegion: PIdnNode => PRegion =
     attr(regionIdUsedWith(_)._1)
 
+  /**
+    * Some region predicate of the region referred to by an identifier definition or use.
+    */
+
   lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp =
     attr(id => regionIdUsedWith(id) match { case (region, regionAssertions) =>
       val regionArguments =
@@ -681,6 +707,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         predicateExp
     }
+
+  /**
+    * Index of the argument bound by the binder in the predicate. None is returned if the region state is bound.
+    */
 
   lazy val outArgumentIndexOf: PPredicateExp => PLogicalVariableBinder => Option[Int] =
     paramAttr(exp => binder => {
@@ -1040,6 +1070,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     }
 
   lazy val boundVariables: PExpression => ListSet[PIdnDef] =
+    /* TODO: check whether or not the current behaviour is intended. */
     attr {
       case PNamedBinder(id, _) => ListSet(id)
       case _ => ListSet.empty

@@ -68,6 +68,7 @@ sealed trait PGuardModifier extends PModifier
 
 case class PUniqueGuard() extends PGuardModifier
 case class PDuplicableGuard() extends PGuardModifier
+case class PDivisibleGuard() extends PGuardModifier
 
 /*
  * Identifiers
@@ -131,7 +132,7 @@ case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
 
 case class PAction(binders: Vector[PNamedBinder],
                    condition: PExpression,
-                   guardId: PIdnUse,
+                   guardId: PIdnUse, // TODO: has to be able to express arbitrary guard combinations
                    guardArguments: Vector[PExpression],
                    from: PExpression,
                    to: PExpression)

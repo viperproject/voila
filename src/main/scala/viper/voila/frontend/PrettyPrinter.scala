@@ -126,6 +126,7 @@ class DefaultPrettyPrinter
     modifier match {
       case PUniqueGuard() => "unique"
       case PDuplicableGuard() => "duplicable"
+      case PDivisibleGuard() => "divisible"
     }
   }
 
