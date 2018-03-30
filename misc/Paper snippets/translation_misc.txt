@@ -1,0 +1,32 @@
+⟦G(e1, ...)@e0⟧ ≡ 
+  // translate: PGuardExp -> vpr.PredicateAccessPredicate
+  
+  Let R be the region that declares G
+  
+  R_G(⟦e0⟧, ⟦e1⟧, ...)
+
+
+⟦R(e0, e1, ...)⟧ ≡ 
+  // getAndTranslateRegionPredicateDetails: PPredicateExp -> (PRegion, Vector[Exp], Vector[EqCmp])
+  
+  Let e0, ... e_k-1 be region R's in-arguments 
+  and e_k, ... its out-arguments
+
+  // Return a pair of two sequences: translated in- and translated out-arguments
+  (⟦e0⟧_(R, 0), ..., ⟦e_k-1⟧_(R, k-1);
+   ⟦e_k⟧_(R, k), ...)
+
+
+⟦e⟧_(R, i) ≡ 
+  // Translate e as the i-th argument of region R
+  // Part of getAndTranslateRegionPredicateDetails
+  
+  if argument i of region R is an in-argument:
+    ⟦e⟧
+  else: // then it must be an out-argument
+    if e is a logical variable binder:
+      true
+    else:
+      ⟦e_i⟧ == region-out-argument-function(R, i-k) // e_k is out-argument 0, etc.
+
+

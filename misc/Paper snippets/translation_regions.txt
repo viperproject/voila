@@ -1,0 +1,35 @@
+TODO: Distinguish in- and out-arguments in declaration
+
+region R(id r, T1 x1, T2 x2, ...)
+  guards {
+    modifier1 G1(T'1, T'2, ... )
+    ...
+  }
+  interpretation { I }
+  state { ϕ }
+  actions {
+    ...
+  }
+
+=========================================================================
+
+region-predicate(R) ≡
+  Let r, x1, ... be region R's formal in-arguments (with appropriate Viper types)
+  Let I be its interpretation
+
+  predicate R_interp(r: T0, x1: T1, ...) { 
+    ⟦I⟧
+  }
+
+
+region-state-function(R) ≡
+  Let r, x1, ... be region R's formal in-arguments (with appropriate Viper types)
+  Let ϕ be its state expression and T the type of ϕ
+
+  regionPred ≡ region-predicate-access(R, r, x1, ...)
+
+  // TODO: Consider whether or not we want to include the state trigger function trick/hack
+
+  function R_state(r: T0, x1: T1, ...): T
+    requires regionPred
+  { unfolding regionPred in ⟦ϕ⟧ }

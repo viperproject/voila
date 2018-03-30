@@ -1,0 +1,118 @@
+TODO: Distinguish in- and out-arguments in declaration
+
+region R(id r, T1 x1, T2 x2, ...)
+  guards {
+    modifier1 G1(T'1, T'2, ... )
+    ...
+  }
+  interpretation { I }
+  state { ϕ }
+  actions {
+    ...
+  }
+
+============================== Make Atomic ==============================
+
+make_atomic
+  using R(e0, e1, ...) // No out-arguments allowed
+  with  G(e'1, ...)@e'0  // G is one of R's guards
+{
+  s;
+}
+
+
+(r, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+guard ≡ ⟦G(e'1, ...)@e'0⟧
+atomicityContextX ≡ r.X // TODO: Simply plug in ⟦interference-set⟧ everywhere
+
+
+inhale acc(r.diamond);
+exhale guard;
+label pre_havoc1;
+stabilise-region-instance(R, r, v1, ..., pre_havoc1) // TODO: Define stabilise-region-instance
+⟦s⟧ // Define ⟦...⟧
+assert r.from in atomicityContextX;
+region-state-change-allowed-by-guard(R, r, v1, ..., G, guard, r.from, r.to) // TODO: Define
+label pre_havoc2;
+stabilise-region-instance(R, r, v1, ..., pre_havoc2) // TODO: Define stabilise-region-instance
+inhale r.to == R_state(r, v1, ...);
+inhale r.from == old(R_state(r, v1, ...));
+inhale guard;
+exhale acc(r.from) && acc(r.to);
+
+
+============================== Open Region ==============================
+
+open_region
+  using R(e0, e1, ...) // No out-arguments allowed
+{
+  s;
+}
+
+
+(r, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+  
+
+label pre_open_region;
+unfold R_interp(r, v1, ...);
+⟦s⟧
+fold R_interp(r, v1, ...);
+assert R_state(r, v1, ...) == old[pre_open_region](R_state(r, v1, ...));
+
+
+============================== Use Atomic ==============================
+
+use_atomic
+  using R(e0, e1, ...) // No out-arguments allowed
+  with  G(e'1, ...)@e'0  // G is one of R's guards
+{
+  s;
+}
+
+
+(r, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+guard ≡ ⟦G(e'1, ...)@e'0⟧
+
+
+label pre_use_atomic;
+exhale guard;
+stabilise-regions(all regions other than R) // TODO: Define
+unfold R_interp(r, v1, ...);
+stabilise-regions(R)
+inhale guard;
+⟦s⟧
+fold R_interp(r, v1, ...);
+region-state-change-allowed-by-guard(
+  R, 
+  r, v1, ..., 
+  G, 
+  guard, 
+  old[pre_use_atomic](R_state(r, v1, ...)), 
+  R_state(r, v1, ...))
+
+
+============================== Update Region ==============================
+
+update_region
+  using R(e0, e1, ...) // No out-arguments allowed
+{
+  s;
+}
+
+
+(r, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+
+
+exhale acc(r.diamond);
+label pre_region_update;
+unfold R_interp(r, v1, ...);
+stabilise-regions(all regions)
+⟦s⟧
+fold R_interp(r, v1, ...);
+if (R_state(r, v1, ...) != old[pre_region_update](R_state(r, v1, ...))) {
+  inhale acc(r.from) && acc(r.to);
+  r.from := old[pre_region_update](R_state(r, v1, ...));
+  r.to := R_state(r, v1, ...);
+} else {
+  inhale acc(r.diamond);
+}
