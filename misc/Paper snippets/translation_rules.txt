@@ -34,7 +34,7 @@ stabilise-region-instance(R, r, v1, ..., pre_havoc1) // TODO: Define stabilise-r
 assert r.from in atomicityContextX;
 region-state-change-allowed-by-guard(R, r, v1, ..., G, guard, r.from, r.to) // TODO: Define
 label pre_havoc2;
-stabilise-region-instance(R, r, v1, ..., pre_havoc2) // TODO: Define stabilise-region-instance
+stabilise-region-instance(R, r, v1, ..., pre_havoc2)
 inhale r.to == R_state(r, v1, ...);
 inhale r.from == old(R_state(r, v1, ...));
 inhale guard;

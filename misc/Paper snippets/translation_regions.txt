@@ -26,10 +26,8 @@ region-state-function(R) ≡
   Let r, x1, ... be region R's formal in-arguments (with appropriate Viper types)
   Let ϕ be its state expression and T the type of ϕ
 
-  regionPred ≡ region-predicate-access(R, r, x1, ...)
-
-  // TODO: Consider whether or not we want to include the state trigger function trick/hack
+  // TODO: Decider whether or not we want/have to include the state trigger function trick/hack
 
   function R_state(r: T0, x1: T1, ...): T
-    requires regionPred
-  { unfolding regionPred in ⟦ϕ⟧ }
+    requires R_interp(r, x1, ...)
+  { unfolding R_interp(r, x1, ...) in ⟦ϕ⟧ }
