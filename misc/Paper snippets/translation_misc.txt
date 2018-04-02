@@ -1,12 +1,13 @@
-⟦G(e1, ...)@e0⟧ ≡ 
+⟪G(e1, ...)@e0⟫ ≡ 
   // translate: PGuardExp -> vpr.PredicateAccessPredicate
   
   Let R be the region that declares G
   
   return R_G(⟦e0⟧, ⟦e1⟧, ...)
 
+=========================================================================
 
-⟦R(e0, e1, ...)⟧ ≡ 
+⟪R(e0, e1, ...)⟫ ≡
   // getAndTranslateRegionPredicateDetails: PPredicateExp -> (PRegion, Vector[Exp], Vector[EqCmp])
   
   Let e0, ... e_k-1 be region R's in-arguments 
@@ -14,11 +15,11 @@
 
   // Return a pair of two sequences: translated in- and translated out-arguments
   return
-    (⟦e0⟧_(R, 0), ..., ⟦e_k-1⟧_(R, k-1);
-    ⟦e_k⟧_(R, k), ...)
+    (⟪e0⟫_(R, 0), ..., ⟪e_k-1⟫_(R, k-1);
+     ⟪e_k⟫_(R, k), ...)
 
 
-⟦e⟧_(R, i) ≡ 
+⟪e⟫_(R, i) ≡
   // Translate e as the i-th argument of region R
   // Part of getAndTranslateRegionPredicateDetails
   
@@ -30,4 +31,50 @@
     else:
       return ⟦e_i⟧ == region-out-argument-function(R, i-k) // e_k is out-argument 0, etc.
 
+=========================================================================
 
+⟪x, B⟫ ≡
+  // translateAsHeapAccess: PIdnNode, PNamedBinder -> Exp
+  Let GBC be the general binding context of B // TODO
+  Let GUC be the general using context of x   // TODO
+
+  heapRead ≡
+    switch (B):
+      case 'y.f |-> ?x': 
+        ⟦y.f⟧
+      case 'R(r, e1, ..., ?x)': // TODO: Support out-arguments that aren't the abstract state
+        R_state(⟦r⟧, ⟦e1⟧, ...)
+      case 'interference ?x in S on r':
+        Let R(r, e1, ...) be the region assertion r is used with.
+
+        R_state(⟦r⟧, ⟦e1⟧, ...)
+
+  switch (GBC, GUC):
+    case (C, C) | (Interference-Clause, Precondition):
+      return heapRead
+    case (Precondition, _) | (Interference-Clause, _):
+      return old(heapRead)
+    case (Procedure-Body, _):
+      if x is bound and used in the same top-level assertion:
+        // Directly read from the heap
+        return heapRead
+      else:
+        // Use the homonymous local variable to which the bound heap value has 
+        // been assigned to, e.g. if the binder was part of an exhale statement.
+        return x
+
+=========================================================================
+
+extract-logical-variable-bindings(a) ≡
+  // extractLogicalVariableBindings: PExpression -> Vector[LocalVarAssign]
+
+  Let ss be an empty sequence of Viper assignments to local variables
+
+  Traverse assertion a and collect logical variable bindings as assignments
+  to local variables:
+    case x.f |-> ?v:
+      ss += (v := ⟦x.f⟧)
+    case R(r, e1, ..., ?v): // TODO: Support out-arguments that aren't the abstract state
+      ss += (v := R_state(⟦r⟧, ⟦e1⟧, ...))
+
+  return ss

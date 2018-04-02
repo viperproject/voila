@@ -1,1 +1,72 @@
-TODO: Define ⟦s⟧
+NOTE: Voila does not support non-ghost, non-atomic statements in a context
+      where an atomic statement is expected.
+
+⟦s⟧ ≡ // translate: PStatement -> Stmt
+  if !is-ghost(s) &&
+        atomicity(s) != atomic &&
+        expected-atomicity(s) == atomic:
+    ERROR // Combination isn't supported
+
+  mustHavocAfter ≡ s' => 
+    !is-atomic(s') || 
+    (is-atomic(s') && !is-ghost(s') && expected-atomicity(s') != atomic)
+
+  vprHavoc ≡
+    if mustHavocAfter(s):
+      // Voila does certain optimisations here in order to avoid stabilising
+      // more than once between statements. We can probably ignore this detail here.
+      stabilise-regions(all region types declared by the current program)
+    else:
+      skip;
+
+  return 
+    ⟪s⟫
+    vprHavoc
+
+
+⟪s⟫ ≡ // directlyTranslate: PStatement -> Stmt
+
+⟪s1; s2⟫ ≡ ⟦s1⟧; ⟦s2⟧
+
+⟪skip⟫ ≡ assert true
+
+⟪if (b) { s1; } else { s2; }⟫ ≡
+  if (⟦b⟧) { ⟦s1⟧ } else { ⟦s2⟧ }
+
+⟪while (b) invariant I; { s; }⟫ ≡
+  while (⟦b⟧) invariant ⟦I⟧ { ⟦s⟧ }
+
+⟪x := e⟫ ≡ ⟦x⟧ := ⟦e⟧
+
+⟪x := y.f⟫ ≡ ⟦x⟧ := ⟦y.f⟧
+
+⟪x.f := e⟫ ≡ ⟦x.f⟧ := ⟦e⟧
+
+⟪unfold P(e1, ...)⟫ ≡ // TODO
+⟪fold P(e1, ...)⟫ ≡ // TODO
+
+⟪inhale a⟫ ≡
+  inhale ⟦a⟧
+  extract-logical-variable-bindings(a)
+
+⟪exhale a⟫ ≡
+  extract-logical-variable-bindings(a)
+  exhale ⟦a⟧
+
+⟪assert a⟫ ≡
+  extract-logical-variable-bindings(a)
+  assert ⟦a⟧
+
+⟪havoc x.f⟫ ≡ 
+  exhale acc(⟦x.f⟧); 
+  inhale acc(⟦x.f⟧)
+
+⟪havoc x⟫ ≡ ⟦x⟧ := havoc_T() // where T is the Viper type of x
+
+⟪use_region_interpretation R(r, e1, ...)⟫ ≡ // TODO
+
+⟪use lemma(e1, ...)⟫ ≡ // TODO
+
+⟪y1, ... := proc(e1, ...)⟫ ≡ // TODO
+
+The translation of rule blocks such as make_atomic is defined in translation_rules.txt

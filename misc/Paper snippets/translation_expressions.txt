@@ -1,3 +1,84 @@
-TODO: Define ⟦e⟧
+⟦lit⟧ ≡ 
+  // Literals that Viper supports as well: bools, ints, null, permissions
+  lit'
 
-Particularly interesting: translation of logical variable binders
+⟦e1 ⨂ e2⟧ ≡
+  // Binary operators that Viper supports as well: arithmetic, relational 
+  // and boolean operators
+  ⟦e1⟧ ⨂' ⟦e2⟧
+
+⟦!e⟧ ≡ !⟦e⟧
+
+⟦e1 ? e2 : e3⟧ ≡ ⟦e1⟧ ? ⟦e2⟧ : ⟦e3⟧
+
+⟦Set<T>(e1, ...)⟧ ≡ Set[T'](⟦e1⟧, ...)
+⟦Seq<T>(e1, ...)⟧ ≡ Seq[T'](⟦e1⟧, ...)
+
+⟦Int⟧ ≡ IntSet()
+⟦Nat⟧ ≡ NatSet()
+
+⟦Set<T>(?v | e(v))⟧ ≡ // TODO
+
+// Translating collection operations is straight-forward
+//   - Sets:
+//       - e1 in e2
+//       - e1 union e2
+//   - Sequences:
+//       - size(e)
+//       - head(e)
+//       - tail(e)
+//   - Pairs:
+//       - ...
+//   - Maps:
+//       - ...
+
+⟦x⟧ ≡ 
+  // translateUseOf: PIdnNode -> Exp
+  if x is a logical variable:
+    // Let B be the context in which x was bound, i.e. x's binder
+    // translateUseOf: PIdnNode, PNamedBinder -> Exp
+    switch(B):
+      case 'Set<T>(?x | ...)': // set comprehension
+        x                    
+      case 'T ?x, ... | ... | G(...): ... ~> ...': // action
+        x
+      case 'y.f |-> ?x': // points-to predicate
+        ⟪x, B⟫
+      case 'R(..., ?x, ...)': // region assertion
+        ⟪x, B⟫
+      case 'interference ?x in S on r': // interference clause
+        ⟪x, B⟫
+  else:
+    // Formal argument, formal return value, local variable
+    x
+
+⟦x.f |-> e⟧ ≡
+  cnstr ≡
+    if e is a logical variable binder: true
+    else: ⟦x.f⟧ == ⟦e⟧
+
+  acc(⟦x.f⟧) && cnstr
+
+⟦G(e1, ...)@e0⟧ ≡ ⟪G(e1, ...)@e0⟫
+
+⟦R(e0, e1, ...)⟧ ≡
+  Let e0, ... e_k-1 be region R's in-arguments and e_k, ... its out-arguments.
+  Let e'0, ... e'_k-1, e'_k, ... ≡ ⟪R(e0, e1, ...)⟫.
+  Recall: in-arguments are translated directly, out-arguments are translated
+  as equalities between the out-arguments and the underlying getter functions.
+
+  R_interp(e'0, ... e'_k-1) && e'_k && e'_k+1 && ...
+
+⟦P(e1, ...)⟧ ≡ P(⟦e1⟧, ...)
+
+⟦r |=> <D>⟧ ≡ acc(⟦r⟧.diamond)
+
+⟦r |=> (e1, e2)⟧ ≡
+  Let R be the region type that region identifier r is used with.
+  Let T be the type of the abstract state of region R.
+
+  acc(⟦r⟧.from) && ⟦r⟧.from == ⟦e1⟧ && acc(⟦r⟧.to) && ⟦r⟧.to == ⟦e2⟧
+
+⟦x.f⟧ ≡ ⟦x⟧.f
+
+⟦unfolding P(e1, ..) in e⟧ ≡ // TODO
