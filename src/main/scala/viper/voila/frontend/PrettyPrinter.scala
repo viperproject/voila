@@ -75,7 +75,7 @@ class DefaultPrettyPrinter
     }
 
   def toDoc(action: PAction): Doc = {
-    val PAction(binders, condition, guardId, guardArguments, from, to) = action
+    val PAction(binders, condition, guards, from, to) = action
 
     val bindersDoc =
       if (binders.isEmpty) emptyDoc
@@ -87,11 +87,13 @@ class DefaultPrettyPrinter
         case _ => toDoc(condition) <+> "|" <> space
       }
 
-    val guardDoc =
-      toDoc(guardId) <>
-      (if (guardArguments.isEmpty) emptyDoc else asArguments(guardArguments))
+    def guardDoc(guard: (PIdnUse, Vector[PExpression])): Doc =
+      toDoc(guard._1) <>
+      (if (guard._2.isEmpty) emptyDoc else asArguments(guard._2))
 
-    bindersDoc <> constraintDoc <> guardDoc <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
+    val guardsDoc = parens(ssep(guards map guardDoc, comma <> space))
+
+    bindersDoc <> constraintDoc <> guardsDoc <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
   }
 
   def toDoc(clause: PSpecificationClause): Doc = {
@@ -278,13 +280,13 @@ class DefaultPrettyPrinter
 
   def toDoc(rule: PRuleStatement): Doc = {
     rule match {
-      case PMakeAtomic(regionPredicate, guard, body) =>
+      case PMakeAtomic(regionPredicate, guards, body) =>
         (   "make_atomic" <> line
-         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> toDoc(guard) <> semi) <> line
+         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> ssep(guards map toDoc, comma <> space) <> semi) <> line
          <> braces(nest(toDoc(body))))
-      case PUseAtomic(regionPredicate, guard, body) =>
+      case PUseAtomic(regionPredicate, guards, body) =>
         (   "use_atomic" <> line
-         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> toDoc(guard) <> semi) <> line
+         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> ssep(guards map toDoc, comma <> space) <> semi) <> line
          <> braces(nest(toDoc(body))))
       case PUpdateRegion(regionPredicate, body) =>
         (   "update_region" <> line

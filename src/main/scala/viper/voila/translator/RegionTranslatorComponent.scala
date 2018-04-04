@@ -274,19 +274,18 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         val regionIdArgument = vpr.LocalVarDecl("$r", translate(PRegionIdType()))()
         val otherArguments = guard.formalArguments map translate
 
-        guard.modifier match {
-          case _: PUniqueGuard | _: PDuplicableGuard =>
+        (guard.modifier,otherArguments) match {
+          case (_: PUniqueGuard | _: PDuplicableGuard, args) =>
             vpr.Predicate(
               name = guardPredicateName(guard, region),
-              formalArgs = regionIdArgument +: otherArguments,
+              formalArgs = regionIdArgument +: args,
               body = None
             )()
 
-          case _: PDivisibleGuard =>
+          case (_: PDivisibleGuard, perm +: args) =>
             vpr.Predicate(
               name = guardPredicateName(guard, region),
-              /* The first other argument is the permission */
-              formalArgs = regionIdArgument +: otherArguments.tail,
+              formalArgs = regionIdArgument +: args,
               body = None
             )()
         }
@@ -402,25 +401,23 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprGuardPredicate = guardPredicate(guardDecl, region)
 
-    val vprGuardArguments = guardExp.arguments map translate
-
-    guardDecl.modifier match {
-      case _: PUniqueGuard | _:PDuplicableGuard =>
+    (guardDecl.modifier, guardExp.arguments) match {
+      case (_: PUniqueGuard | _:PDuplicableGuard, r +: args) =>
         vpr.PredicateAccessPredicate(
           vpr.PredicateAccess(
-            vprGuardArguments,
+            (r +: args) map translate,
             vprGuardPredicate.name
           )().withSource(guardExp),
           vpr.FullPerm()()
         )().withSource(guardExp)
 
-      case _: PDivisibleGuard =>
+      case (_: PDivisibleGuard, r +: perm +: args) =>
         vpr.PredicateAccessPredicate(
           vpr.PredicateAccess(
-            vprGuardArguments.head +: vprGuardArguments.tail.tail, // FIXME: employ better programming pattern
+            (r +: args) map translate,
             vprGuardPredicate.name
           )().withSource(guardExp),
-          vprGuardArguments.tail.head
+          translate(perm)
         )().withSource(guardExp)
     }
   }
@@ -681,8 +678,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def regionStateChangeAllowedByGuard(region: PRegion,
                                       vprRegionInArgs: Vector[vpr.Exp],
-                                      guardName: String,
-                                      vprGuard: vpr.PredicateAccessPredicate,
+                                      guards: Vector[PGuardExp],
                                       vprFrom: vpr.Exp,
                                       vprTo: vpr.Exp)
                                      : vpr.Assert = {
@@ -690,33 +686,64 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     /* from == to */
     val vprUnchanged = vpr.EqCmp(vprFrom, vprTo)()
 
-    val relevantActions =
-      region.actions.filter(_.guardId.name == guardName)
+
+    /*
+    val guardMap =
+      new  mutable.HashMap[String, mutable.Set[Vector[PExpression]]]
+      with mutable.MultiMap[String, Vector[PExpression]]
+
+    guards foreach {guard => guardMap.addBinding(guard.guard.name, guard.arguments)}
+
+
+*/
+    // FIXME: Assumes, every guard kind only occurs once (in guards and action). Maybe automatically combine all guards of the same kind
+    val guardMap = guards.map(g => g.guard.name -> g.arguments).toMap
+
+    def relevantAction(action: PAction): Boolean = {
+      // FIXME: assumes globally unique guard name
+      val actionKinds = action.guards map (_._1.name)
+
+      actionKinds forall (guardMap contains _)
+    }
+
+    val relevantActions = region.actions filter relevantAction
 
     val vprActionConstraints: Vector[vpr.Exp] =
       relevantActions.map(action => {
 
-        val vprExistentialConstraint = semanticAnalyser.entity(action.guardId) match {
-          case GuardEntity(guardDecl, `region`) => guardDecl.modifier match {
-            case _: PUniqueGuard | _: PDuplicableGuard =>
-              stateConstraintsFromAction(
-                action,
-                vprFrom,
-                vprTo,
-                vpr.TrueLit()())
-            case _: PDivisibleGuard =>
-              stateConstraintsFromAction(
-                action,
-                vprFrom,
-                vprTo,
-                vpr.PermLeCmp( // FIXME fails if guard types do not match
-                  translate(action.guardArguments.head),
-                  vprGuard.perm
-                )()
-                )
-          }
-        }
+        val vprExistentialConstraint = stateConstraintsFromAction(
+          action,
+          vprFrom,
+          vprTo,
+          vpr.TrueLit()())
 
+        var vprConjunctGuardCheck: vpr.Exp = vpr.TrueLit()()
+
+        var vprConditionGuardCheck: vpr.Exp = vpr.TrueLit()()
+
+        var conditionVars: Vector[vpr.LocalVarDecl] = Vector.empty
+
+        action.guards foreach { case (aGuardId, aGuardArgs) =>
+
+            val guardKind = semanticAnalyser.entity(aGuardId) match {
+              case GuardEntity(guardDecl, `region`) => guardDecl
+            }
+
+            val guardArgs = guardMap(aGuardId.name)
+
+            (guardKind.modifier, guardArgs, aGuardArgs) match {
+              case (_: PDivisibleGuard, r +: heldPerm +: _, requiredPerm +: _) =>
+                vprConjunctGuardCheck = vpr.And(
+                  vprConjunctGuardCheck,
+                  vpr.PermLeCmp(
+                    translate(requiredPerm),
+                    translate(heldPerm)
+                  )()
+                )()
+
+              case _ =>
+            }
+        }
 
         val binderInstantiations: Map[String, vpr.Exp] =
           action.binders.map(binder =>
@@ -724,16 +751,18 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                 binder.id.name -> vprFrom
               } else if (AstUtils.isBoundVariable(action.to, binder)) {
                 binder.id.name -> vprTo
-              } else if (action.guardArguments.exists(arg => AstUtils.isBoundVariable(arg, binder))) {
+              } else if (action.guards.exists(_._2.exists(arg => AstUtils.isBoundVariable(arg, binder)))) {
                 /* The bound variable is a direct argument of the action guard G, i.e. the action
                  * guard is of the shape G(..., k, ...).
                  */
+                val (guardId, guardArguments)
+                  = action.guards.find(_._2 exists (AstUtils.isBoundVariable(_, binder))).get
 
                 val argumentIndex = /* Index of k in G(..., k, ...) */
-                  action.guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
+                  guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
 
                 val vprArgument = /* Guard predicate is G(r, ..., k, ...) */
-                  vprGuard.loc.args(1 + argumentIndex)
+                  translate(guardMap(guardId.name)(1 + argumentIndex))
 
                 binder.id.name -> vprArgument
             } else {
@@ -748,7 +777,18 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             v.localVar -> binderInstantiations(v.name)
           )(breakOut)
 
-        vprExistentialConstraint.exp.replace(substitutes)
+        val actionConstraint = vprExistentialConstraint.exp.replace(substitutes)
+
+        val bodyRhs = vpr.And(actionConstraint,vprConjunctGuardCheck)()
+
+        val body = vpr.Implies(vprConditionGuardCheck, bodyRhs)()
+
+        if (conditionVars.isEmpty) {
+          body
+        } else {
+          // TODO: output forall
+          ???
+        }
       })
 
     val vprConstraint = viper.silicon.utils.ast.BigOr(vprUnchanged +: vprActionConstraints)
@@ -808,47 +848,53 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   private def assembleCheckIfEnvironmentMayHoldActionGuard(region: PRegion,
                                                            vprRegionId: vpr.Exp,
                                                            action: PAction)
-  : vpr.Exp = semanticAnalyser.entity(action.guardId) match {
-      case GuardEntity(guardDecl, `region`) =>
-        guardDecl.modifier match {
-          case _: PDuplicableGuard =>
-            vpr.TrueLit()()
+  : vpr.Exp = viper.silicon.utils.ast.BigAnd(
+    action.guards.map{case (gid, gargs) =>
+      assembleCheckIfEnvironmentMayHoldBaseActionGuard(region, vprRegionId, gid, gargs)
+    }
+  )
 
-          case _: PUniqueGuard =>
-            val vprGuardArguments = vprRegionId +: (action.guardArguments map translate)
+  private def assembleCheckIfEnvironmentMayHoldBaseActionGuard(region: PRegion,
+                                                           vprRegionId: vpr.Exp,
+                                                               guardId: PIdnUse,
+                                                               guardArguments: Vector[PExpression])
+  : vpr.Exp = semanticAnalyser.entity(guardId) match {
+    case GuardEntity(guardDecl, `region`) =>
+      (guardDecl.modifier, guardArguments) match {
+        case (_: PDuplicableGuard, args) =>
+          vpr.TrueLit()()
 
-            vpr.EqCmp(
-              vpr.CurrentPerm(
-                vpr.PredicateAccess(
-                  vprGuardArguments,
-                  guardPredicate(guardDecl, region).name
-                )()
-              )(),
-              vpr.NoPerm()()
-            )()
-
-          case _: PDivisibleGuard =>
-            val vprActionGuardArguments = action.guardArguments map translate
-            val requiredPerm = vprActionGuardArguments.head
-            val vprGuardArguments = vprRegionId +: vprActionGuardArguments.tail
-
-            vpr.PermLeCmp(
-              vpr.CurrentPerm(
-                vpr.PredicateAccess(
-                  vprGuardArguments,
-                  guardPredicate(guardDecl, region).name
-                )()
-              )(),
-              vpr.PermSub(
-                vpr.FullPerm()(),
-                requiredPerm
+        case (_: PUniqueGuard, args) =>
+          vpr.EqCmp(
+            vpr.CurrentPerm(
+              vpr.PredicateAccess(
+                vprRegionId +: (args map translate),
+                guardPredicate(guardDecl, region).name
               )()
-            )()
-        }
+            )(),
+            vpr.NoPerm()()
+          )()
 
-      case _ =>
-        sys.error(
-          s"Unexpectedly failed to find a declaration for the guard denoted by " +
-          s"${action.guardId} (${action.guardId.position})")
+        case (_: PDivisibleGuard, requiredPerm +: args) =>
+          vpr.PermLeCmp(
+            vpr.CurrentPerm(
+              vpr.PredicateAccess(
+                vprRegionId +: (args map translate),
+                guardPredicate(guardDecl, region).name
+              )()
+            )(),
+            vpr.PermSub(
+              vpr.FullPerm()(),
+              translate(requiredPerm)
+            )()
+          )()
+      }
+
+    case _ =>
+      sys.error(
+        s"Unexpectedly failed to find a declaration for the guard denoted by " +
+        s"${guardId} (${guardId.position})")
   }
 }
+
+

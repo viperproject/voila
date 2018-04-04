@@ -132,8 +132,7 @@ case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
 
 case class PAction(binders: Vector[PNamedBinder],
                    condition: PExpression,
-                   guardId: PIdnUse, // TODO: has to be able to express arbitrary guard combinations
-                   guardArguments: Vector[PExpression],
+                   guards: Vector[(PIdnUse, Vector[PExpression])],
                    from: PExpression,
                    to: PExpression)
     extends PAstNode with PBindingContext with PScope {
@@ -298,7 +297,7 @@ sealed trait PRuleStatement extends PStatement {
   def body: PStatement
 }
 
-case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+case class PMakeAtomic(regionPredicate: PPredicateExp, guards: Vector[PGuardExp], body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "make-atomic"
@@ -312,7 +311,7 @@ case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
   val components: Vector[PStatement] = Vector(body)
 }
 
-case class PUseAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+case class PUseAtomic(regionPredicate: PPredicateExp, guards: Vector[PGuardExp], body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "use-atomic"

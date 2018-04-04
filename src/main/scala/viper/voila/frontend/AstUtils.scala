@@ -45,4 +45,5 @@ object AstUtils {
       case (PIdnExp(PIdnUse(name)), namedBinder: PNamedBinder) => name == namedBinder.id.name
       case _ => false
     }
+
 }

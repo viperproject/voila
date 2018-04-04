@@ -75,28 +75,31 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         contractMessages ++ atomicityMessages
 
       case action: PAction => // TODO: add guard type check and it seems that condition type check is missing
+
         reportTypeMismatch(action.to, typ(action.from)) ++
-        checkUse(entity(action.guardId)) {
-          case GuardEntity(decl, region) => decl.modifier match {
-            case _: PUniqueGuard | _: PDuplicableGuard =>
-              reportArgumentLengthMismatch(action.guardId, decl.id, 0, action.guardArguments.length)
+        action.guards flatMap { case (guardId: PIdnUse, guardArguments: Vector[PExpression]) =>
+          checkUse(entity(guardId)) {
+            case GuardEntity(decl, region) => decl.modifier match {
+              case _: PUniqueGuard | _: PDuplicableGuard =>
+                reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
 
-            case _: PDivisibleGuard =>
-              val lengthMessages =
-                reportArgumentLengthMismatch(action.guardId, decl.id, 1, action.guardArguments.length)
+              case _: PDivisibleGuard =>
+                val lengthMessages =
+                  reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
 
-              val typeMessages =
-                if (lengthMessages.isEmpty) {
-                  reportTypeMismatch(action.guardArguments.head, PFracType(), typ(action.guardArguments.head))
-                } else {
-                  Vector.empty
-                }
+                val typeMessages =
+                  if (lengthMessages.isEmpty) {
+                    reportTypeMismatch(guardArguments.head, PFracType(), typ(guardArguments.head))
+                  } else {
+                    Vector.empty
+                  }
 
-              lengthMessages ++ typeMessages
+                lengthMessages ++ typeMessages
+            }
+
+            case _ =>
+              message(guardId, s"Expected a guard, but got ${guardId.name}")
           }
-
-          case _ =>
-            message(action.guardId, s"Expected a guard, but got ${action.guardId.name}")
         }
 
       case PAssign(lhs, rhs) =>
@@ -420,7 +423,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val entity: PIdnNode => Entity =
     attr {
       case g @ tree.parent(PGuardExp(guardId, _)) if guardId eq g => lookupGuard(guardId)
-      case g @ tree.parent(PAction(_, _, guardId, _, _, _)) if guardId eq g => lookupGuard(guardId)
+      case g @ tree.parent(PAction(_, _, guards, _, _)) if guards.exists(_._1 eq g) => lookupGuard(g) // FIXME: not sure whether or not PAction is still a parent in this case
       case n => lookup(env(n), n.name, UnknownEntity())
     }
 
@@ -638,9 +641,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   AstUtils.isBoundVariable(action.to, binder)) {
 
                 typ(region.state)
-              } else if (action.guardArguments.exists(arg => AstUtils.isBoundVariable(arg, binder))) {
-                val guard = region.guards.find(_.id.name == action.guardId.name).get
-                val argIdx = action.guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
+              } else if (action.guards.exists(_._2.exists(arg => AstUtils.isBoundVariable(arg, binder)))) {
+                val (guardId, guardArguments) =
+                  action.guards.find(_._2.exists(arg => AstUtils.isBoundVariable(arg, binder))).get
+                val guard = region.guards.find(_.id.name == guardId.name).get
+                val argIdx = guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
 
                 guard.formalArguments(argIdx).typ
               } else {
