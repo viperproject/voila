@@ -1,0 +1,498 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Voila",
+  "fileTypes": ["vl"],
+	
+	"scopeName": "source.voila",
+
+	"patterns": [
+		{ "include": "#comments" },
+		{ "include": "#structs" },
+		{ "include": "#regions" },
+		{ "include": "#guards" },
+		{ "include": "#interpretations" },
+		{ "include": "#states" },
+		{ "include": "#actions" },
+		{ "include": "#predicates" },
+		{ "include": "#procedures" },
+		
+		{ "include": "#keywords" },
+		{ "include": "#constants" }
+	],
+
+
+	"repository": {
+		"comments": {
+			"patterns": [
+				{
+					"begin": "/\\*", 
+					"captures": {
+						"0": { "name": "punctuation.definition.comment.voila" }
+					}, 
+					"end": "\\*/", 
+					"name": "comment.block.voila"
+				}, 
+				{
+					"captures": {
+						"1": { "name": "comment.line.double-slash.voila" }, 
+						"2": { "name": "punctuation.definition.comment.voila" }
+					}, 
+					"match": "\\s*((//).*$\\n?)"
+				}
+			]
+		},
+
+
+		"constants": {
+			"patterns": [
+				{
+					"name": "constant.language.voila",
+					"match": "\\b(null|true|false)\\b"
+				},
+				{
+					"name": "constant.numeric.voila",
+					"match": "((\\+|-)?\\d+)"
+				}
+			]
+		},
+
+		"keywords": {
+			"---NOTE-----": "Keywords used in specific syntax rules, e.g. 'abstract_atomic' and 'procedures', don't actually need to be included here",
+			"patterns": [
+				{
+					"match": "\\b(if|else|do|while|skip|predicate|struct|procedure|macro|region|guards|interpretation|state|actions|returns)\\b",
+					"name": "keyword.control.voila"
+				},
+				{
+					"match": "\\b(inhale|exhale|assume|assert|havoc|use_region_interpretation|use|unfolding|unfold|fold)\\b",
+					"name": "keyword.control.ghost.voila"
+				},
+				{
+					"match": "\\b(make_atomic|update_region|use_atomic|open_region)\\b",
+					"name": "keyword.control.rules.voila"
+				},
+				{
+					"match": "\\b(using|with|interference|requires|ensures|invariant)\\b",
+					"name": "keyword.clauses.voila"
+				},
+				{
+					"match": "\\b(abstract_atomic|primitive_atomic|non_atomic)\\b",
+					"name": "keyword.atomicity-modifiers.voila"
+				},
+				{
+					"match": "\\b(in|on)\\b", 
+					"name": "keyword.operator.voila"
+				},
+				{
+					"match": "(==>|<==>)",
+					"name": "keyword.operator.logical.voila"
+				},
+				{
+					"match": "(==|!=|<=|>=|<|>)",
+					"name": "keyword.operator.comparison.voila"
+				},
+				{
+					"match": "(=)", 
+					"name": "keyword.operator.assignment.voila"
+				},
+				{
+					"match": "(\\-|\\+|\\*|div|mod)",
+					"name": "keyword.operator.arithmetic.voila"
+				}, 
+				{
+					"match": "(!|&&|\\|\\|)", 
+					"name": "keyword.operator.logical.voila"
+				},
+				{
+					"match": "(;)", 
+					"name": "punctuation.terminator.voila"
+				}
+			]
+		},
+
+		"generics": {
+			"begin": "<",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.bracket.angle.voila"
+				}
+			},
+			"end": ">",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.bracket.angle.voila"
+				}
+			},
+			"patterns": [ 
+				{
+					"include": "#types"
+				},
+				{
+					"match": ",",
+					"name": "punctuation.separator.delimiter.voila"
+				}
+			]
+		},
+
+		"types": {
+			"patterns": [
+				{
+					"match": "\\b(int|bool|id|frac)\\b", 
+					"name": "storage.type.buildin.voila"
+				},
+				{
+					"begin": "\\b(set|seq|pair|map)(?=<)",
+					"beginCaptures": {
+						"1": { "name": "storage.type.buildin.collection.voila" }
+					},
+					"end": "(?=\\S+>)\\b",
+					"patterns": [
+						{ "include": "#generics" }
+					]
+				},
+				{
+					"match": "\\b(\\w+)\\b", 
+					"name": "storage.type.struct.voila"
+				}
+			]
+		},
+
+		"parameters": {
+			"patterns": [
+				{
+					"begin": "(?=\\S+\\s+\\S+)",
+					"end": "(?=,|\\))",
+					"name": "meta.definition.variable.voila",
+					"patterns": [
+						{
+							"match": "(\\w+)\\s*((,)|(?=\\)))",
+							"captures": {
+								"1": {
+									"name": "entity.name.variable.voila",
+									"-----NOTE-----": "An alternative would be 'variable.parameter.voila'"
+								}
+							}
+						},
+						{ "include": "#types" }
+					]
+				}
+			]
+		},
+
+		"parameterized-entity": {
+			"begin": "(\\w+)\\s*(\\()",
+			"beginCaptures": {
+				"1": { "name": "entity.name.other.voila" },
+				"2": { "name": "punctuation.definition.parameters.begin.bracket.round.voila" }
+			},
+			"end": "\\)",
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.parameters.end.bracket.round.voila" }
+			},
+			"patterns": [
+				{
+					"include": "#parameters"
+				}
+			]
+		},
+
+		"structs": {
+			"name": "meta.struct.voila",
+			"begin": "\\b(?=struct\\s+\\w+)",
+			"end": "}",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.section.struct.end.bracket.curly.voila"
+				}
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"match": "(struct)\\s+(\\w+)",
+					"name": "meta.struct.identifier.voila",
+					"captures": {
+						"1": { 
+							"name": "keyword.control.toplevel.voila",
+							"-----NOTE-----": "Alternatively 'storage.modifier.voila'"
+						},
+						"2": { "name": "entity.name.other.struct.voila" }
+					}
+				},
+				{
+					"begin": "{",
+					"beginCaptures": {
+						"0": { "name": "punctuation.section.struct.begin.bracket.curly.voila" }
+					},
+					"end": "(?=})",
+					"contentName": "meta.struct.body.voila",
+					"patterns": [
+						{ "include": "#comments" },
+						{
+							"name": "meta.definition.variable.voila",
+							"begin": "(?=[^\\s;]+\\s+\\w+)",
+							"end": "(?=;)",
+							"patterns": [
+								{
+									"match": "(\\w+)(?=\\s*;)",
+									"captures": {
+										"1": {
+											"name": "entity.name.variable.voila",
+											"-----NOTE-----": "Alternatively 'variable.other.definition.voila'"
+										}
+									}
+								},
+								{ "include": "#types" }
+							]
+						}
+					]
+				}
+			]
+		},
+
+		"regions": {
+			"name": "meta.region.voila",
+			"begin": "\\b(region)\\b",
+			"beginCaptures": {
+				"1": { "name": "keyword.control.toplevel.voila" }
+			},
+			"end": "(?=$)",
+			"endCaptures": {
+				"0": { "name": "punctuation.section.region.end.bracket.curly.voila" }
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"name": "meta.region.identifier.voila",
+					"include": "#parameterized-entity"
+				}
+			]
+		},
+
+		"guard-modifiers": {
+			"patterns": [
+				{
+					"match": "\\b(unique|duplicable)\\b",
+					"name": "storage.modifier.voila"
+				}
+			]
+		},
+
+		"guards": {
+			"name": "meta.guards.voila",
+			"begin": "\\b(?=guards)\\b",
+			"end": "}",
+			"endCaptures": {
+				"0": { "name": "punctuation.section.guards.end.bracket.curly.voila" }
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"match": "(guards)",
+					"name": "keyword.control.voila",
+					"-----NOTE-----": "Alternatively 'storage.modifier.voila'"
+				},
+				{
+					"begin": "{",
+					"beginCaptures": {
+						"0": { 	"name": "punctuation.section.guards.begin.bracket.curly.voila" }
+					},
+					"end": "(?=})",
+					"contentName": "meta.guards.body.voila",
+					"patterns": [
+						{ "include": "#comments" },
+						{
+							"name": "meta.definition.guard.voila",
+							"begin": "(?=\\w+\\s+[^;]+)",
+							"end": "(?=;)",
+							"patterns": [
+								{
+									"name": "meta.guard.identifier.voila",
+									"match": "(\\w+)(?=\\s*;)",
+									"captures": {
+										"1": { "name": "entity.name.other.voila" }
+									}
+								},
+								{
+									"name": "meta.guard.identifier.voila",
+									"include": "#parameterized-entity"
+								},
+								{ "include": "#guard-modifiers" }
+							]
+						}
+					]
+				}
+			]
+		},
+
+		"expressions": {
+			"patterns": [
+				 { "include": "#comments" },
+				 { "include": "#constants" },
+				 { "include": "#keywords" }
+			]
+		},
+
+		"interpretations": {
+			"name": "meta.interpretation.voila",
+			"begin": "\\b(interpretation)\\b",
+			"beginCaptures": {
+				"1": { "name": "keyword.control.voila" }
+			},
+			"end": "}",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.section.interpretation.end.bracket.curly.voila"
+				}
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"begin": "{",
+					"beginCaptures": {
+						"0": { "name": "punctuation.section.interpretation.begin.bracket.curly.voila" }
+					},
+					"end": "(?=})",
+					"contentName": "meta.interpretation.body.voila",
+					"patterns": [
+						{ "include": "#expressions" }
+					]
+				}
+			]
+		},
+
+		"states": {
+			"name": "meta.state.voila",
+			"begin": "\\b(state)\\b",
+			"beginCaptures": {
+				"1": { "name": "keyword.control.voila" }
+			},
+			"end": "}",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.section.state.end.bracket.curly.voila"
+				}
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"begin": "{",
+					"beginCaptures": {
+						"0": { "name": "punctuation.section.state.begin.bracket.curly.voila" }
+					},
+					"end": "(?=})",
+					"contentName": "meta.state.body.voila",
+					"patterns": [
+						{ "include": "#expressions" }
+					]
+				}
+			]
+		},
+
+		"actions": {
+			"name": "meta.actions.voila",
+			"begin": "\\b(?=actions)\\b",
+			"end": "}",
+			"endCaptures": {
+				"0": { "name": "punctuation.section.actions.end.bracket.curly.voila" }
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"match": "(actions)",
+					"name": "keyword.control.voila"
+				},
+				{
+					"begin": "{",
+					"beginCaptures": {
+						"0": { 	"name": "punctuation.section.actions.begin.bracket.curly.voila" }
+					},
+					"end": "(?=})",
+					"contentName": "meta.actions.body.voila",
+					"patterns": [
+						{ "include": "#comments" },
+						{
+							"name": "meta.definition.guard.voila",
+							"begin": "(?=\\w+\\s+[^;]+)",
+							"end": "(?=;)",
+							"patterns": [
+								{
+									"name": "meta.guard.identifier.voila",
+									"match": "(\\w+)(?=\\s*;)",
+									"captures": {
+										"1": { "name": "entity.name.other.voila" }
+									}
+								},
+								{
+									"name": "meta.guard.identifier.voila",
+									"include": "#parameterized-entity"
+								},
+								{ "include": "#guard-modifiers" }
+							]
+						}
+					]
+				}
+			]
+		},
+
+		"predicates": {
+			"name": "meta.predicate.voila",
+			"begin": "\\b(predicate)\\b",
+			"beginCaptures": {
+				"1": { "name": "keyword.control.toplevel.voila" }
+			},
+			"end": "}|$",
+			"endCaptures": {
+				"0": { "name": "punctuation.section.predicate.end.bracket.curly.voila" }
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"name": "meta.predicate.identifier.voila",
+					"include": "#parameterized-entity"
+				},
+				{
+					"begin": "{",
+					"beginCaptures": {
+						"0": { "name": "punctuation.section.predicate.begin.bracket.curly.voila" }
+					},
+					"end": "(?=})",
+					"contentName": "meta.predicate.body.voila",
+					"patterns": [
+						{ "include": "#expressions" }
+					]
+				}
+			]
+		},
+
+		"procedures": {
+			"name": "meta.procedure.voila",
+			"begin": "\\b((primitive_atomic|abstract_atomic|non_atomic)\\s+)?(procedure)\\b",
+			"beginCaptures": {
+				"1": { "name": "keyword.control.atomicity-modifiers.voila" },
+				"3": { "name": "keyword.control.toplevel.voila" }
+			},
+			"end": "}|$",
+			"endCaptures": {
+				"0": { "name": "punctuation.section.procedure.end.bracket.curly.voila" }
+			},
+			"patterns": [
+				{ "include": "#comments" },
+				{
+					"name": "meta.procedure.identifier.voila",
+					"include": "#parameterized-entity"
+				},
+				{
+					"begin": "{",
+					"beginCaptures": {
+						"0": { "name": "punctuation.section.procedure.begin.bracket.curly.voila" }
+					},
+					"end": "(?=})",
+					"contentName": "meta.procedure.body.voila",
+					"patterns": [
+						{ "include": "#keywords" }
+					]
+				}
+			]
+		}
+	}
+}

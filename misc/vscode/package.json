@@ -1,0 +1,26 @@
+{
+    "name": "voila",
+    "displayName": "Voila",
+    "description": "VSCode support for the Voila verifier",
+    "version": "0.0.1",
+    "publisher": "mschwerhoff",
+    "engines": {
+        "vscode": "^1.22.0"
+    },
+    "categories": [
+        "Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "voila",
+            "aliases": ["Voila", "voila"],
+            "extensions": [".vl"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "voila",
+            "scopeName": "source.voila",
+            "path": "./syntaxes/voila.tmLanguage.json"
+        }]
+    }
+}
