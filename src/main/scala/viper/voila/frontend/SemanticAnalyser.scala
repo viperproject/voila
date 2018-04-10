@@ -77,9 +77,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case action: PAction => // TODO: add guard type check and it seems that condition type check is missing
 
         reportTypeMismatch(action.to, typ(action.from)) ++
-        action.guards flatMap { case (guardId: PIdnUse, guardArguments: Vector[PExpression]) =>
+        action.guards.flatMap { case (guardId, guardArguments) =>
           checkUse(entity(guardId)) {
-            case GuardEntity(decl, region) => decl.modifier match {
+            case GuardEntity(decl, region) => check(decl.modifier) {
               case _: PUniqueGuard | _: PDuplicableGuard =>
                 reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
 
