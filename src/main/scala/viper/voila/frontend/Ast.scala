@@ -432,6 +432,19 @@ case class PPairSecond(pair: PExpression) extends PPairExp with PUnOp {
   val operand: PExpression = pair
 }
 
+sealed trait PTupleExp extends PExpression
+
+case class PExplicitTuple(elements: Vector[PExpression],
+                          typeAnnotation: Option[Vector[PType]])
+    extends PTupleExp
+
+case class PTupleGet(tuple: PExpression,
+                     index: Int,
+                     of: Int)
+    extends PTupleExp with PUnOp {
+      val operand: PExpression = tuple
+    }
+
 sealed trait PMapExp extends PExpression
 
 case class PExplicitMap(elements: Vector[(PExpression, PExpression)],
@@ -492,6 +505,7 @@ sealed trait PCollectionType extends PType {
 case class PSetType(elementType: PType) extends PCollectionType
 case class PSeqType(elementType: PType) extends PCollectionType
 case class PPairType(elementType1: PType, elementType2: PType) extends PType
+case class PTupleType(elementTypes: Vector[PType]) extends PType
 case class PMapType(keyType: PType, valueType: PType) extends PType
 
 /*

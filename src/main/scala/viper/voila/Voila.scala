@@ -175,7 +175,7 @@ class Voila extends StrictLogging {
 
         val programToVerify =
           translatedProgram.copy(
-            domains = preambleProgram.domains ++ translatedProgram.domains,
+            domains = preambleProgram.domains ++ preamble.generatedDomains ++ translatedProgram.domains,
             fields = preambleProgram.fields ++ translatedProgram.fields,
             functions = preambleProgram.functions ++ translatedProgram.functions,
             predicates = preambleProgram.predicates ++ translatedProgram.predicates,

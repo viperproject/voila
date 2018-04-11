@@ -784,6 +784,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 PPairType(typ1, typ2)
             }
 
+          case explicitNPair: PExplicitTuple =>
+            explicitNPair.typeAnnotation match {
+              case Some(types) =>
+                PTupleType(types)
+
+              case None =>
+                PTupleType(explicitNPair.elements map typ)
+            }
+
           case explicitMap: PExplicitMap =>
             explicitMap.typeAnnotation match {
               case Some((typ1, typ2)) =>
@@ -817,6 +826,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case tailExp: PSeqTail => typ(tailExp.seq)
           case fstExp: PPairFirst => typ(fstExp.pair).asInstanceOf[PPairType].elementType1
           case sndExp: PPairSecond => typ(sndExp.pair).asInstanceOf[PPairType].elementType2
+          case getExp: PTupleGet => typ(getExp.tuple).asInstanceOf[PTupleType].elementTypes(getExp.index)
 
           case PMapUnion(left, right) =>
             (typ(left), typ(right)) match {
@@ -911,6 +921,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       /* TODO: Unification is needed for handling the next cases, which require type variables */
       // case tree.parent(_: PSetUnion) => /* TODO: Return set<T> */
       // case tree.parent(_: PPairFirst | _: PPairSecond) => /* TODO: Return pair<T1, T2> */
+      // case tree.parent (_: PNPairGFet) => /* TODO: Return pairN<TS> */
       // case tree.parent(_: PMapDisjoint | _: PMapUnion) => /* TODO: Return map<T1, T2> */
       // case tree.parent(_: PMapKeys) => /* TODO: Return set<T> */
       // case tree.parent(_: PMapLookup) => /* TODO: Return map<key-type, T> */

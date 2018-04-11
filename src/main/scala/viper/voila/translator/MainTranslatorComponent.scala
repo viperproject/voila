@@ -1175,6 +1175,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
       case pairExp: PPairExp => translatePairExpression(pairExp)
+      case nPairExp: PTupleExp => translateNPairExpression(nPairExp)
       case mapExp: PMapExp => translateMapExpression(mapExp)
       case PIntSet() => preamble.sets.int.withSource(expression)
       case PNatSet() => preamble.sets.nat.withSource(expression)
@@ -1297,6 +1298,40 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       case PPairSecond(pair) =>
         apply(pair, preamble.pairs.second, Vector(translate(pair)))
+    }
+  }
+
+  private def translateNPairExpression(expression: PTupleExp): vpr.Exp = {
+    def apply(nPairTypedExpression: PExpression,
+              nPairFunction: vpr.DomainFunc,
+              arguments: Vector[vpr.Exp])
+             : vpr.DomainFuncApp = {
+
+      val elementTypes = semanticAnalyser.typ(nPairTypedExpression) match {
+        case nPairType: PTupleType =>
+          nPairType.elementTypes map translate
+
+        case other =>
+          sys.error(
+            s"Expected $expression to be of type nPair, but got $other " +
+                s"(at ${expression.lineColumnPosition})")
+      }
+
+      val typeVarMap = preamble.tuples.typeVarMap(elementTypes)
+
+      vpr.DomainFuncApp(
+        func = nPairFunction,
+        args = arguments,
+        typVarMap = typeVarMap
+      )().withSource(expression)
+    }
+
+    expression match {
+      case nPair @ PExplicitTuple(elements, _) =>
+        apply(nPair, preamble.tuples.pair(elements.length), elements map translate)
+
+      case PTupleGet(pair, index, of) =>
+        apply(pair, preamble.tuples.get(index, of), Vector(translate(pair)))
     }
   }
 
@@ -1446,6 +1481,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.DomainType(
         preamble.pairs.domain,
         preamble.pairs.typeVarMap(translate(elementType1), translate(elementType2)))
+
+    case PTupleType(elementTypes) =>
+      vpr.DomainType(
+        preamble.tuples.domain(elementTypes.length),
+        preamble.tuples.typeVarMap(elementTypes map translate)
+      )
 
     case PMapType(elementType1, elementType2) =>
       vpr.DomainType(

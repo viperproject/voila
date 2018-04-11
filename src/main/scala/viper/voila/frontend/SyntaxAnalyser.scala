@@ -44,9 +44,17 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Set", "Int", "Nat", "union",
     "Seq", "size", "head", "tail",
     "Pair", "fst", "snd",
+    "Tuple",
     "Map", "keys", "vals", "lkup", "upd", "disj",
     "unfolding"
   )
+
+  val reservedPatterns = Set(
+    """get\d+of\d+""".r.pattern
+  )
+
+  def isReservedWord(word: String): Boolean =
+    (reservedWords contains word) || (reservedPatterns exists (_.matcher(word).matches()))
 
   lazy val program: Parser[PProgram] =
     (struct | region | predicate | procedure | makro).* ^^ (allMembers => {
@@ -436,6 +444,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     setExp0 |
     seqExp0 |
     pairExp0 |
+    tupleExp0 |
     mapExp0 |
     applicationLikeExp |
     (location <~ "|->") ~ (binder | exp70) ^^ PPointsTo |
@@ -504,6 +513,20 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         PExplicitPair(element1, element2, typeAnnotation map { case t1 ~ t2 => (t1, t2) })
     }
 
+  lazy val tupleExp0: Parser[PTupleExp] =
+    tupleLiteral |
+    ("get" ~> regex("[0-9]+".r)) ~ ("of" ~> regex("[0-9]+".r)) ~ ("(" ~> expression <~ ")") ^^ {
+      case index ~ arity ~ expr => PTupleGet(expr, index.toInt, arity.toInt)
+    }
+
+  lazy val tupleLiteral: Parser[PExplicitTuple] =
+    "Tuple" ~>
+    ("[" ~> rep1sep(typ, ",") <~ "]").? ~
+    ("(" ~> rep1sep(expression, ",") <~ ")") ^^ {
+      case typeAnnotations ~ elements =>
+        PExplicitTuple(elements, typeAnnotations)
+    }
+
   lazy val mapExp0: Parser[PMapExp] =
     mapLiteral |
     "keys" ~> "(" ~> expression <~ ")" ^^ PMapKeys |
@@ -543,6 +566,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
     "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PPairType |
+    "tuple" ~> "<" ~> rep1sep(typ, ",") <~ ">" ^^ PTupleType |
     "map" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PMapType |
     idnuse ^^ PRefType
 
@@ -554,7 +578,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val identifier: Parser[String] =
     "[a-zA-Z_][a-zA-Z0-9_]*".r into (s => {
-      if (reservedWords contains s)
+      if (isReservedWord(s))
         failure(s"""keyword "$s" found where identifier expected""")
       else
         success(s)
