@@ -87,11 +87,7 @@ class DefaultPrettyPrinter
         case _ => toDoc(condition) <+> "|" <> space
       }
 
-    def guardDoc(guard: (PIdnUse, Vector[PExpression])): Doc =
-      toDoc(guard._1) <>
-      (if (guard._2.isEmpty) emptyDoc else asArguments(guard._2))
-
-    val guardsDoc = parens(ssep(guards map guardDoc, comma <> space))
+    val guardsDoc = parens(ssep(guards map toDoc, comma <> space))
 
     bindersDoc <> constraintDoc <> guardsDoc <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
   }
@@ -393,8 +389,11 @@ class DefaultPrettyPrinter
       case PPointsTo(id, value) => toDoc(id) <+> "|->" <+> toDoc(value)
       case PDiamond(regionId) => toDoc(regionId) <+> "|=>" <+> "<D>"
 
-      case PGuardExp(guard, arguments) =>
-        toDoc(guard) <> asArguments(arguments.tail) <> "@" <> toDoc(arguments.head)
+      case PRegionedGuardExp(guard, regionId, argument) =>
+        toDoc(guard) <> toDoc(argument) <> "@" <> toDoc(regionId)
+
+      case PBaseGuardExp(guard, argument) =>
+        toDoc(guard) <> toDoc(argument)
 
       case PRegionUpdateWitness(regionId, from, to) =>
         toDoc(regionId) <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"
@@ -418,4 +417,12 @@ class DefaultPrettyPrinter
       case PUnknownType() => "<unknown>"
       case PNullType() => "<null>"
     }
+
+      def toDoc(arg: PGuardArg): Doc =
+        arg match {
+          case PStandartGuardArg(args) =>
+            asArguments(args)
+          case PSetGuardArg(set) =>
+            "|" <> toDoc(set) <> "|"
+        }
 }

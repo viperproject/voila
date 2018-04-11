@@ -118,13 +118,17 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "divisible" ^^^ PDivisibleGuard() |
     success(PUniqueGuard())
 
-  private lazy val guardBasePrefix: Parser[(PIdnUse, Vector[PExpression])] =
-    idnuse ~ ("(" ~> listOfExpressions <~ ")") ^^ {
-      case guardId ~ args => (guardId, args)
-    } |
-    idnuse ^^ (guardId => (guardId, Vector.empty))
+  private lazy val guardArg: Parser[PGuardArg] =
+    "(" ~> listOfExpressions <~ ")" ^^ PStandartGuardArg |
+    "|" ~> expression <~ "|" ^^ PSetGuardArg
 
-  private lazy val guardPrefix: Parser[Vector[(PIdnUse, Vector[PExpression])]] =
+  private lazy val guardBasePrefix: Parser[PBaseGuardExp] =
+    idnuse ~ guardArg ^^ {
+      case guardId ~ args => PBaseGuardExp(guardId, args)
+    } |
+    idnuse ^^ (guardId => PBaseGuardExp(guardId, PStandartGuardArg(Vector.empty).at(guardId)))
+
+  private lazy val guardPrefix: Parser[Vector[PBaseGuardExp]] =
     rep1sep(guardBasePrefix, ",")
 
 
@@ -139,7 +143,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     (guardPrefix <~ ":") ~
     (binderOrExpression <~ "~>") ~ (binderOrExpression <~ ";") ^^ {
       case guards ~ _from ~ _to =>
-        val condition = PTrueLit().at(guards.head._1)
+        val condition = PTrueLit().at(guards.head)
 
         var binders = Vector.empty[PNamedBinder]
 
@@ -168,7 +172,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     (expression <~ "~>") ~ (expression <~ ";") ^^ {
       case optBinders ~ optCondition ~ guards ~ from ~ to =>
         val binders = optBinders.getOrElse(Vector.empty)
-        val condition = optCondition.getOrElse(PTrueLit().at(guards.head._1))
+        val condition = optCondition.getOrElse(PTrueLit().at(guards.head))
 
         PAction(binders, condition, guards, from, to)
     }
@@ -478,12 +482,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
 
-  lazy val guardExp: Parser[PGuardExp] =
-    idnuse ~ ("(" ~> listOfExpressions <~ ")") ~ ("@" ~> idnexp) ^^ {
-      case guardId ~ args ~ regionId => PGuardExp(guardId, regionId +: args)
+  lazy val guardExp: Parser[PRegionedGuardExp] =
+    idnuse ~ guardArg ~ ("@" ~> idnexp) ^^ {
+      case guardId ~ args ~ regionId => PRegionedGuardExp(guardId, regionId, args)
     } |
     (idnuse <~ "@") ~ idnexp ^^ {
-      case guardId ~ regionId => PGuardExp(guardId, Vector(regionId))
+      case guardId ~ regionId => PRegionedGuardExp(guardId, regionId, PStandartGuardArg(Vector.empty).at(guardId))
     }
 
   lazy val setExp0: Parser[PSetExp] =

@@ -285,10 +285,10 @@ case class RegionStateError(offendingNode: PPredicateExp, detail: Option[Verific
     copy(offendingNode, detail)
 }
 
-case class InsufficientGuardPermissionError(offendingNode: PGuardExp, detail: Option[VerificationError] = None)
+case class InsufficientGuardPermissionError(offendingNode: PRegionedGuardExp, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
-  type OffendingNode = PGuardExp
+  type OffendingNode = PRegionedGuardExp
   def localId: String = "guard_permission_error"
   val localMessage: String = s"Guard ${offendingNode.formatForUsers} might not be available"
 

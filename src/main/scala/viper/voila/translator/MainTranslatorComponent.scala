@@ -740,7 +740,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
 
 
-        val collectAllGuardExps = collect[Vector, PGuardExp] { case exp: PGuardExp => exp }
+        val collectAllGuardExps = collect[Vector, PRegionedGuardExp] { case exp: PRegionedGuardExp => exp }
         val guardExps = collectAllGuardExps(region.interpretation)
 
         val vprGuardPredicateAccesses: Vector[vpr.PredicateAccessPredicate] = {
@@ -1195,7 +1195,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         )()
 
       case pointsTo: PPointsTo => translate(pointsTo)
-      case guard: PGuardExp => translate(guard)
+      case guard: PRegionedGuardExp => translate(guard)
 
       case PUnfolding(predicate, body) =>
         /* TODO: Rather brittle, improve! */
