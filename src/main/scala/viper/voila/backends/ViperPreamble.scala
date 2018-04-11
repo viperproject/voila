@@ -8,7 +8,12 @@ package viper.voila.backends
 
 import viper.silver.ast._
 
+import scala.collection.mutable
+
 class ViperPreamble(preamble: Program) {
+
+  def generatedDomains: Seq[Domain] =
+    tuples.generatedDomains
 
   object sets {
     val int: FuncApp = FuncApp(preamble.findFunction("IntSet"), Vector.empty)()
@@ -23,6 +28,107 @@ class ViperPreamble(preamble: Program) {
     val second: DomainFunc = preamble.findDomainFunction("snd")
 
     def typeVarMap(t1: Type, t2: Type) = Map(domain.typVars(0) -> t1, domain.typVars(1) -> t2)
+  }
+
+  object tuples {
+    private var domains: mutable.Map[Int, Domain] = mutable.Map.empty
+    private var constructors: mutable.Map[Int, DomainFunc] = mutable.Map.empty
+    private var getters: mutable.Map[(Int,Int), DomainFunc] = mutable.Map.empty
+
+    def clear(): Unit = {
+      domains.clear()
+      constructors.clear()
+      getters.clear()
+    }
+
+    // FIXME: deep-copy domain definitions
+    def generatedDomains: Seq[Domain] = domains.values.toSeq
+
+    private def addNPairDomain(arity: Int): Unit = {
+      val domainName = s"Tuple$arity"
+
+      val typeVars = 0.until(arity) map (ix => TypeVar(s"T$ix"))
+      val decls = 0.until(arity) map (ix => LocalVarDecl(s"t$ix", typeVars(ix))())
+      val vars = decls map (_.localVar)
+      val typVarMap = typeVars.zip(typeVars).toMap
+
+      val domainTyp = DomainType(domainName, typVarMap)(typeVars)
+      val domainTypVar = TypeVar("p1")
+      val domainDecl = LocalVarDecl("p", domainTyp)()
+      val domainVar = domainDecl.localVar
+
+      val tupleFunc = DomainFunc(s"tuple$arity",decls, domainTyp)(domainName = domainName)
+      val getFuncs = 0.until(arity) map (ix =>
+        DomainFunc(s"get${ix}of${arity}", Seq(domainDecl), typeVars(ix))(domainName = domainName)
+      )
+
+      val getOverTupleAxiom = {
+
+        val nPairApp = DomainFuncApp(tupleFunc, vars, typVarMap)()
+        val eqs = 0.until(arity) map {ix =>
+          EqCmp(
+            DomainFuncApp(
+              getFuncs(ix),
+              Seq(nPairApp),
+              typVarMap
+            )(),
+            vars(ix)
+          )()
+        }
+
+        DomainAxiom(
+          name = s"getter_over_tuple$arity",
+          exp = Forall(
+            decls,
+            Seq(Trigger(Seq(nPairApp))()),
+            viper.silicon.utils.ast.BigAnd(eqs)
+          )()
+        )(domainName = domainName)
+      }
+
+      val tupleOverGetAxiom = {
+
+        val nGetApp = getFuncs map (f =>
+          DomainFuncApp(f, Seq(domainVar), typVarMap)()
+        )
+
+        DomainAxiom(
+          name = s"tuple${arity}_over_getter",
+          exp = Forall(
+            Seq(domainDecl),
+            nGetApp map (g => Trigger(Seq(g))()),
+            EqCmp(
+              DomainFuncApp(
+                tupleFunc,
+                nGetApp,
+                typVarMap
+              )(),
+              domainVar
+            )()
+          )()
+        )(domainName = domainName)
+      }
+
+      val domain = Domain(
+        domainName,
+        tupleFunc +: getFuncs,
+        Seq(getOverTupleAxiom, tupleOverGetAxiom),
+        typeVars
+      )()
+
+      domains.update(arity, domain)
+      constructors.update(arity, tupleFunc)
+      0.until(arity) foreach (ix => getters.update((ix, arity), getFuncs(ix)))
+    }
+
+    def domain(arity: Int): Domain =
+      domains.getOrElse(arity, {addNPairDomain(arity); domains(arity)})
+    def pair(arity: Int): DomainFunc =
+      constructors.getOrElse(arity, {addNPairDomain(arity); constructors(arity)})
+    def get(index: Int, arity: Int): DomainFunc =
+      getters.getOrElse((index, arity), {addNPairDomain(arity); getters((index, arity))})
+
+    def typeVarMap(ts: Vector[Type]) = domain(ts.length).typVars.zip(ts).toMap
   }
 
   object maps {
