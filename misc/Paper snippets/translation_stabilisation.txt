@@ -1,0 +1,102 @@
+region R(id r, T1 x1, T2 x2, ...)
+  guards {
+    modifier1 G1(T'1, T'2, ... )
+    ...
+  }
+  interpretation { I }
+  state { ϕ }
+  actions {
+    T''1 y1, ... | c(y1, ...) | G'1(g1(y1, ...), ...): from(y1, ...) ~> to(y1, ...) // action1
+    ...
+  }
+
+=========================================================================
+
+stabilise-regions(regions) ≡
+  // stabilizeRegions: Vector[PRegion], String -> Stmt
+
+  Let regions be a set of regions R1, R2, ...
+
+  return
+    label pre_havoc;
+    stabilise-region-instances(R1, pre_havoc);
+    stabilise-region-instances(R2, pre_havoc);
+    ...
+
+
+stabilise-region-instance(R, r, v1, ..., preHavocLabel) ≡
+  // stabilizeRegionInstance: PRegion, Vector[vpr.Exp], vpr.Label -> Seqn
+
+  Let x0, x1, x2, ... be the formal arguments of region R
+
+  return
+    stabilise-region-instances(R, preHavocLabel)
+      with following substitutions performed (until a fix point is reached):
+        1. forall x0, x1, ... :: body  -->  body[r/x0, v1/x1, ...]
+        2. perm(R_interp(r, v1, ...))  -->  write
+
+
+stabilise-region-instances(R, preHavocLabel) ≡
+  // stabilizeAllRegionInstances: PRegion, Label -> Seqn
+
+  actionFilter ≡ _ => true
+  postRegionState ≡ args => R_state(args)
+  preRegionState ≡ args => old[preHavocLabel](postRegionState(args))
+  prePermissions ≡ e => old[preHavocLabel](e)
+  stateTrigger ≡ ... // TODO: Decider whether or not we want/have to include the state trigger function trick/hack
+
+  return
+    stabilise-all-region-instances( // generateCodeForStabilizingAllRegionInstances
+      R,
+      actionFilter,
+      preRegionState,
+      postRegionState,
+      prePermissions,
+      stateTrigger)
+
+
+stabilise-all-region-instances( // generateCodeForStabilizingAllRegionInstances
+    R,                          // PRegion
+    actionFilter,               // PAction => Boolean
+    preRegionState,             // Vector[vpr.Exp] => vpr.Exp
+    postRegionState,            // Vector[vpr.Exp] => vpr.Exp
+    prePermissions,             // vpr.Exp => vpr.Exp
+    stateTrigger) ≡             // Vector[vpr.Exp] => vpr.Trigger
+
+  Let 
+    id r, T1 x1, T2 x2, ... 
+  be the formal arguments of region R
+
+  Let action1 (and analogously, action2, ...) denote an action of the shape
+    T''1 y1, ... | c(y1, ...) | G'1(g1(y1, ...), ...): from(y1, ...) ~> to(y1, ...)
+  and let G'1 denote a guard of region R of the shape
+    modifier1 G(T'1, T'2, ... )
+
+  preHavocRegionPermissions ≡ 
+    prePermissions(perm(R_interp(r, x1, ...)))
+
+  vprStateConstraintsFromActions ≡
+       state-constraints-from-action(action1, preRegionState(r, x1, ...), postRegionState(r, x1, ...))
+    || state-constraints-from-action(action2, preRegionState(r, x1, ...), postRegionState(r, x1, ...))
+    || ...
+
+  vprPreliminaryResult1 ≡
+    exhale forall id r, T1 x1, ... :: acc(R_interp(r, x1, ...), preHavocRegionPermissions);
+    inhale forall id r, T1 x1, ... :: acc(R_interp(r, x1, ...), preHavocRegionPermissions);
+    inhale forall id r, T1 x1, ... :: {stateTrigger(r, x1, ...)}
+      none < preHavocRegionPermissions ==> (
+        (none < perm(r.diamond) ==> postRegionState(r, x1, ...) in R_X(r, x1, ...)) &&
+        (postRegionState(r, x1, ...) == preRegionState(r, x1, ...) || 
+        vprStateConstraintsFromActions));
+
+  // TODO: Necessary for the verification to succeed, but we can probably
+  //       ignore it in the formalisation since it's standard skolemisation.
+  // vprPreliminaryResult2 ≡
+  //   skolemise-existentials(vprPreliminaryResult1)
+
+  // TODO: Can be ignored: renames quantified variables, solely because Viper
+  //       doesn't allow quantified variables to shadow local ones.
+  // vprPreliminaryResult3 ≡
+  //   sanitise-bound-variable-names(vprPreliminaryResult2)
+
+  return vprPreliminaryResult

@@ -972,7 +972,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
        * will result in several trivially-true subexpressions of the shape
        * state(r, x) == state(r, x).
        */
-      viper.silver.ast.utility.Transformer.simplify(vprConstraint)
+      viper.silver.ast.utility.Simplifier.simplify(vprConstraint)
     )()
   }
 
