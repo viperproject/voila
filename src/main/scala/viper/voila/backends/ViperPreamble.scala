@@ -123,7 +123,7 @@ class ViperPreamble(preamble: Program) {
 
     def domain(arity: Int): Domain =
       domains.getOrElse(arity, {addNPairDomain(arity); domains(arity)})
-    def pair(arity: Int): DomainFunc =
+    def tuple(arity: Int): DomainFunc =
       constructors.getOrElse(arity, {addNPairDomain(arity); constructors(arity)})
     def get(index: Int, arity: Int): DomainFunc =
       getters.getOrElse((index, arity), {addNPairDomain(arity); getters((index, arity))})

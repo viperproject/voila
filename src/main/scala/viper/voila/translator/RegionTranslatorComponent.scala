@@ -10,6 +10,7 @@ import scala.collection.breakOut
 import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import sourcecode.Name.Machine
+import viper.silver.ast.Exp
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
 import viper.voila.reporting.InsufficientGuardPermissionError
@@ -206,6 +207,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
+
   def actionSkolemizationFunctionFootprintName(regionName: String): String =
     s"${regionName}_sk_fp"
 
@@ -268,6 +270,15 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def guardPredicateName(guard: PGuardDecl, region: PRegion): String =
     s"${region.id.name}_${guard.id.name}"
 
+  def extractGuardAndRegionNameFromGuardPredicateName(guardPredicateName: String)
+                                                     : (String, String) = {
+
+    val splittedName = guardPredicateName.split("_")
+
+    (splittedName(0), splittedName(1))
+  }
+
+
   def guardPredicate(guard: PGuardDecl, region: PRegion): vpr.Predicate = {
     guardPredicateCache.getOrElseUpdate(
       (guard, region),
@@ -294,6 +305,55 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )
   }
 
+  def guardTriggerFunctionName(guard: PGuardDecl, region: PRegion): String =
+    s"${guardPredicateName(guard, region)}_T"
+
+  def guardTriggerFunction(guard: PGuardDecl, region: PRegion): Option[vpr.DomainFunc] = {
+    val guardPred = guardPredicate(guard, region)
+
+    if (guardPred.formalArgs.isEmpty) {
+      None
+    } else {
+      Some(
+        vpr.DomainFunc(
+          name = guardTriggerFunctionName(guard, region),
+          formalArgs = guardPred.formalArgs,
+          typ = vpr.Bool
+        )(domainName = regionStateTriggerFunctionsDomainName)
+      )
+    }
+  }
+
+  def guardTriggerFunction(guardPredicateName: String): Option[vpr.DomainFunc] = {
+    val (guardName, regionName) = extractGuardAndRegionNameFromGuardPredicateName(guardPredicateName)
+    val region = tree.root.regions.find(_.id.name == regionName).get
+    val guard = region.guards.find(_.id.name == guardName).get
+
+    guardTriggerFunction(guard, region)
+  }
+
+  def guardTriggerFunctionApplication(guardPredicateApplication: vpr.PredicateAccess)
+                                     : Option[vpr.DomainFuncApp] =
+    guardTriggerFunction(guardPredicateApplication.predicateName) map {
+      guardTriggerFunc =>
+        vpr.DomainFuncApp(
+          func = guardTriggerFunc,
+          args = guardPredicateApplication.args,
+          typVarMap = Map.empty
+        )()
+    }
+
+  def guardTriggerFunctionApplication(guard: PGuardDecl, args: Vector[vpr.Exp], region: PRegion)
+                                     : Option[vpr.DomainFuncApp] =
+    guardTriggerFunction(guard, region) map {
+      guardTriggerFunc =>
+        vpr.DomainFuncApp(
+          func = guardTriggerFunc,
+          args = args,
+          typVarMap = Map.empty
+        )()
+    }
+
   def translate(region: PRegion): Vector[vpr.Declaration] = {
     val regionPredicateName = region.id.name
 
@@ -315,6 +375,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val skolemizationFunctions = collectActionSkolemizationFunctions(region)
 
     (   guardPredicates
+     ++ region.guards.flatMap(guard => guardTriggerFunction(guard, region))
      ++ Vector(skolemizationFunctionFootprint)
      ++ skolemizationFunctions
      ++ region.formalOutArgs.indices.map(regionOutArgumentFunction(region, _))
@@ -382,14 +443,14 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vprRegionArguments)()
   }
 
-  def translate(guardExp: PRegionedGuardExp): vpr.PredicateAccessPredicate = {
+  def translate(guardExp: PRegionedGuardExp): Exp = {
     semanticAnalyser.entity(guardExp.guard) match {
       case GuardEntity(guardDecl, region) =>
-        val guardPredicateAccess =
+        val (guardPredicateAccess, guardPredicateAccessLoc) =
           translateUseOf(guardExp, guardDecl, region)
 
         errorBacktranslator.addReasonTransformer {
-          case e: vprrea.InsufficientPermission if e causedBy guardPredicateAccess.loc =>
+          case e: vprrea.InsufficientPermission if e causedBy guardPredicateAccessLoc =>
             InsufficientGuardPermissionError(guardExp)
         }
 
@@ -398,31 +459,120 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translateUseOf(guardExp: PRegionedGuardExp, guardDecl: PGuardDecl, region: PRegion)
-                    : vpr.PredicateAccessPredicate = {
+                    : (vpr.Exp, vpr.PredicateAccess) = {
 
     val vprGuardPredicate = guardPredicate(guardDecl, region)
 
+    val translatedRegionId = translate(guardExp.regionId)
+
+    /* acc(guard(r,args), perm) */
+    def accessPredicate(args: Vector[vpr.Exp], perm: vpr.Exp): vpr.PredicateAccessPredicate =
+      vpr.PredicateAccessPredicate(
+        vpr.PredicateAccess(
+          translatedRegionId +: args,
+          vprGuardPredicate.name
+        )().withSource(guardExp),
+        perm
+      )().withSource(guardExp)
+
+    /* body && [guardT(args), true] */
+    def triggerWrapper(args: Vector[vpr.Exp], body: vpr.Exp): vpr.Exp =
+      vpr.And(
+        body,
+        vpr.InhaleExhaleExp(
+          guardTriggerFunctionApplication(
+            guardDecl,
+            translatedRegionId +: args,
+            region
+          ).get,
+          vpr.TrueLit()()
+        )()
+      )()
+
+
     guardExp.argument match {
       case PStandartGuardArg(args) =>
-        (guardDecl.modifier, args) match {
-          case (_: PUniqueGuard | _:PDuplicableGuard, args) =>
-            vpr.PredicateAccessPredicate(
-              vpr.PredicateAccess(
-                (guardExp.regionId +: args) map translate,
-                vprGuardPredicate.name
-              )().withSource(guardExp),
-              vpr.FullPerm()()
-            )().withSource(guardExp)
+        constructFromModifier(
+          guardDecl.modifier,
+          args map translate
+        ){ case (predArgs, perm) =>
+          val body = accessPredicate(predArgs, perm)
 
-          case (_: PDivisibleGuard, perm +: args) =>
-            vpr.PredicateAccessPredicate(
-              vpr.PredicateAccess(
-                (guardExp.regionId +: args) map translate,
-                vprGuardPredicate.name
-              )().withSource(guardExp),
-              translate(perm)
-            )().withSource(guardExp)
+          if (predArgs.isEmpty) {
+            (body, body.loc)
+          } else {
+            (triggerWrapper(predArgs, body), body.loc)
+          }
         }
+
+      case PSetGuardArg(set) =>
+        val (conditional, decls) = extractGuardSetArgConditional(set)
+
+        constructFromModifier(
+          guardDecl.modifier,
+          decls map (_.localVar)
+        ){ case (predArgs, perm) =>
+          val body = accessPredicate(predArgs, perm)
+
+          val rhs = if (predArgs.isEmpty) {
+            body
+          } else {
+            triggerWrapper(predArgs, body)
+          }
+
+          val trigger = guardTriggerFunctionApplication(
+            guardDecl,
+            translatedRegionId +: predArgs,
+            region
+          ).get
+
+          val total = vpr.Forall(
+            decls,
+            Seq(vpr.Trigger(Seq(trigger))()),
+            vpr.Implies(
+              conditional,
+              rhs
+            )()
+          )()
+
+          (total, body.loc)
+        }
+    }
+  }
+
+  private def extractGuardSetArgConditional(set: PExpression): (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
+    val vipElemTypes = semanticAnalyser.typ(set) match {
+      case PTupleType(elementTypes) =>
+        elementTypes map translate
+
+      case other =>
+        sys.error(s"${set.pretty} should be of type Tuple but is ${other}")
+    }
+
+    val decls = vipElemTypes.zipWithIndex map { case (typ, ix) =>
+      vpr.LocalVarDecl(s"$$a_$ix", typ)()
+    }
+
+    val conditional = vpr.DomainFuncApp(
+      func = preamble.tuples.tuple(decls.length),
+      args = decls map (_.localVar),
+      typVarMap = preamble.tuples.typeVarMap(vipElemTypes)
+    )()
+
+    (conditional, decls)
+  }
+
+  private def constructFromModifier[A](modifier: PModifier,
+                                       expArgs: Vector[vpr.Exp],
+                                       dfltPerm: vpr.Exp = vpr.FullPerm()())
+                                      (constructor: (Vector[vpr.Exp], vpr.Exp) => A): A = {
+
+    (modifier, expArgs) match {
+      case (_: PUniqueGuard | _:PDuplicableGuard, args) =>
+        constructor(args, dfltPerm)
+
+      case (_: PDivisibleGuard, perm +: args) =>
+        constructor(args, perm)
     }
   }
 

@@ -743,7 +743,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val collectAllGuardExps = collect[Vector, PRegionedGuardExp] { case exp: PRegionedGuardExp => exp }
         val guardExps = collectAllGuardExps(region.interpretation)
 
-        val vprGuardPredicateAccesses: Vector[vpr.PredicateAccessPredicate] = {
+        val vprGuardPredicateAccesses: Vector[(vpr.Exp, vpr.PredicateAccess)] = {
           guardExps foreach (guardExp => {
             assert(
               region.formalInArgs.exists(_.id.name == guardExp.regionId.id.name),
@@ -764,14 +764,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
         val vprPermissionConstraintsForUniqueGuards =
-          vprGuardPredicateAccesses map (vprGuardAccess => {
+          vprGuardPredicateAccesses map {case (_, vprGuardAccessLoc) =>
             vpr.Inhale(
               vpr.PermLeCmp(
-                vpr.CurrentPerm(vprGuardAccess.loc)(),
+                vpr.CurrentPerm(vprGuardAccessLoc)(),
                 vpr.FullPerm()()
               )()
             )()
-          })
+          }
 
 
 
@@ -1175,7 +1175,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
       case pairExp: PPairExp => translatePairExpression(pairExp)
-      case nPairExp: PTupleExp => translateNPairExpression(nPairExp)
+      case nPairExp: PTupleExp => translateTupleExpression(nPairExp)
       case mapExp: PMapExp => translateMapExpression(mapExp)
       case PIntSet() => preamble.sets.int.withSource(expression)
       case PNatSet() => preamble.sets.nat.withSource(expression)
@@ -1301,7 +1301,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  private def translateNPairExpression(expression: PTupleExp): vpr.Exp = {
+  private def translateTupleExpression(expression: PTupleExp): vpr.Exp = {
     def apply(nPairTypedExpression: PExpression,
               nPairFunction: vpr.DomainFunc,
               arguments: Vector[vpr.Exp])
@@ -1328,7 +1328,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     expression match {
       case nPair @ PExplicitTuple(elements, _) =>
-        apply(nPair, preamble.tuples.pair(elements.length), elements map translate)
+        apply(nPair, preamble.tuples.tuple(elements.length), elements map translate)
 
       case PTupleGet(pair, index, of) =>
         apply(pair, preamble.tuples.get(index, of), Vector(translate(pair)))
