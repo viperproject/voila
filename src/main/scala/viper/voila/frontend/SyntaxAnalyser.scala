@@ -500,17 +500,17 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case typeAnnotation ~ elements => PExplicitSeq(elements, typeAnnotation)
     }
 
-  lazy val pairExp0: Parser[PPairExp] =
+  lazy val pairExp0: Parser[PTupleExp] =
     pairLiteral |
-    "fst" ~> "(" ~> expression <~ ")" ^^ PPairFirst |
-    "snd" ~> "(" ~> expression <~ ")" ^^ PPairSecond
+    "fst" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 0)) |
+    "snd" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 1))
 
-  lazy val pairLiteral: Parser[PExplicitPair] =
+  lazy val pairLiteral: Parser[PExplicitTuple] =
     "Pair" ~>
     ("[" ~> (typ <~ ",") ~ typ <~ "]").? ~
     ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ {
       case typeAnnotation ~ (element1 ~ element2) =>
-        PExplicitPair(element1, element2, typeAnnotation map { case t1 ~ t2 => (t1, t2) })
+        PExplicitTuple(Vector(element1, element2), typeAnnotation map { case t1 ~ t2 => Vector(t1, t2) })
     }
 
   lazy val tupleExp0: Parser[PTupleExp] =
@@ -565,7 +565,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "frac" ^^^ PFracType() |
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
-    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PPairType |
+    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ {case t1 ~ t2 => PTupleType(Vector(t1,t2))} |
     "tuple" ~> "<" ~> rep1sep(typ, ",") <~ ">" ^^ PTupleType |
     "map" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PMapType |
     idnuse ^^ PRefType

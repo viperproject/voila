@@ -1174,8 +1174,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqSize(seq) => vpr.SeqLength(go(seq))().withSource(expression)
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
-      case pairExp: PPairExp => translatePairExpression(pairExp)
-      case nPairExp: PTupleExp => translateNPairExpression(nPairExp)
+      case nPairExp: PTupleExp => translateTupleExpression(nPairExp)
       case mapExp: PMapExp => translateMapExpression(mapExp)
       case PIntSet() => preamble.sets.int.withSource(expression)
       case PNatSet() => preamble.sets.nat.withSource(expression)
@@ -1262,46 +1261,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     customTranslationScheme.applyOrElse(expression, defaultTranslationScheme)
   }
 
-  /* TODO: Unify translatePairExpression and translateMapExpression */
+  /* TODO: Unify translateTupleExpression and translateMapExpression */
 
-  private def translatePairExpression(expression: PPairExp): vpr.Exp = {
-    def apply(pairTypedExpression: PExpression,
-              pairFunction: vpr.DomainFunc,
-              arguments: Vector[vpr.Exp])
-             : vpr.DomainFuncApp = {
-
-      val (elementType1, elementType2) =
-        semanticAnalyser.typ(pairTypedExpression) match {
-          case pairType: PPairType =>
-            (translate(pairType.elementType1), translate(pairType.elementType2))
-          case other =>
-            sys.error(
-              s"Expected $expression to be of type pair, but got $other " +
-                  s"(at ${expression.lineColumnPosition})")
-        }
-
-      val typeVarMap = preamble.pairs.typeVarMap(elementType1, elementType2)
-
-      vpr.DomainFuncApp(
-        func = pairFunction,
-        args = arguments,
-        typVarMap = typeVarMap
-      )().withSource(expression)
-    }
-
-    expression match {
-      case pair @ PExplicitPair(element1, element2, _) =>
-        apply(pair, preamble.pairs.pair, Vector(translate(element1), translate(element2)))
-
-      case PPairFirst(pair) =>
-        apply(pair, preamble.pairs.first, Vector(translate(pair)))
-
-      case PPairSecond(pair) =>
-        apply(pair, preamble.pairs.second, Vector(translate(pair)))
-    }
-  }
-
-  private def translateNPairExpression(expression: PTupleExp): vpr.Exp = {
+  private def translateTupleExpression(expression: PTupleExp): vpr.Exp = {
     def apply(tupleTypedExpression: PExpression,
               tupleFunction: vpr.DomainFunc,
               arguments: Vector[vpr.Exp])
@@ -1477,11 +1439,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PFracType() => vpr.Perm
     case PSetType(elementType) => vpr.SetType(translate(elementType))
     case PSeqType(elementType) => vpr.SeqType(translate(elementType))
-
-    case PPairType(elementType1, elementType2) =>
-      vpr.DomainType(
-        preamble.pairs.domain,
-        preamble.pairs.typeVarMap(translate(elementType1), translate(elementType2)))
 
     case PTupleType(elementTypes) =>
       vpr.DomainType(

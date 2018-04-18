@@ -20,16 +20,6 @@ class ViperPreamble(preamble: Program) {
     val nat: FuncApp = FuncApp(preamble.findFunction("NatSet"), Vector.empty)()
   }
 
-  object pairs {
-    val domain: Domain = preamble.findDomain("Pair")
-
-    val pair: DomainFunc = preamble.findDomainFunction("pair")
-    val first: DomainFunc = preamble.findDomainFunction("fst")
-    val second: DomainFunc = preamble.findDomainFunction("snd")
-
-    def typeVarMap(t1: Type, t2: Type) = Map(domain.typVars(0) -> t1, domain.typVars(1) -> t2)
-  }
-
   object tuples {
     private var domains: mutable.Map[Int, Domain] = mutable.Map.empty
     private var constructors: mutable.Map[Int, DomainFunc] = mutable.Map.empty
