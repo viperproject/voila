@@ -50,7 +50,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   val reservedPatterns = Set(
-    """get\d+of\d+""".r.pattern
+    """get\d+""".r.pattern
   )
 
   def isReservedWord(word: String): Boolean =
@@ -515,8 +515,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val tupleExp0: Parser[PTupleExp] =
     tupleLiteral |
-    ("get" ~> regex("[0-9]+".r)) ~ ("of" ~> regex("[0-9]+".r)) ~ ("(" ~> expression <~ ")") ^^ {
-      case index ~ arity ~ expr => PTupleGet(expr, index.toInt, arity.toInt)
+    ("get" ~> regex("[0-9]+".r)) ~ ("(" ~> expression <~ ")") ^^ {
+      case index ~ expr => PTupleGet(expr, index.toInt)
     }
 
   lazy val tupleLiteral: Parser[PExplicitTuple] =

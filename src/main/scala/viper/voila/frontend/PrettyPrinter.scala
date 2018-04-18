@@ -330,7 +330,7 @@ class DefaultPrettyPrinter
         "(" <> ssep(Vector(elem1, elem2) map toDoc, comma <> space) <> ")"
 
       case PExplicitTuple(elements, typeAnnotation) =>
-        s"Pair${elements.length}" <>
+        s"Tuple${elements.length}" <>
         typeAnnotation.fold(emptyDoc)(ta =>
           "[" <> ssep(ta map toDoc, comma <> space) <> "]") <>
         "(" <> ssep(elements map toDoc, comma <> space) <> ")"
@@ -375,7 +375,7 @@ class DefaultPrettyPrinter
       case PSeqTail(seq) => "tail" <> parens(toDoc(seq))
       case PPairFirst(pair) => "fst" <> parens(toDoc(pair))
       case PPairSecond(pair) => "snd" <> parens(toDoc(pair))
-      case PTupleGet(pair,index,arity) => s"get${index}of${arity}" <> parens(toDoc(pair))
+      case PTupleGet(tuple,index) => s"get${index}" <> parens(toDoc(tuple))
       case PMapUnion(left, right) => "uni" <> parens(toDoc(left) <> comma <+> toDoc(right))
       case PMapDisjoint(left, right) => "disj" <> parens(toDoc(left) <> comma <+> toDoc(right))
       case PMapKeys(map) => "keys" <> parens(toDoc(map))

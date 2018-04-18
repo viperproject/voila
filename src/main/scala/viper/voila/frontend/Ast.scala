@@ -438,9 +438,7 @@ case class PExplicitTuple(elements: Vector[PExpression],
                           typeAnnotation: Option[Vector[PType]])
     extends PTupleExp
 
-case class PTupleGet(tuple: PExpression,
-                     index: Int,
-                     of: Int)
+case class PTupleGet(tuple: PExpression, index: Int)
     extends PTupleExp with PUnOp {
       val operand: PExpression = tuple
     }

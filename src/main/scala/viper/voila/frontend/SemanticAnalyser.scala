@@ -192,6 +192,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   case _ =>
                     message(guardId, s"Expected a guard, but got ${guardId.name}")
                 }
+
+              case PTupleGet(tuple, index) =>
+                check(typ(tuple)) {
+                  case PTupleType(elementTypes) =>
+                    message(exp, s"Out of bounds access in ${exp.pretty}", index >= elementTypes.length)
+                }
           })
     }
 
@@ -784,13 +790,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 PPairType(typ1, typ2)
             }
 
-          case explicitNPair: PExplicitTuple =>
-            explicitNPair.typeAnnotation match {
+          case explicitTuple: PExplicitTuple =>
+            explicitTuple.typeAnnotation match {
               case Some(types) =>
                 PTupleType(types)
 
               case None =>
-                PTupleType(explicitNPair.elements map typ)
+                PTupleType(explicitTuple.elements map typ)
             }
 
           case explicitMap: PExplicitMap =>
@@ -826,7 +832,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case tailExp: PSeqTail => typ(tailExp.seq)
           case fstExp: PPairFirst => typ(fstExp.pair).asInstanceOf[PPairType].elementType1
           case sndExp: PPairSecond => typ(sndExp.pair).asInstanceOf[PPairType].elementType2
-          case getExp: PTupleGet => typ(getExp.tuple).asInstanceOf[PTupleType].elementTypes(getExp.index)
+          case getExp: PTupleGet =>
+            val elementTypes = typ(getExp.tuple).asInstanceOf[PTupleType].elementTypes
+            if (elementTypes.isDefinedAt(getExp.index)) {
+              elementTypes(getExp.index)
+            } else {
+              PUnknownType() // FIXME: maybe replace with out of bounds error message
+            }
+
 
           case PMapUnion(left, right) =>
             (typ(left), typ(right)) match {

@@ -1302,14 +1302,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   private def translateNPairExpression(expression: PTupleExp): vpr.Exp = {
-    def apply(nPairTypedExpression: PExpression,
-              nPairFunction: vpr.DomainFunc,
+    def apply(tupleTypedExpression: PExpression,
+              tupleFunction: vpr.DomainFunc,
               arguments: Vector[vpr.Exp])
              : vpr.DomainFuncApp = {
 
-      val elementTypes = semanticAnalyser.typ(nPairTypedExpression) match {
-        case nPairType: PTupleType =>
-          nPairType.elementTypes map translate
+      val elementTypes = semanticAnalyser.typ(tupleTypedExpression) match {
+        case tupleType: PTupleType =>
+          tupleType.elementTypes map translate
 
         case other =>
           sys.error(
@@ -1320,18 +1320,19 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       val typeVarMap = preamble.tuples.typeVarMap(elementTypes)
 
       vpr.DomainFuncApp(
-        func = nPairFunction,
+        func = tupleFunction,
         args = arguments,
         typVarMap = typeVarMap
       )().withSource(expression)
     }
 
     expression match {
-      case nPair @ PExplicitTuple(elements, _) =>
-        apply(nPair, preamble.tuples.pair(elements.length), elements map translate)
+      case tuple @ PExplicitTuple(elements, _) =>
+        apply(tuple, preamble.tuples.tuple(elements.length), elements map translate)
 
-      case PTupleGet(pair, index, of) =>
-        apply(pair, preamble.tuples.get(index, of), Vector(translate(pair)))
+      case PTupleGet(tuple, index) =>
+        val of = semanticAnalyser.typ(tuple).asInstanceOf[PTupleType].elementTypes.length
+        apply(tuple, preamble.tuples.get(index, of), Vector(translate(tuple)))
     }
   }
 
