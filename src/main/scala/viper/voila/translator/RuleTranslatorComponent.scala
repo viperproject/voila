@@ -115,7 +115,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           regionInArgs,
           makeAtomic.guards, /* FIXME: only temporal placeholder, guard is going to be a vector itself */
           vprStepFrom,
-          vprStepTo
+          vprStepTo,
+          preHavocLabel1
         ).withSource(makeAtomic)
 
       errorBacktranslator.addErrorTransformer {
@@ -400,7 +401,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         vprInArgs,
         useAtomic.guards,
         oldState,
-        currentState
+        currentState,
+        preUseAtomicLabel
       ).withSource(useAtomic)
 
     errorBacktranslator.addErrorTransformer {

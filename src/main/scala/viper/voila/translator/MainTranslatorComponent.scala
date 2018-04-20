@@ -225,7 +225,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             regionStateTriggerFunctionDomain,
             atomicityContextsDomain(tree.root.regions))
       ++ usedVariableHavocs(tree)
-      ++ recordedSetComprehensions.values
+      ++ recordedSetComprehensionFunctions
       ++ tree.root.regions.flatMap(region => {
             val typ = semanticAnalyser.typ(region.state)
 
@@ -1170,6 +1170,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
       case PSetContains(element, set) => vpr.AnySetContains(go(element), go(set))().withSource(expression)
+        // translateSetContainsExpressionWith(go(element), set)(customTranslationScheme)
+
       case PSetUnion(left, right) => vpr.AnySetUnion(go(left), go(right))().withSource(expression)
       case PSeqSize(seq) => vpr.SeqLength(go(seq))().withSource(expression)
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)

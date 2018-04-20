@@ -6,15 +6,18 @@
 
 package viper.voila.translator
 
-import scala.collection.breakOut
+import scala.collection.{breakOut, mutable}
 import scala.collection.immutable.{ListMap, ListSet}
 import viper.silver.{ast => vpr}
 import viper.voila.frontend.{PIdnExp, PIdnUse, PSetComprehension, VoilaTree}
 
 trait SetComprehensionComponent { this: PProgramToViperTranslator =>
   private var comprehensions: Map[PSetComprehension, vpr.Function] = Map.empty
+  private val comprehensionPatterns: mutable.Map[vpr.Exp, vpr.Function] = mutable.Map.empty
 
   def recordedSetComprehensions: Map[PSetComprehension, vpr.Function] = comprehensions
+
+  def recordedSetComprehensionFunctions: Seq[vpr.Function] = comprehensionPatterns.values.toSeq
 
   def analyseSetComprehensions(tree: VoilaTree): Unit = {
     comprehensions = comprehensions.empty
@@ -33,23 +36,25 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
     val vprSetType = vpr.SetType(vprElementType)
 
     val freeVariables: ListSet[PIdnUse] = semanticAnalyser.freeVariables(comprehension)
+    val decls: ListSet[vpr.LocalVarDecl] =
+      freeVariables.zipWithIndex
+      .map{ case (fv,ix)  => {
+        val vprDecl =
+          vpr.LocalVarDecl(
+            s"$$s_$ix",// fv.name,
+            vprElementType
+          )()
+
+        vprDecl
+      }}(breakOut)
 
     val freeVariablesToDecls: ListMap[PIdnUse, vpr.LocalVarDecl] =
-      freeVariables
-        .map(fv => {
-          val vprDecl =
-            vpr.LocalVarDecl(
-              fv.name,
-              vprElementType
-            )()
-
-          fv -> vprDecl
-        })(breakOut)
+      freeVariables.zip(decls)(breakOut)
 
     val vprBody = {
       val vprQVarDecl =
         vpr.LocalVarDecl(
-          comprehension.qvar.id.name,
+          "$k", // comprehension.qvar.id.name,
           vprElementType
         )()
 
@@ -60,6 +65,9 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
             vpr.Result()(typ = vprSetType)
           )(),
           translateWith(comprehension.filter) {
+            case PIdnExp(id) if id.name == comprehension.qvar.id.name =>
+              vprQVarDecl.localVar
+
             case PIdnExp(id) if freeVariables.contains(id) =>
               freeVariablesToDecls(id).localVar
           }
@@ -72,16 +80,17 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
       )()
     }
 
-    val vprFunction =
+    val vprFunction = comprehensionPatterns.getOrElseUpdate(vprBody,
       vpr.Function(
         name = setComprehensionFunctionName,
-        formalArgs = freeVariablesToDecls.values.toSeq,
+        formalArgs = decls.toSeq,
         typ = vprSetType,
         pres = Vector.empty,
         posts = Vector(vprBody),
         decs = None,
         body = None
       )()
+    )
 
     comprehensions += comprehension -> vprFunction
   }

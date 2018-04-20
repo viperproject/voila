@@ -19,6 +19,9 @@ import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
 
 trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
+
+  private val EXTRA_GUARD_TRIGGER = false
+
   private val regionStateFunctionCache =
     mutable.Map.empty[PRegion, vpr.Function]
 
@@ -311,7 +314,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def guardTriggerFunction(guard: PGuardDecl, region: PRegion): Option[vpr.DomainFunc] = {
     val guardPred = guardPredicate(guard, region)
 
-    if (guardPred.formalArgs.isEmpty) {
+    if (guardPred.formalArgs.length <= 1) {
       None
     } else {
       Some(
@@ -475,18 +478,22 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         perm
       )().withSource(guardExp)
 
-    /* body && [guardT(args), true] */
-    def triggerWrapper(args: Vector[vpr.Exp], body: vpr.Exp): vpr.Exp =
-      vpr.And(
-        body,
-        vpr.InhaleExhaleExp(
+    /* [true, guardT(args)] */
+    def triggerWrapperConditional(args: Vector[vpr.Exp]): vpr.Exp =
+      vpr.InhaleExhaleExp(
+          vpr.TrueLit()(),
           guardTriggerFunctionApplication(
             guardDecl,
             translatedRegionId +: args,
             region
-          ).get,
-          vpr.TrueLit()()
-        )()
+          ).get
+      )()
+
+    /* [true, guardT(args)] ==> body */
+    def triggerWrapper(args: Vector[vpr.Exp], body: vpr.Exp): vpr.Exp =
+      vpr.Implies(
+        triggerWrapperConditional(args),
+        body
       )()
 
 
@@ -498,15 +505,15 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         ){ case (predArgs, perm) =>
           val body = accessPredicate(predArgs, perm)
 
-          if (predArgs.isEmpty) {
-            (body, body.loc)
-          } else {
+          if (EXTRA_GUARD_TRIGGER && predArgs.nonEmpty) {
             (triggerWrapper(predArgs, body), body.loc)
+          } else {
+            (body, body.loc)
           }
         }
 
       case PSetGuardArg(set) =>
-        val (conditional, decls) = extractGuardSetArgConditional(set)
+        val (conditional, decls) = extractGuardSetArgConditional(set, guardDecl.formalArguments.length)
 
         constructFromModifier(
           guardDecl.modifier,
@@ -514,24 +521,31 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         ){ case (predArgs, perm) =>
           val body = accessPredicate(predArgs, perm)
 
-          val rhs = if (predArgs.isEmpty) {
-            body
+          val totalConditional = if (EXTRA_GUARD_TRIGGER && predArgs.nonEmpty) {
+            vpr.And(
+              conditional,
+              triggerWrapperConditional(predArgs)
+            )()
           } else {
-            triggerWrapper(predArgs, body)
+            conditional
           }
 
-          val trigger = guardTriggerFunctionApplication(
-            guardDecl,
-            translatedRegionId +: predArgs,
-            region
-          ).get
+          val trigger = if (EXTRA_GUARD_TRIGGER) {
+            guardTriggerFunctionApplication(
+              guardDecl,
+              translatedRegionId +: predArgs,
+              region
+            ).get
+          } else {
+            conditional
+          }
 
           val total = vpr.Forall(
             decls,
             Seq(vpr.Trigger(Seq(trigger))()),
             vpr.Implies(
-              conditional,
-              rhs
+              totalConditional,
+              body
             )()
           )()
 
@@ -540,26 +554,41 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  private def extractGuardSetArgConditional(set: PExpression): (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
-    val vipElemTypes = semanticAnalyser.typ(set) match {
-      case PTupleType(elementTypes) =>
-        elementTypes map translate
+  private def extractGuardSetArgConditional(set: PExpression, expectedNum: Int): (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
+    semanticAnalyser.typ(set) match {
+
+      case PSetType(elementType) if expectedNum == 1 =>
+        val vipElemTypes = translate(elementType)
+        val decl = vpr.LocalVarDecl(s"$$a", vipElemTypes)()
+
+        val conditional = vpr.AnySetContains(
+          decl.localVar,
+          translate(set)
+        )()
+
+        (conditional, Vector(decl))
+
+      case PSetType(PTupleType(elementTypes)) if expectedNum > 1 =>
+        val vipElemTypes = elementTypes map translate
+
+        val decls = vipElemTypes.zipWithIndex map { case (typ, ix) =>
+          vpr.LocalVarDecl(s"$$a_$ix", typ)()
+        }
+
+        val conditional = vpr.AnySetContains(
+          vpr.DomainFuncApp(
+            func = preamble.tuples.tuple(decls.length),
+            args = decls map (_.localVar),
+            typVarMap = preamble.tuples.typeVarMap(vipElemTypes)
+          )(),
+          translate(set)
+        )()
+
+        (conditional, decls)
 
       case other =>
         sys.error(s"${set.pretty} should be of type Tuple but is ${other}")
     }
-
-    val decls = vipElemTypes.zipWithIndex map { case (typ, ix) =>
-      vpr.LocalVarDecl(s"$$a_$ix", typ)()
-    }
-
-    val conditional = vpr.DomainFuncApp(
-      func = preamble.tuples.tuple(decls.length),
-      args = decls map (_.localVar),
-      typVarMap = preamble.tuples.typeVarMap(vipElemTypes)
-    )()
-
-    (conditional, decls)
   }
 
   private def constructFromModifier[A](modifier: PModifier,
@@ -728,7 +757,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     def substitute(v: vpr.LocalVar, qvars: Seq[vpr.LocalVar]): vpr.Exp = {
       vpr.FuncApp(
         collectedActionSkolemizationFunctions(region.id.name, v.name),
-        qvars
+        qvars.take(region.formalInArgs.length)
       )()
     }
 
@@ -815,7 +844,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     vprHavocAllInstances.transform(
       {
-        case forall: vpr.Forall =>
+        case forall: vpr.Forall if forall.variables.head.name == "$r" => // FIXME: well ...
           val substitutions: Map[vpr.LocalVar, vpr.Exp] =
             forall.variables.map(_.localVar).zip(vprRegionInArgs)(breakOut)
 
@@ -834,8 +863,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                                       vprRegionInArgs: Vector[vpr.Exp],
                                       guards: Vector[PRegionedGuardExp],
                                       vprFrom: vpr.Exp,
-                                      vprTo: vpr.Exp)
+                                      vprTo: vpr.Exp,
+                                      preLabel: vpr.Label)
                                      : vpr.Assert = {
+
+    def toOldArgs(args: Vector[vpr.Exp]): Vector[vpr.Exp] =
+      args.map(vpr.LabelledOld(_, preLabel.name)())
 
     /* from == to */
     val vprUnchanged = vpr.EqCmp(vprFrom, vprTo)()
@@ -871,13 +904,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           vprTo,
           vpr.TrueLit()())
 
-        var vprConjunctGuardCheck: vpr.Exp = vpr.TrueLit()()
-
-        var vprConditionGuardCheck: vpr.Exp = vpr.TrueLit()()
-
-        var conditionVars: Vector[vpr.LocalVarDecl] = Vector.empty
-
-        action.guards foreach { case PBaseGuardExp(aGuardId, aGuardArg) =>
+        val constraints: Vector[vpr.Exp] = action.guards map { case PBaseGuardExp(aGuardId, aGuardArg) =>
 
           val guardKind = semanticAnalyser.entity(aGuardId) match {
             case GuardEntity(guardDecl, `region`) => guardDecl
@@ -888,17 +915,115 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           (guardArg, aGuardArg) match {
             case (PStandartGuardArg(guardArgs), PStandartGuardArg(aGuardArgs)) =>
               (guardKind.modifier, guardArgs, aGuardArgs) match {
-                case (_: PDivisibleGuard, r +: heldPerm +: _, requiredPerm +: _) =>
-                  vprConjunctGuardCheck = vpr.And(
-                    vprConjunctGuardCheck,
+                case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs, sollArgs) =>
+                  viper.silicon.utils.ast.BigAnd(
+                    haveArgs.zip(sollArgs).map{ case (h,s) =>
+                      vpr.EqCmp(
+                        vpr.LabelledOld(translate(h), preLabel.name)(),
+                        translate(s)
+                      )()
+                    }
+                  )
+
+                case (_: PDivisibleGuard, r +: heldPerm +: haveArgs, requiredPerm +: sollArgs) =>
+                  viper.silicon.utils.ast.BigAnd(
                     vpr.PermLeCmp(
                       translate(requiredPerm),
                       translate(heldPerm)
+                    )() +:
+                    haveArgs.zip(sollArgs).map{ case (h,s) =>
+                      vpr.EqCmp(
+                        vpr.LabelledOld(translate(h), preLabel.name)(),
+                        translate(s)
+                      )()
+                    }
+                  )
+              }
+
+            case (PStandartGuardArg(guardArgs), PSetGuardArg(aGuardSet)) =>
+
+              (guardKind.modifier, guardArgs) match {
+                case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs) =>
+
+                  val guardElem = if (haveArgs.length == 1) {
+                    translate(haveArgs.head)
+                  } else {
+                    vpr.DomainFuncApp(
+                      func = preamble.tuples.tuple(haveArgs.length),
+                      args = haveArgs map translate,
+                      typVarMap = preamble.tuples.typeVarMap(
+                        haveArgs map (s => translate(semanticAnalyser.typ(s)))
+                      )
+                    )()
+                  }
+
+                  vpr.AnySetSubset(
+                    translate(aGuardSet),
+                    vpr.LabelledOld(
+                      vpr.ExplicitSet(Seq(guardElem))(), preLabel.name)()
+                  )()
+              }
+
+            case (PSetGuardArg(guardSet), PStandartGuardArg(aGuardArgs)) =>
+
+              (guardKind.modifier, aGuardArgs) match {
+                case (_: PUniqueGuard | _: PDuplicableGuard, sollArgs) =>
+
+                  val sollArgsTuple = vpr.DomainFuncApp(
+                    func = preamble.tuples.tuple(sollArgs.length),
+                    args = sollArgs map translate,
+                    typVarMap = preamble.tuples.typeVarMap(
+                      sollArgs map (s => translate(semanticAnalyser.typ(s)))
+                    )
+                  )()
+
+                  vpr.AnySetContains(
+                    sollArgsTuple,
+                    vpr.LabelledOld(translate(guardSet), preLabel.name)()
+                  )()
+
+                case _ => ???
+              }
+
+            case (PSetGuardArg(guardSet), PSetGuardArg(aGuardSet)) =>
+
+              val (aGuardconditional, aGuardDecls) = extractGuardSetArgConditional(aGuardSet, guardKind.formalArguments.length)
+
+              guardKind.modifier match {
+                case _: PUniqueGuard | _: PDuplicableGuard =>
+
+                  val aGuardElem = if (aGuardDecls.length == 1) {
+                    aGuardDecls.head.localVar
+                  } else {
+                    vpr.DomainFuncApp(
+                      func = preamble.tuples.tuple(aGuardDecls.length),
+                      args = aGuardDecls map (_.localVar),
+                      typVarMap = preamble.tuples.typeVarMap(
+                        aGuardDecls map (_.typ)
+                      )
+                    )()
+                  }
+
+                  vpr.Forall(
+                    aGuardDecls,
+                    Vector.empty,
+                    vpr.Implies(
+                      aGuardconditional,
+                      vpr.AnySetContains(
+                        aGuardElem,
+                        translate(guardSet)
+                      )()
                     )()
                   )()
 
-                case _ =>
+//                  vpr.AnySetSubset(
+//                    vpr.LabelledOld(translate(guardSet), preLabel.name)(),
+//                    translate(aGuardSet)
+//                  )()
+
+                case _ => ???
               }
+
           }
         }
 
@@ -951,18 +1076,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             v.localVar -> binderInstantiations(v.name)
           )(breakOut)
 
-        val actionConstraint = vprExistentialConstraint.exp.replace(substitutes)
+        val body = vpr.And(
+          vprExistentialConstraint.exp,
+          viper.silicon.utils.ast.BigAnd(constraints)
+        )()
 
-        val bodyRhs = vpr.And(actionConstraint,vprConjunctGuardCheck)()
-
-        val body = vpr.Implies(vprConditionGuardCheck, bodyRhs)()
-
-        if (conditionVars.isEmpty) {
-          body
-        } else {
-          // TODO: output forall
-          ???
-        }
+        body.replace(substitutes)
       })
 
     val vprConstraint = viper.silicon.utils.ast.BigOr(vprUnchanged +: vprActionConstraints)
@@ -1034,6 +1153,22 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                                                                guardArgument: PGuardArg)
   : vpr.Exp = semanticAnalyser.entity(guardId) match {
     case GuardEntity(guardDecl, `region`) =>
+
+      /* guardT(args) */
+      def triggerWrapperConditional(args: Vector[vpr.Exp]): vpr.Exp =
+        guardTriggerFunctionApplication(
+          guardDecl,
+          vprRegionId +: args,
+          region
+        ).get
+
+      /* guardT(args) && body */
+      def triggerWrapper(args: Vector[vpr.Exp], body: vpr.Exp): vpr.Exp =
+        vpr.And(
+          triggerWrapperConditional(args),
+          body
+        )()
+
       guardArgument match {
         case PStandartGuardArg(guardArguments) =>
           (guardDecl.modifier, guardArguments) match {
@@ -1041,15 +1176,23 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
               vpr.TrueLit () ()
 
             case (_: PUniqueGuard, args) =>
-              vpr.EqCmp (
+              val translatedArgs = args map translate
+
+              val body = vpr.EqCmp (
                 vpr.CurrentPerm (
                   vpr.PredicateAccess (
-                    vprRegionId +: (args map translate),
+                    vprRegionId +: translatedArgs,
                     guardPredicate (guardDecl, region).name
                   ) ()
                 ) (),
                 vpr.NoPerm () ()
               ) ()
+
+              if (EXTRA_GUARD_TRIGGER && translatedArgs.nonEmpty) {
+                triggerWrapper(translatedArgs, body)
+              } else {
+                body
+              }
 
             case (_: PDivisibleGuard, requiredPerm +: args) =>
               vpr.PermLeCmp (
@@ -1064,6 +1207,56 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                   translate (requiredPerm)
                 ) ()
               ) ()
+          }
+
+        case PSetGuardArg(set) =>
+          val (conditional, decls) = extractGuardSetArgConditional(set, guardDecl.formalArguments.length)
+
+          (guardDecl.modifier, decls map (_.localVar)) match {
+            case (_: PDuplicableGuard, _) =>
+              vpr.TrueLit()()
+
+            case (_: PUniqueGuard, translatedArgs) =>
+
+              val body = vpr.EqCmp (
+                vpr.CurrentPerm (
+                  vpr.PredicateAccess (
+                    vprRegionId +: translatedArgs,
+                    guardPredicate (guardDecl, region).name
+                  ) ()
+                ) (),
+                vpr.NoPerm () ()
+              ) ()
+
+              val rhs = if (EXTRA_GUARD_TRIGGER && translatedArgs.nonEmpty) {
+                triggerWrapper(translatedArgs, body)
+              } else {
+                body
+              }
+
+              val trigger = if (EXTRA_GUARD_TRIGGER) {
+                guardTriggerFunctionApplication(
+                  guardDecl,
+                  vprRegionId +: translatedArgs,
+                  region
+                ).get
+              } else {
+                conditional
+              }
+
+              /* forall xs :: {guardT(r,xs)} tuple(xs) in set ==> guardT(r,xs) && perm(guard(r,xs)) = none */
+              /* forall xs :: {tuple(xs) in set} tuple(xs) in set ==> perm(guard(r,xs)) = none */
+              vpr.Forall(
+                decls,
+                Seq(vpr.Trigger(Seq(trigger))()),
+                vpr.Implies(
+                  conditional,
+                  rhs
+                )()
+              )()
+
+            case (_: PDivisibleGuard, requiredPerm +: _) =>
+              ??? // TODO: not yet supported
           }
       }
 
