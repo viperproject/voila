@@ -415,20 +415,6 @@ case class PSeqSize(seq: PExpression) extends PSeqExp
 case class PSeqHead(seq: PExpression) extends PSeqExp
 case class PSeqTail(seq: PExpression) extends PSeqExp
 
-sealed trait PPairExp extends PExpression
-
-case class PExplicitPair(element1: PExpression,
-                         element2: PExpression,
-                         typeAnnotation: Option[(PType, PType)])
-    extends PPairExp
-
-case class PPairFirst(pair: PExpression) extends PPairExp with PUnOp {
-  val operand: PExpression = pair
-}
-
-case class PPairSecond(pair: PExpression) extends PPairExp with PUnOp {
-  val operand: PExpression = pair
-}
 
 sealed trait PTupleExp extends PExpression
 
@@ -436,9 +422,7 @@ case class PExplicitTuple(elements: Vector[PExpression],
                           typeAnnotation: Option[Vector[PType]])
     extends PTupleExp
 
-case class PTupleGet(tuple: PExpression,
-                     index: Int,
-                     of: Int)
+case class PTupleGet(tuple: PExpression, index: Int)
     extends PTupleExp with PUnOp {
       val operand: PExpression = tuple
     }
@@ -513,7 +497,6 @@ sealed trait PCollectionType extends PType {
 
 case class PSetType(elementType: PType) extends PCollectionType
 case class PSeqType(elementType: PType) extends PCollectionType
-case class PPairType(elementType1: PType, elementType2: PType) extends PType
 case class PTupleType(elementTypes: Vector[PType]) extends PType
 case class PMapType(keyType: PType, valueType: PType) extends PType
 

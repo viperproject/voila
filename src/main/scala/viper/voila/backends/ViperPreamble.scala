@@ -20,29 +20,13 @@ class ViperPreamble(preamble: Program) {
     val nat: FuncApp = FuncApp(preamble.findFunction("NatSet"), Vector.empty)()
   }
 
-  object pairs {
-    val domain: Domain = preamble.findDomain("Pair")
-
-    val pair: DomainFunc = preamble.findDomainFunction("pair")
-    val first: DomainFunc = preamble.findDomainFunction("fst")
-    val second: DomainFunc = preamble.findDomainFunction("snd")
-
-    def typeVarMap(t1: Type, t2: Type) = Map(domain.typVars(0) -> t1, domain.typVars(1) -> t2)
-  }
-
   object tuples {
-    private var domains: mutable.Map[Int, Domain] = mutable.Map.empty
-    private var constructors: mutable.Map[Int, DomainFunc] = mutable.Map.empty
-    private var getters: mutable.Map[(Int,Int), DomainFunc] = mutable.Map.empty
+    private var _generatedDomains: List[Domain] = List.empty
+    private val domains: mutable.Map[Int, Domain] = mutable.Map.empty
+    private val constructors: mutable.Map[Int, DomainFunc] = mutable.Map.empty
+    private val getters: mutable.Map[(Int,Int), DomainFunc] = mutable.Map.empty
 
-    def clear(): Unit = {
-      domains.clear()
-      constructors.clear()
-      getters.clear()
-    }
-
-    // FIXME: deep-copy domain definitions
-    def generatedDomains: Seq[Domain] = domains.values.toSeq
+    def generatedDomains: List[Domain] = _generatedDomains
 
     private def addNPairDomain(arity: Int): Unit = {
       val domainName = s"Tuple$arity"
@@ -119,6 +103,8 @@ class ViperPreamble(preamble: Program) {
       domains.update(arity, domain)
       constructors.update(arity, tupleFunc)
       0.until(arity) foreach (ix => getters.update((ix, arity), getFuncs(ix)))
+
+      _generatedDomains ::= domain
     }
 
     def domain(arity: Int): Domain =
