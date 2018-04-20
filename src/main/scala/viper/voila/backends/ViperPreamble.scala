@@ -21,18 +21,12 @@ class ViperPreamble(preamble: Program) {
   }
 
   object tuples {
-    private var domains: mutable.Map[Int, Domain] = mutable.Map.empty
-    private var constructors: mutable.Map[Int, DomainFunc] = mutable.Map.empty
-    private var getters: mutable.Map[(Int,Int), DomainFunc] = mutable.Map.empty
+    private var _generatedDomains: List[Domain] = List.empty
+    private val domains: mutable.Map[Int, Domain] = mutable.Map.empty
+    private val constructors: mutable.Map[Int, DomainFunc] = mutable.Map.empty
+    private val getters: mutable.Map[(Int,Int), DomainFunc] = mutable.Map.empty
 
-    def clear(): Unit = {
-      domains.clear()
-      constructors.clear()
-      getters.clear()
-    }
-
-    // FIXME: deep-copy domain definitions
-    def generatedDomains: Seq[Domain] = domains.values.toSeq
+    def generatedDomains: List[Domain] = _generatedDomains
 
     private def addNPairDomain(arity: Int): Unit = {
       val domainName = s"Tuple$arity"
@@ -109,6 +103,8 @@ class ViperPreamble(preamble: Program) {
       domains.update(arity, domain)
       constructors.update(arity, tupleFunc)
       0.until(arity) foreach (ix => getters.update((ix, arity), getFuncs(ix)))
+
+      _generatedDomains ::= domain
     }
 
     def domain(arity: Int): Domain =
