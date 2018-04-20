@@ -900,6 +900,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             }
 
           case _: PSetContains => PBoolType()
+          case _: PSetSubset => PBoolType()
           case _: PSeqSize => PIntType()
           case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
           case tailExp: PSeqTail => typ(tailExp.seq)
@@ -998,6 +999,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         Set(PSetType(typ(contains.element)))
 
       /* TODO: Unification is needed for handling the next cases, which require type variables */
+      // case tree.parent(_: PSetContains) => /* TODO: Return set<T> */
       // case tree.parent(_: PSetUnion) => /* TODO: Return set<T> */
       // case tree.parent(_: PPairFirst | _: PPairSecond) => /* TODO: Return pair<T1, T2> */
       // case tree.parent (_: PNPairGFet) => /* TODO: Return pairN<TS> */

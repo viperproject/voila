@@ -6,14 +6,14 @@
 
 package viper.voila.translator
 
-import scala.collection.{breakOut, mutable}
+import scala.collection.breakOut
 import scala.collection.immutable.{ListMap, ListSet}
 import viper.silver.{ast => vpr}
 import viper.voila.frontend.{PIdnExp, PIdnUse, PSetComprehension, VoilaTree}
 
 trait SetComprehensionComponent { this: PProgramToViperTranslator =>
   private var comprehensions: Map[PSetComprehension, vpr.Function] = Map.empty
-  private val comprehensionPatterns: mutable.Map[vpr.Exp, vpr.Function] = mutable.Map.empty
+  private var comprehensionPatterns: Map[vpr.Exp, vpr.Function] = Map.empty
 
   def recordedSetComprehensions: Map[PSetComprehension, vpr.Function] = comprehensions
 
@@ -38,15 +38,15 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
     val freeVariables: ListSet[PIdnUse] = semanticAnalyser.freeVariables(comprehension)
     val decls: ListSet[vpr.LocalVarDecl] =
       freeVariables.zipWithIndex
-      .map{ case (fv,ix)  => {
+        .map{ case (fv,ix)  => {
         val vprDecl =
           vpr.LocalVarDecl(
-            s"$$s_$ix",// fv.name,
+              s"$$s_$ix",// fv.name,
             vprElementType
           )()
 
-        vprDecl
-      }}(breakOut)
+          vprDecl
+        }}(breakOut)
 
     val freeVariablesToDecls: ListMap[PIdnUse, vpr.LocalVarDecl] =
       freeVariables.zip(decls)(breakOut)
@@ -80,8 +80,10 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
       )()
     }
 
-    val vprFunction = comprehensionPatterns.getOrElseUpdate(vprBody,
-      vpr.Function(
+    val vprFunction = if (comprehensionPatterns.contains(vprBody)) {
+      comprehensionPatterns(vprBody)
+    } else {
+      val function = vpr.Function(
         name = setComprehensionFunctionName,
         formalArgs = decls.toSeq,
         typ = vprSetType,
@@ -90,7 +92,11 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
         decs = None,
         body = None
       )()
-    )
+
+      comprehensionPatterns += vprBody -> function
+
+      function
+    }
 
     comprehensions += comprehension -> vprFunction
   }
