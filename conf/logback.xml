@@ -1,4 +1,9 @@
 <configuration>
+  <conversionRule
+      conversionWord="highlight"
+      converterClass="viper.voila.reporting.LogbackOutputHighlighter"
+  />
+
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
       <pattern>%msg%n</pattern>

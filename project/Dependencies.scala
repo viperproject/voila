@@ -3,8 +3,9 @@ import sbt._
 object Dependencies {
   lazy val kiama = "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.1.0"
   lazy val scallop = "org.rogach" %% "scallop" % "2.0.7"
-  lazy val logbackClassic = "ch.qos.logback" % "logback-classic" % "1.1.7" // Logging Backend
   lazy val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0" // Logging Frontend
+  lazy val logbackClassic = "ch.qos.logback" % "logback-classic" % "1.1.7" // Logging Backend
+  lazy val jansi = "org.fusesource.jansi" % "jansi" % "1.17.1" // For colouring Logback output
   lazy val commonsIO = "commons-io" % "commons-io" % "2.5"
 
   lazy val silver = "viper" %% "silver" % "0.1-SNAPSHOT"
