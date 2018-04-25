@@ -15,12 +15,13 @@ import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
 import viper.voila.reporting.InsufficientGuardPermissionError
 import viper.silver.ast.utility.Rewriter.Traverse
+import viper.silver.ast.utility.Simplifier
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
 
 trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
-  private val EXTRA_GUARD_TRIGGER = false
+  private val EXTRA_GUARD_TRIGGER = true
 
   private val regionStateFunctionCache =
     mutable.Map.empty[PRegion, vpr.Function]
@@ -481,19 +482,30 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     /* [true, guardT(args)] */
     def triggerWrapperConditional(args: Vector[vpr.Exp]): vpr.Exp =
       vpr.InhaleExhaleExp(
-          vpr.TrueLit()(),
-          guardTriggerFunctionApplication(
-            guardDecl,
-            translatedRegionId +: args,
-            region
-          ).get
+        vpr.TrueLit()(),
+        guardTriggerFunctionApplication(
+          guardDecl,
+          translatedRegionId +: args,
+          region
+        ).get
       )()
 
-    /* [true, guardT(args)] ==> body */
+    /* [true, guardT(args)] */
+    def triggerPart(args: Vector[vpr.Exp]): vpr.Exp =
+      vpr.InhaleExhaleExp(
+        guardTriggerFunctionApplication(
+          guardDecl,
+          translatedRegionId +: args,
+          region
+        ).get,
+        vpr.TrueLit()()
+      )()
+
+    /* [guardT(args), true] && body */
     def triggerWrapper(args: Vector[vpr.Exp], body: vpr.Exp): vpr.Exp =
-      vpr.Implies(
-        triggerWrapperConditional(args),
-        body
+      vpr.And(
+        body,
+        triggerPart(args)
       )()
 
 
@@ -521,6 +533,23 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         ){ case (predArgs, perm) =>
           val body = accessPredicate(predArgs, perm)
 
+          val triggers = Vector(
+            vpr.Trigger(
+              Vector(
+                guardTriggerFunctionApplication(
+                  guardDecl,
+                  translatedRegionId +: predArgs,
+                  region
+                ).get
+              )
+            )(),
+            vpr.Trigger(
+              Vector(
+                conditional
+              )
+            )()
+          )
+
           val totalConditional = if (EXTRA_GUARD_TRIGGER && predArgs.nonEmpty) {
             vpr.And(
               conditional,
@@ -530,22 +559,29 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             conditional
           }
 
-          val trigger = if (EXTRA_GUARD_TRIGGER) {
-            guardTriggerFunctionApplication(
-              guardDecl,
-              translatedRegionId +: predArgs,
-              region
-            ).get
+
+          val triggerExtra = if (EXTRA_GUARD_TRIGGER) {
+            vpr.Forall(
+              decls,
+              triggers,
+              vpr.Implies(
+                conditional,
+                triggerPart(predArgs)
+              )()
+            )()
           } else {
-            conditional
+            vpr.TrueLit()()
           }
 
-          val total = vpr.Forall(
-            decls,
-            Seq(vpr.Trigger(Seq(trigger))()),
-            vpr.Implies(
-              totalConditional,
-              body
+          val total = vpr.And(
+            triggerExtra,
+            vpr.Forall(
+              decls,
+              triggers,
+              vpr.Implies(
+                conditional,
+                body
+              )()
             )()
           )()
 
@@ -1154,21 +1190,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   : vpr.Exp = semanticAnalyser.entity(guardId) match {
     case GuardEntity(guardDecl, `region`) =>
 
-      /* guardT(args) */
-      def triggerWrapperConditional(args: Vector[vpr.Exp]): vpr.Exp =
-        guardTriggerFunctionApplication(
-          guardDecl,
-          vprRegionId +: args,
-          region
-        ).get
-
-      /* guardT(args) && body */
-      def triggerWrapper(args: Vector[vpr.Exp], body: vpr.Exp): vpr.Exp =
-        vpr.And(
-          triggerWrapperConditional(args),
-          body
-        )()
-
       guardArgument match {
         case PStandartGuardArg(guardArguments) =>
           (guardDecl.modifier, guardArguments) match {
@@ -1188,11 +1209,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                 vpr.NoPerm () ()
               ) ()
 
-              if (EXTRA_GUARD_TRIGGER && translatedArgs.nonEmpty) {
-                triggerWrapper(translatedArgs, body)
-              } else {
-                body
-              }
+              body
 
             case (_: PDivisibleGuard, requiredPerm +: args) =>
               vpr.PermLeCmp (
@@ -1228,30 +1245,31 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
                 vpr.NoPerm () ()
               ) ()
 
-              val rhs = if (EXTRA_GUARD_TRIGGER && translatedArgs.nonEmpty) {
-                triggerWrapper(translatedArgs, body)
-              } else {
-                body
-              }
-
-              val trigger = if (EXTRA_GUARD_TRIGGER) {
-                guardTriggerFunctionApplication(
-                  guardDecl,
-                  vprRegionId +: translatedArgs,
-                  region
-                ).get
-              } else {
-                conditional
-              }
+              val triggers = Vector(
+                vpr.Trigger(
+                  Vector(
+                    guardTriggerFunctionApplication(
+                      guardDecl,
+                      vprRegionId +: translatedArgs,
+                      region
+                    ).get
+                  )
+                )(),
+                vpr.Trigger(
+                  Vector(
+                    conditional
+                  )
+                )()
+              )
 
               /* forall xs :: {guardT(r,xs)} tuple(xs) in set ==> guardT(r,xs) && perm(guard(r,xs)) = none */
               /* forall xs :: {tuple(xs) in set} tuple(xs) in set ==> perm(guard(r,xs)) = none */
               vpr.Forall(
                 decls,
-                Seq(vpr.Trigger(Seq(trigger))()),
+                triggers,
                 vpr.Implies(
                   conditional,
-                  rhs
+                  body
                 )()
               )()
 
