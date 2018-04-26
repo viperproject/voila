@@ -17,7 +17,8 @@ Basic Visual Studio Code support for Voila.
 
 ### Fine-tune highlighting
 
-- Switch to VSCode theme `Dark (Visual Studio)`
+- Switch to VSCode theme `Visual Studio Dark` (potentially called
+  `Dark (Visual Studio)`)
 - Open your user settings (File -> Preferences -> Settings)
 - Copy the following configuration block into your user settings:
  
@@ -56,7 +57,7 @@ Basic Visual Studio Code support for Voila.
             {
               "scope": "keyword.control.toplevel.voila",
               "settings": {
-                "foreground": "#F2D116"
+                "foreground": "#ffe23e"
               }
             },
           ]
@@ -240,19 +241,24 @@ that runs Voila.
 - Open VSCode and an MSYS2 terminal (e.g. `MSYS2 MinGW 64-bit`) and place the 
   windows side-by-side (e.g. using `Win+Left`/`Win+Right`)
 - Focus the terminal:
+    - Let's assume the Voila source directory is the current directory
     - Create an environment variable pointing to Voila's executable. E.g.
 
-          VOILA_CMD='/d/Develop/Viper/voila/misc/nailgun/voila.bat ng=true'
+          VOILA_CMD='/voila/misc/nailgun/voila.bat ng=true'
 
-      It is expected that a Voila file can be verified by running
+      for using Nailgun. It is expected that a Voila file can be verified by
+      running
       
           $VOILA_CMD -i /absolute/path/to/some/file.vl
 
-    - Execute `source path/to/demo-env-win/setup.bash` (`demo-env-win` should be a
-      subdirectory) of the directory where this README was found)
-    - It should now be possible to verify a Voila file by executing 
-      `voila path/to/some/file.vl`
-- Load the script `demo-env-win/setup.ahk` into AutoHotkey
+    - However Voila is run, ensure that it colours its output (errors) by
+      passing the Logback configuration `./conf/logback-color.xml` to the JVM
+      at start-up
+    - Execute `source ./misc/vscode/demo-env-win/setup.bash`
+    - The terminal prompt should have changed, and it should now be possible
+      to verify a Voila file by executing `voila path/to/some/file.vl` 
+      (absolute and relative paths should work)
+- Load the script `./misc/vscode/demo-env-win/setup.ahk` into AutoHotkey
 - The following keyboard shortcuts should now work:
     - In VSCode, pressing `F5` should verify the currently open Voila file in
       the open MSYS2 terminal
@@ -261,7 +267,8 @@ that runs Voila.
     - Pressing `Win+Ctrl+f` should make VSCode and MSYS2 fullscreen by removing
       decorational border/frame elements (press again to undo)
     - Pressing `Win+Alt+Up` should maximise VSCode and thus hide the terminal
-      (press again to undo)
+      (press again to undo). This might only properly cover the screen if
+      VSCode is in fullscreen mode (`Win+Ctrl+f`).
 - For the perfect demo mode:
     - Hide several VSCode GUI elements via the following settings:
 
