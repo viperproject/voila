@@ -32,6 +32,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   private var _translatedProcedureStubs: Map[String, vpr.Method] = _
   protected def translatedProcedureStubs: Map[String, vpr.Method] = _translatedProcedureStubs
 
+  protected def outputDebugInfo(message: String): Unit = logger.debug(s"${indent()}$message")
+
   /*
    * Immutable state and utility methods
    */
@@ -1044,33 +1046,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case stmt: PUseAtomic => translate(stmt)
       case stmt: POpenRegion => translate(stmt)
     }
-  }
-
-  def stabilizeRegions(reason: String): vpr.Stmt = {
-    stabilizeRegions(tree.root.regions, reason)
-  }
-
-  def stabilizeRegions(regions: Vector[PRegion], reason: String): vpr.Stmt = {
-    val stabilizationMessage =
-      s"Stabilising regions ${regions.map(_.id.name).mkString(",")} ($reason)"
-
-    logger.debug(s"${indent()}$stabilizationMessage")
-
-    val preHavocLabel = freshLabel("pre_havoc")
-
-    val stabilizeInstances =
-      regions.map(region =>
-        prependComment(
-          s"Stabilising all instances of region ${region.id.name}",
-          stabilizeAllRegionInstances(region, preHavocLabel)))
-
-    val result =
-      vpr.Seqn(
-        preHavocLabel +: stabilizeInstances,
-        Vector.empty
-      )()
-
-    surroundWithSectionComments(stabilizationMessage, result)
   }
 
   def translate(expression: PExpression): vpr.Exp =
