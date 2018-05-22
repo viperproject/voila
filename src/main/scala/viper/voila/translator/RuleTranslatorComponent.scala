@@ -43,20 +43,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
     }
 
-    val preHavocLabel1 = freshLabel("pre_havoc")
+    val havoc1 = stabilizeSingleInstances("before atomic", (region, regionInArgs))
 
-    val havoc1 =
-      prependComment(
-        s"Stabilising region ${makeAtomic.regionPredicate}",
-        stabilizeRegionInstance(region, regionInArgs, preHavocLabel1))
-
-
-    val preHavocLabel2 = freshLabel("pre_havoc")
-
-    val havoc2 =
-      prependComment(
-        s"Stabilising region ${makeAtomic.regionPredicate}",
-        stabilizeRegionInstance(region, regionInArgs, preHavocLabel2))
+    val havoc2 = stabilizeSingleInstances("after atomic", (region, regionInArgs))
 
     val ruleBody = translate(makeAtomic.body)
 
@@ -183,11 +172,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           inhaleDiamond,
           exhaleGuard,
-          preHavocLabel1,
           havoc1,
           ruleBody,
           checkUpdatePermitted,
-          preHavocLabel2,
           havoc2,
           BLANK_LINE,
           assumeCurrentStateIsStepTo,
@@ -236,7 +223,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val stabilizeFrameRegions =
-      stabilizeRegions(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}")
+      stabilizeAllInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}")
 
     val ruleBody = translate(updateRegion.body)
 
@@ -372,10 +359,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val stabilizationReason = s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}"
 
     val stabilizeOtherRegionTypes =
-      stabilizeRegions(tree.root.regions.filterNot(_ == region), stabilizationReason)
+      stabilizeAllInstances(stabilizationReason, tree.root.regions.filterNot(_ == region): _*)
 
     val stabilizeCurrentRegionTypes =
-      stabilizeRegions(Vector(region), stabilizationReason)
+      stabilizeAllInstances(stabilizationReason, region)
 
     val currentState =
       vpr.FuncApp(

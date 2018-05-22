@@ -530,7 +530,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         if (alreadyHavoced) {
           None
         } else {
-          Some(stabilizeRegions(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
+          Some(stabilizeAllInstances(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
         }
       } else {
         None
@@ -910,10 +910,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   //       Vector.empty
                   //     )()
                   //   )()
-                  val vprHavocRegion =
-                    prependComment(
-                      s"Stabilising region $regionPredicate",
-                      stabilizeRegionInstance(region, vprRegionArguments, vprPreHavocLabel))
+                  val vprHavocRegion = stabilizeSingleInstances("call interference check", (region, vprRegionArguments))
+//                    prependComment(
+//                      s"Stabilising region $regionPredicate",
+//                      stabilizeRegionInstance(region, vprRegionArguments, vprPreHavocLabel))
 
                   val vprCurrentState =
                     vpr.FuncApp(
@@ -1017,7 +1017,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           }
 
           val stabilizeFrameRegions =
-            stabilizeRegions(s"before ${call.statementName}@${call.lineColumnPosition}")
+            stabilizeAllInstances(s"before ${call.statementName}@${call.lineColumnPosition}")
 
           val vprHavocTargets = vprReturns map havoc
 
