@@ -300,12 +300,17 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val guardPredicates =
       region.guards map (guard => guardPredicate(guard, region))
 
+    /* TODO unify -> e.g. one footprintManagerList*/
+
+    val interferenceFunctionFootprint = interferenceSetFunctionManager.collectFooprint(region)
+    val interferenceFunctions = interferenceSetFunctionManager.collectAllFunctions(region)
+
     val skolemizationFunctionFootprint = collectActionSkolemizationFunctionFootprint(region)
     val skolemizationFunctions = collectActionSkolemizationFunctions(region)
 
     (   guardPredicates
-     ++ Vector(skolemizationFunctionFootprint)
-     ++ skolemizationFunctions
+     ++ Vector(skolemizationFunctionFootprint, interferenceFunctionFootprint)
+     ++ skolemizationFunctions ++ interferenceFunctions
      ++ region.formalOutArgs.indices.map(regionOutArgumentFunction(region, _))
      ++ Vector(
           regionPredicate,
