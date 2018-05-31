@@ -328,13 +328,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             actionSkolemizationFunctionFootprintAccess(region.id.name)))
       )()
 
-    val inhaleInterferenceFunctionFootprints =
-      vpr.Inhale(
-        viper.silicon.utils.ast.BigAnd(
-          /* TODO: Would benefit from an optimisation similar to issue #47 */
-          tree.root.regions map (region =>
-            interferenceSetFunctionManager.footprintAccess(region)))
-      )()
+//    val inhaleInterferenceFunctionFootprints =
+//      vpr.Inhale(
+//        viper.silicon.utils.ast.BigAnd(
+//          /* TODO: Would benefit from an optimisation similar to issue #47 */
+//          tree.root.regions map (region =>
+//            interferenceSetFunctionManager.footprintAccess(region)))
+//      )()
 
     val procedureWideBoundLogicalVariableDeclarations: Vector[vpr.LocalVarDecl] = {
       procedure.body match {
@@ -349,7 +349,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vprMethod.body.map(actualBody =>
         actualBody.copy(
           ss =
-            inhaleSkolemizationFunctionFootprints +: inhaleInterferenceFunctionFootprints +:
+            inhaleSkolemizationFunctionFootprints +: // inhaleInterferenceFunctionFootprints +:
             actualBody.ss,
           scopedDecls =
               actualBody.scopedDecls ++

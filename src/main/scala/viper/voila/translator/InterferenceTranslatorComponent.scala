@@ -14,21 +14,44 @@ import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
 import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, RegionStateError, UnfoldError}
+import viper.voila.translator.TranslatorUtils._
 
 
 trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
-  val interferenceSetFunctionManager: TranslatorUtils.BasicFootprintFunctionManagerNoFeature[PRegion] with TranslatorUtils.EmptyFootprintSelection[PRegion]  =
-    new TranslatorUtils.BasicFootprintFunctionManagerNoFeature[PRegion]
-      with TranslatorUtils.EmptyFootprintSelection[PRegion]
-      with TranslatorUtils.MemberBasedFootprintNames[PRegion] {
+  private val interferenceSetFunctions = {
+    val _name = "interferenceSet"
+    def _functionType(obj: PRegion): Type = vpr.SetType(regionStateFunction(obj).typ)
 
-      override val name: String = "interference"
+    val _footprintManager =
+      new FootprintManager[PRegion]
+        with RegionManager[vpr.Predicate, vpr.PredicateAccessPredicate]
+        with RemoveVersionSelector[PRegion] {
+        override val name: String = _name
+      }
 
-      override def functionArgSelection(obj: PRegion): Vector[LocalVarDecl] = obj.formalInArgs map translate
-      override def selectFunctionArgs(obj: PRegion, args: Vector[Exp]): Vector[Exp] = args
-      override def functionTyp(obj: PRegion): Type = vpr.SetType(regionStateFunction(obj).typ)
+    val _triggerManager =
+      new DomainFunctionManager[PRegion]
+        with RegionManager[vpr.DomainFunc, vpr.DomainFuncApp]
+        with SubFullSelector[PRegion] {
+        override val name: String = _name
+        override def functionTyp(obj: PRegion): Type = _functionType(obj)
+      }
+
+    new HeapFunctionManager[PRegion]
+      with RegionManager[vpr.Function, vpr.FuncApp]
+      with VersionedSelector[PRegion] {
+
+      override val footprintManager: FootprintManager[PRegion] with SubSelector[PRegion] = _footprintManager
+      override val triggerManager: DomainFunctionManager[PRegion] with SubSelector[PRegion] = _triggerManager
+
+      override def functionTyp(obj: PRegion): Type = _functionType(obj)
+      override val name: String = _name
     }
+  }
+
+
+
 
   /* Interference-Set Domain and Domain-Functions */
 
@@ -47,7 +70,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
     /* exp in X(xs)*/
     def expInSet(exp: vpr.Exp) = vpr.AnySetContains(
       exp,
-      interferenceSetFunctionManager.functionApplication(region, regionArgs)
+      interferenceSetFunctions.application(region, regionArgs)
     )()
 
     /* m in X(xs) <==> e(xs)[postState(xs) -> m] */
@@ -62,8 +85,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
       val selectState = selectWrapper.wrap(expInSet(newState))
 
       /* acc(R_inference_fp()) */
-      val interferenceFootprintAccess =
-        interferenceSetFunctionManager.footprintAccess(region)
+      val interferenceFootprintAccess = null
 
       /* exhale acc(R_inference_fp()) */
       val vprExhaleInterferenceFootprintAccess =
@@ -97,5 +119,47 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
   def linkInterference() = ???
 
   def queryInterference() = ???
+
+  def nextStateContainedInInference(region: PRegion): Constraint =
+    new Constraint {
+      override def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt =
+        TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
+          vpr.AnySetContains(
+            target,
+            interferenceSetFunctions.application(region, args)
+          )()
+        )
+    }
+
+  def containsAllPossibleNextStatesConstraint(region: PRegion, possibleNextStateConstraint: Constraint): Constraint =
+    new Constraint {
+      override def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt = {
+
+        val varName = "$_m" // TODO: naming convention
+        val varType = regionStateFunction(region).typ
+        val varDecl = vpr.LocalVarDecl(varName, varType)()
+        val variable = varDecl.localVar
+
+        val regionArgs = args
+
+        /* m in X(xs)*/
+        val varInInterference =
+          vpr.AnySetContains(
+            variable,
+            target
+          )()
+
+        val varIsPossibleNextState: TranslatorUtils.BetterQuantifierWrapper.WrapperExt =
+          possibleNextStateConstraint(args)(variable)
+
+        /* m in X(xs) <==> preState(xs) ~> m */
+        varIsPossibleNextState.combine(e =>
+          TranslatorUtils.BetterQuantifierWrapper.QuantWrapperExt(
+            Vector(varDecl),
+            vpr.EqCmp(varInInterference, e)()
+          )
+        )
+      }
+    }
 
 }

@@ -9,12 +9,14 @@ package viper.voila.translator
 import scala.collection.breakOut
 import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
+import viper.silver.ast.{Exp, LocalVarDecl}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
 import viper.voila.reporting.InsufficientGuardPermissionError
 import viper.silver.ast.utility.Rewriter.Traverse
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
+import viper.voila.translator.TranslatorUtils.{BaseSelector, BasicManagerWithSimpleApplication}
 
 trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   private val regionStateFunctionCache =
@@ -30,6 +32,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   protected val collectedActionSkolemizationFunctions =
     /* Maps pairs of region and variable names to corresponding skolemization functions */
     mutable.Map.empty[(String, String), vpr.Function]
+
+  protected var collectingFunctions: List[PRegion => Vector[vpr.Declaration]] = Nil
 
   def regionPredicateAccess(region: PRegion,
                             arguments: Vector[vpr.Exp],
@@ -300,17 +304,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val guardPredicates =
       region.guards map (guard => guardPredicate(guard, region))
 
-    /* TODO unify -> e.g. one footprintManagerList*/
-
-    val interferenceFunctionFootprint = interferenceSetFunctionManager.collectFooprint(region)
-    val interferenceFunctions = interferenceSetFunctionManager.collectAllFunctions(region)
-
     val skolemizationFunctionFootprint = collectActionSkolemizationFunctionFootprint(region)
     val skolemizationFunctions = collectActionSkolemizationFunctions(region)
 
     (   guardPredicates
-     ++ Vector(skolemizationFunctionFootprint, interferenceFunctionFootprint)
-     ++ skolemizationFunctions ++ interferenceFunctions
+     ++ collectingFunctions.flatMap(_(region))
+     ++ Vector(skolemizationFunctionFootprint) // , interferenceFunctionFootprint)
+     ++ skolemizationFunctions //  ++ interferenceFunctions
      ++ region.formalOutArgs.indices.map(regionOutArgumentFunction(region, _))
      ++ Vector(
           regionPredicate,
@@ -551,5 +551,20 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           s"Unexpectedly failed to find a declaration for the guard denoted by " +
               s"${action.guardId} (${action.guardId.position})")
     }
+  }
+
+  trait RegionManager[M <: vpr.Declaration, A <: vpr.Exp] extends BasicManagerWithSimpleApplication[PRegion, M, A] {
+
+    this: BaseSelector[PRegion] =>
+
+    override def idToName(id: PRegion): String = id.id.name
+
+    override def getID(objName: String): PRegion =
+      tree.root.regions.find(_.id.name == objName).get
+
+    def collectMember(obj: PRegion): Vector[vpr.Declaration] =
+      collectMember(TranslatorUtils.ManagedObject(obj, obj.formalInArgs map translate))
+
+    collectingFunctions ::= (collectMember(_: PRegion)) // TODO: not sure if this is safe
   }
 }

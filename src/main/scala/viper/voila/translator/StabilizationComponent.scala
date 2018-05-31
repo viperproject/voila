@@ -19,6 +19,15 @@ import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, Inte
 
 trait StabilizationComponent { this: PProgramToViperTranslator =>
 
+  object sequenceStabilizeSubject extends TranslatorUtils.Subject[Int] {
+    private var version = 0
+
+    def nextVersion: Unit = {
+      version += 1
+      notifyObservers(version)
+    }
+  }
+
   def stabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
     val stabilizationMessage =
       s"Stabilising regions ${regions.map(_._1.id.name).mkString(",")} ($reason)"
@@ -416,7 +425,133 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     wrapper.wrap(vprConstrainStateIfRegionAccessible)
   }
 
+  trait SelectableEntitiy[T] {
+
+    def application(id: T, args: Vector[vpr.Exp]): vpr.Exp
+
+    def triggers(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger]
+
+    def havoc(id: T, wrapper: TranslatorUtils.BetterQuantifierWrapper.QuantWrapper): vpr.Stmt
+
+    def select(id: T, entity: SelectableEntitiy[T], constraint: Constraint, wrapper: TranslatorUtils.BetterQuantifierWrapper.QuantWrapper): vpr.Stmt = {
+
+      val args = wrapper.args
+
+      val havocCode = entity.havoc(id, wrapper)
+
+      val selectCondition = constraint.constrain(args)(entity.application(id, args))
+
+      val selectExp = wrapper.wrap(selectCondition, entity.triggers(id, args))
+
+      val selectCode = vpr.Inhale(selectExp)()
+
+      vpr.Seqn(
+        Vector(havocCode, selectCode),
+        Vector.empty
+      )()
+    }
+  }
+
+  def singleWrapper(args: Vector[vpr.Exp]): TranslatorUtils.BetterQuantifierWrapper.Wrapper =
+    TranslatorUtils.BetterQuantifierWrapper.UnitWrapper(args)
+
+
+
+
+
+
+
+  trait Constraint {
+    def constrain(args: Vector[vpr.Exp])(target: vpr.Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt
+  }
+
+  def possibleNextStateConstraint(region: PRegion,
+                                  actionFilter: PAction => Boolean,
+                                  preRegionState: Vector[vpr.Exp] => vpr.Exp)
+  : Constraint = new Constraint {
+    override def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt = {
+
+      val vprRegionArguments = args
+
+      /* First element a_0 of region arguments as */
+      val vprRegionId = vprRegionArguments.head
+
+      /* R_state(as) */
+      val vprPreRegionState = preRegionState(vprRegionArguments)
+
+      /* m ~ R_state'(as) */
+      val vprPostRegionState = target
+
+      /* R_state'(as) == R_state(as) */
+      val vprStateUnchanged =
+        vpr.EqCmp(
+          vprPostRegionState,
+          vprPreRegionState
+        )()
+
+      val vprStateConstraintsFromActions: vpr.Exp =
+        viper.silicon.utils.ast.BigOr(
+          region.actions map (action =>
+            stateConstraintsFromAction(
+              action,
+              vprPreRegionState,
+              vprPostRegionState,
+              assembleCheckIfEnvironmentMayHoldActionGuard(region, vprRegionId, action))))
+
+      val vprStateConstraintsFromAtomicityContext = {
+        /* none < perm(a_0 |=> <D>) */
+        val vprDiamondHeld =
+          vpr.PermLtCmp(
+            vpr.NoPerm()(),
+            vpr.CurrentPerm(diamondAccess(vprRegionId).loc)()
+          )()
+
+        /* X(as) */
+        val vprAtomicityContext =
+          vpr.DomainFuncApp(
+            atomicityContextFunction(region),
+            vprRegionArguments,
+            Map.empty[vpr.TypeVar, vpr.Type]
+          )()
+
+        vpr.Implies(
+          vprDiamondHeld,
+          vpr.AnySetContains(
+            vprPostRegionState,
+            vprAtomicityContext
+          )()
+        )()
+      }
+
+      val vprConstrainRegionState =
+        vpr.And(
+          vprStateConstraintsFromAtomicityContext,
+          vpr.Or(
+            vprStateUnchanged,
+            vprStateConstraintsFromActions
+          )()
+        )()
+
+      TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(vprConstrainRegionState)
+    }
+  }
+
   object QuantifierWrapper {
+
+    sealed trait WrapperExt {
+      def combine(func: vpr.Exp => WrapperExt): WrapperExt
+    }
+    case class UnitWrapperExt(exp: Exp) extends WrapperExt {
+      override def combine(func: Exp => WrapperExt): WrapperExt = func(exp)
+    }
+    case class QuantWrapperExt(decls: Vector[vpr.LocalVarDecl], exp: Exp) extends WrapperExt {
+      override def combine(func: Exp => WrapperExt): WrapperExt = func(exp) match {
+        case UnitWrapperExt(e) => QuantWrapperExt(decls, e)
+        case QuantWrapperExt(ds, e) => QuantWrapperExt(decls ++: ds, e)
+      }
+    }
+
+
 
     sealed trait Wrapper[X,S,T] {
       def param: X
@@ -452,5 +587,9 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
           )()
         )
     }
+  }
+
+  trait SequenceStabelizeVersionedSelector[T] extends TranslatorUtils.VersionedSelector[T] {
+    sequenceStabilizeSubject.addObserver(this) // TODO: probably a very bad idea -> data races
   }
 }
