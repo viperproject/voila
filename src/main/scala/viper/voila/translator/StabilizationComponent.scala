@@ -6,7 +6,7 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{Exp, Trigger}
+import viper.silver.ast.{Exp, Stmt, Trigger}
 import viper.silver.ast.utility.Rewriter.Traverse
 
 import scala.collection.breakOut
@@ -15,6 +15,8 @@ import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
 import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, RegionStateError, UnfoldError}
+import viper.voila.translator.TranslatorUtils.BetterQuantifierWrapper.WrapperExt
+import viper.voila.translator.TranslatorUtils.{BetterQuantifierWrapper, Constraint}
 
 
 trait StabilizationComponent { this: PProgramToViperTranslator =>
@@ -195,6 +197,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
       identity
     )
   }
+
 
 
   private def generateCodeForStabilizingRegionInstances(region: PRegion,
@@ -425,51 +428,116 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     wrapper.wrap(vprConstrainStateIfRegionAccessible)
   }
 
-  trait SelectableEntitiy[T] {
 
-    def application(id: T, args: Vector[vpr.Exp]): vpr.Exp
 
-    def triggers(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger]
+  case class RegionStateFrontResourceWrapper(prePermissions: vpr.Exp => vpr.Exp) extends TranslatorUtils.FrontResource[PRegion] {
+    override def application(id: PRegion, args: Vector[Exp]): Exp =
+      vpr.FuncApp(
+        regionStateFunction(id),
+        args
+      )()
 
-    def havoc(id: T, wrapper: TranslatorUtils.BetterQuantifierWrapper.QuantWrapper): vpr.Stmt
+    override def applyTrigger(id: PRegion, args: Vector[Exp]): Vector[Trigger] =
+      Vector(
+        vpr.Trigger(
+          Vector(
+            vpr.DomainFuncApp(
+              func = regionStateTriggerFunction(id.id.name),
+              args = args,
+              typVarMap = Map.empty
+            )()
+          ))())
 
-    def select(id: T, entity: SelectableEntitiy[T], constraint: Constraint, wrapper: TranslatorUtils.BetterQuantifierWrapper.QuantWrapper): vpr.Stmt = {
 
-      val args = wrapper.args
+    override def havoc(id: PRegion)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt = {
+      val vprRegionArguments = wrapper.args
 
-      val havocCode = entity.havoc(id, wrapper)
+      /* R(as) */
+      val vprRegionPredicateInstance =
+        vpr.PredicateAccess(
+          args = vprRegionArguments,
+          predicateName = id.id.name
+        )()
 
-      val selectCondition = constraint.constrain(args)(entity.application(id, args))
 
-      val selectExp = wrapper.wrap(selectCondition, entity.triggers(id, args))
+      /* π */
+      val vprPreHavocRegionPermissions =
+        prePermissions(vpr.CurrentPerm(vprRegionPredicateInstance)())
 
-      val selectCode = vpr.Inhale(selectExp)()
+      /* Note: It is assumed that havocking a region R(as) should not affect the permission
+       * amount. Hence, π is used everywhere, i.e. there is not dedicated post-havoc permission
+       * amount in use.
+       */
+
+      /* acc(R(as), π) */
+      val vprRegionAssertion =
+        vpr.PredicateAccessPredicate(
+          loc = vprRegionPredicateInstance,
+          perm = vprPreHavocRegionPermissions
+        )()
+
+      val vprWrappedRegionAssertion = wrapper.wrap(vprRegionAssertion)
+
+      /* exhale ∀ as · acc(R(as), π) */
+      val vprExhaleAllRegionInstances = vpr.Exhale(vprWrappedRegionAssertion)()
+
+      /* inhale ∀ as · acc(R(as), π) */
+      val vprInhaleAllRegionInstances = vpr.Inhale(vprWrappedRegionAssertion)()
 
       vpr.Seqn(
-        Vector(havocCode, selectCode),
+        Vector(
+          vprExhaleAllRegionInstances,
+          vprInhaleAllRegionInstances
+        ),
         Vector.empty
       )()
     }
   }
 
+
   def singleWrapper(args: Vector[vpr.Exp]): TranslatorUtils.BetterQuantifierWrapper.Wrapper =
     TranslatorUtils.BetterQuantifierWrapper.UnitWrapper(args)
 
+  def regionAllWrapper(region: PRegion, prePermissions: vpr.Exp => vpr.Exp): TranslatorUtils.BetterQuantifierWrapper.Wrapper = {
 
+    /* Arguments as for region R */
+    val vprRegionArgumentDecls: Vector[vpr.LocalVarDecl] = region.formalInArgs.map(translate)
 
+    /* Arguments as for region R */
+    val vprRegionArguments: Vector[vpr.LocalVar] = vprRegionArgumentDecls map (_.localVar)
 
+    /* R(as) */
+    val vprRegionPredicateInstance =
+      vpr.PredicateAccess(
+        args = vprRegionArguments,
+        predicateName = region.id.name
+      )()
 
+    /* π */
+    val vprPreHavocRegionPermissions =
+      prePermissions(vpr.CurrentPerm(vprRegionPredicateInstance)())
 
+    /* none < π */
+    val vprIsRegionAccessible =
+      vpr.PermLtCmp(
+        vpr.NoPerm()(),
+        vprPreHavocRegionPermissions
+      )()
 
-  trait Constraint {
-    def constrain(args: Vector[vpr.Exp])(target: vpr.Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt
+    TranslatorUtils.BetterQuantifierWrapper.QuantWrapper(vprRegionArgumentDecls, vprRegionArguments, vprIsRegionAccessible)
   }
+
+
+
+
+
 
   def possibleNextStateConstraint(region: PRegion,
                                   actionFilter: PAction => Boolean,
                                   preRegionState: Vector[vpr.Exp] => vpr.Exp)
-  : Constraint = new Constraint {
-    override def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt = {
+  : Constraint = {
+
+    def constrain(args: Vector[Exp])(target: Exp): WrapperExt = {
 
       val vprRegionArguments = args
 
@@ -534,6 +602,8 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
       TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(vprConstrainRegionState)
     }
+
+    Constraint(constrain, Some(args => s => skolemizeCodeForRegionTransition(region, args, s)))
   }
 
   object QuantifierWrapper {

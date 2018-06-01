@@ -6,7 +6,7 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{Exp, LocalVar, LocalVarDecl, Type}
+import viper.silver.ast._
 
 import scala.collection.{breakOut, mutable}
 import viper.silver.{ast => vpr}
@@ -19,7 +19,7 @@ import viper.voila.translator.TranslatorUtils._
 
 trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
-  private val interferenceSetFunctions = {
+  val interferenceSetFunctions: FrontResource[PRegion] = {
     val _name = "interferenceSet"
     def _functionType(obj: PRegion): Type = vpr.SetType(regionStateFunction(obj).typ)
 
@@ -47,6 +47,38 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
       override def functionTyp(obj: PRegion): Type = _functionType(obj)
       override val name: String = _name
+
+      override protected def post(trigger: DomainFuncApp): Vector[Exp] = {
+
+        val varName = "$_m" // TODO: naming convention
+        val varType = trigger.typ match { case vpr.SetType(t) => t }
+        val varDecl = vpr.LocalVarDecl(varName, varType)()
+        val variable = varDecl.localVar
+
+        val varInResult =
+          vpr.AnySetContains(
+            variable,
+            vpr.Result()(typ = trigger.typ)
+          )()
+
+        val varInTrigger =
+          vpr.AnySetContains(
+            variable,
+            trigger
+          )()
+
+        Vector(
+          vpr.Forall(
+            Vector(varDecl),
+            Vector(vpr.Trigger(Vector(varInResult))()),
+            vpr.Implies(varInResult, varInTrigger)()
+          )()
+        )
+      }
+
+      override protected def triggerApplication(id: PRegion, args: Vector[Exp]): Exp = args match {
+        case (xs :+ m) => vpr.AnySetContains(m, triggerManager.application(id, xs))()
+      }
     }
   }
 
@@ -120,46 +152,45 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
   def queryInterference() = ???
 
-  def nextStateContainedInInference(region: PRegion): Constraint =
-    new Constraint {
-      override def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt =
-        TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
-          vpr.AnySetContains(
-            target,
-            interferenceSetFunctions.application(region, args)
-          )()
+  def nextStateContainedInInference(region: PRegion): Constraint = Constraint( args => target =>
+    TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
+      vpr.AnySetContains(
+        target,
+        interferenceSetFunctions.application(region, args)
+      )()
+    )
+  )
+
+  def containsAllPossibleNextStatesConstraint(region: PRegion, possibleNextStateConstraint: Constraint): Constraint = {
+    def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt = {
+
+      val varName = "$_m" // TODO: naming convention
+      val varType = regionStateFunction(region).typ
+      val varDecl = vpr.LocalVarDecl(varName, varType)()
+      val variable = varDecl.localVar
+
+      val regionArgs = args
+
+      /* m in X(xs)*/
+      val varInInterference =
+        vpr.AnySetContains(
+          variable,
+          target
+        )()
+
+      val varIsPossibleNextState: TranslatorUtils.BetterQuantifierWrapper.WrapperExt =
+        possibleNextStateConstraint.constrain(args)(variable)
+
+      /* m in X(xs) <==> preState(xs) ~> m */
+      varIsPossibleNextState.combine(e =>
+        TranslatorUtils.BetterQuantifierWrapper.QuantWrapperExt(
+          Vector(varDecl),
+          vpr.EqCmp(varInInterference, e)()
         )
+      )
     }
 
-  def containsAllPossibleNextStatesConstraint(region: PRegion, possibleNextStateConstraint: Constraint): Constraint =
-    new Constraint {
-      override def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt = {
-
-        val varName = "$_m" // TODO: naming convention
-        val varType = regionStateFunction(region).typ
-        val varDecl = vpr.LocalVarDecl(varName, varType)()
-        val variable = varDecl.localVar
-
-        val regionArgs = args
-
-        /* m in X(xs)*/
-        val varInInterference =
-          vpr.AnySetContains(
-            variable,
-            target
-          )()
-
-        val varIsPossibleNextState: TranslatorUtils.BetterQuantifierWrapper.WrapperExt =
-          possibleNextStateConstraint(args)(variable)
-
-        /* m in X(xs) <==> preState(xs) ~> m */
-        varIsPossibleNextState.combine(e =>
-          TranslatorUtils.BetterQuantifierWrapper.QuantWrapperExt(
-            Vector(varDecl),
-            vpr.EqCmp(varInInterference, e)()
-          )
-        )
-      }
-    }
+    Constraint(constrain, possibleNextStateConstraint.skolemization)
+  }
 
 }

@@ -134,28 +134,28 @@ object TranslatorUtils {
         vpr.FullPerm()()
       )()
 
-    def allWrapper(id: T)(transformer: Vector[vpr.Exp] => vpr.Exp):  vpr.Exp = {
-
-      val member = collectedMember(idToName(id))
-      val decls = member.formalArgs.toVector
-      val vars = decls map (_.localVar)
-
-      vpr.Forall(
-        variables = decls,
-        triggers = Vector.empty,
-        exp = transformer(vars)
+    def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+      vpr.Seqn(
+        Vector(exhaleFootprint(id)(wrapper), inhaleFootprint(id)(wrapper)),
+        Vector.empty
       )()
     }
 
-    def singleWrapper(id: T, args: Vector[vpr.Exp])(transformer: Vector[vpr.Exp] => vpr.Exp):  vpr.Exp = {
-      transformer(args)
+    def inhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
+
+      /* No trigger yet available */
+      vpr.Inhale(transedWrapper.wrapWithoutCondition(application(id, args)))()
     }
 
-    def inhaleFootprint(id: T)(wrapper: (Vector[vpr.Exp] => vpr.Exp) => vpr.Exp): vpr.Stmt =
-      vpr.Inhale(wrapper(application(id,_)))()
+    def exhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
 
-    def exhaleFootprint(id: T)(wrapper: (Vector[vpr.Exp] => vpr.Exp) => vpr.Exp): vpr.Stmt =
-      vpr.Exhale(wrapper(application(id,_)))()
+      /* No trigger yet available */
+      vpr.Exhale(transedWrapper.wrapWithoutCondition(application(id, args)))()
+    }
   }
 
   trait FunctionManager[T, M <: vpr.Declaration, A <: vpr.Exp] extends BasicManager[T, M, A] {
@@ -201,7 +201,43 @@ object TranslatorUtils {
       )()
   }
 
-  trait HeapFunctionManager[T] extends FunctionManager[T, vpr.Function, vpr.FuncApp] {
+  case class Constraint(constrain: Vector[Exp] => vpr.Exp => TranslatorUtils.BetterQuantifierWrapper.WrapperExt,
+                        skolemization: Option[Vector[Exp] => vpr.Stmt => vpr.Stmt] = None)
+
+  trait FrontResource[T] {
+
+    def application(id: T, args: Vector[vpr.Exp]): vpr.Exp
+
+    def applyTrigger(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger]
+
+    def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
+
+    def select(id: T, constraint: Constraint)(wrapper: TranslatorUtils.BetterQuantifierWrapper.QuantWrapper): vpr.Stmt = {
+
+      val args = wrapper.args
+
+      val havocCode = havoc(id)(wrapper)
+
+      val selectCondition = constraint.constrain(args)(application(id, args))
+
+      val selectExp = wrapper.wrapExt(selectCondition, applyTrigger(id, _))
+
+      val selectCode = vpr.Inhale(selectExp)()
+
+      val finalizedSelectCode = constraint.skolemization match {
+        case None => selectCode
+        case Some(skolemize) => skolemize(args)(selectCode)
+      }
+
+      vpr.Seqn(
+        Vector(havocCode, finalizedSelectCode),
+        Vector.empty
+      )()
+    }
+
+  }
+
+  trait HeapFunctionManager[T] extends FunctionManager[T, vpr.Function, vpr.FuncApp] with FrontResource[T] {
 
     this: BaseSelector[T] =>
 
@@ -210,11 +246,8 @@ object TranslatorUtils {
     val footprintManager: FootprintManager[T] with SubSelector[T]
     val triggerManager: DomainFunctionManager[T] with SubSelector[T]
 
-    protected def post(trigger: vpr.DomainFuncApp): vpr.Exp =
-      vpr.InhaleExhaleExp(
-        trigger,
-        vpr.TrueLit()()
-      )()
+    protected def post(trigger: vpr.DomainFuncApp): Vector[vpr.Exp] =
+      Vector.empty
 
     protected def body(obj: ManagedObject[T]): (Option[vpr.Exp], Option[vpr.DecClause]) =
       (None, None)
@@ -236,7 +269,7 @@ object TranslatorUtils {
           formalArgs = decls,
           typ = functionTyp(obj.id),
           pres = Vector(footprintManager.application(obj.id,vars)),
-          posts = Vector(post(triggerManager.application(obj.id, vars))),
+          posts = post(triggerManager.application(obj.id, vars)),
           decs = decs,
           body = bodyExp
         )(),
@@ -250,13 +283,19 @@ object TranslatorUtils {
         args = selectArgs(id, args)
       )()
 
-    def applyTrigger(id: T, args: Vector[vpr.Exp]): vpr.DomainFuncApp =
+    protected def triggerApplication(id: T, args: Vector[vpr.Exp]): vpr.Exp =
       triggerManager.application(id, selectArgs(id, args))
 
-    def inhaleFootprint(id: T)(wrapper: (Vector[vpr.Exp] => vpr.Exp) => vpr.Exp): vpr.Stmt =
+    def applyTrigger(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger] =
+      Vector(vpr.Trigger(Vector(triggerApplication(id, args)))())
+
+    def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
+      footprintManager.havoc(id)(wrapper)
+
+    def inhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
       footprintManager.inhaleFootprint(id)(wrapper)
 
-    def exhaleFootprint(id: T)(wrapper: (Vector[vpr.Exp] => vpr.Exp) => vpr.Exp): vpr.Stmt =
+    def exhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
       footprintManager.exhaleFootprint(id)(wrapper)
   }
 
@@ -280,28 +319,35 @@ object TranslatorUtils {
     sealed trait Wrapper {
       def args: Vector[vpr.Exp]
 
-      def wrap(ext: WrapperExt, triggers: Vector[vpr.Trigger] = Vector.empty): vpr.Exp
+      def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp
 
-      def wrap(exp: vpr.Exp, triggers: Vector[vpr.Trigger] = Vector.empty): vpr.Exp =
-        wrap(UnitWrapperExt(exp), triggers)
+      def wrap(exp: vpr.Exp, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp =
+        wrapExt(UnitWrapperExt(exp), triggers)
+
+      def wrapExtWithoutCondition(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp
+
+      def wrapWithoutCondition(exp: vpr.Exp, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp =
+        wrapExtWithoutCondition(UnitWrapperExt(exp), triggers)
 
       def transform(trans: Vector[vpr.Exp] => Vector[vpr.Exp]): Wrapper
     }
 
     case class UnitWrapper(args: Vector[vpr.Exp]) extends Wrapper {
-      override def wrap(ext: WrapperExt, triggers: Vector[Trigger]): Exp = ext match {
+      override def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = ext match {
         case UnitWrapperExt(e) => e
-        case QuantWrapperExt(ds, e) => vpr.Forall(ds, triggers, e)(e.pos, e.info, e.errT)
+        case QuantWrapperExt(ds, e) => vpr.Forall(ds, triggers(args ++: (ds map (_.localVar))), e)(e.pos, e.info, e.errT)
       }
 
       override def transform(trans: Vector[Exp] => Vector[Exp]): Wrapper =
         UnitWrapper(trans(args))
+
+      override def wrapExtWithoutCondition(exp: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = wrapExt(exp, triggers)
     }
 
     case class QuantWrapper(decls: Vector[vpr.LocalVarDecl], args: Vector[vpr.Exp], condition: vpr.Exp) extends Wrapper {
-      override def wrap(ext: WrapperExt, triggers: Vector[Trigger]): Exp = ext match {
-        case UnitWrapperExt(e) => vpr.Forall(decls, triggers, e)(e.pos, e.info, e.errT)
-        case QuantWrapperExt(ds, e) => vpr.Forall(decls ++: ds, triggers, vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
+      override def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = ext match {
+        case UnitWrapperExt(e) => vpr.Forall(decls, triggers(decls map (_.localVar)), e)(e.pos, e.info, e.errT)
+        case QuantWrapperExt(ds, e) => vpr.Forall(decls ++: ds, triggers((decls ++: ds) map (_.localVar)), vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
       }
 
       override def transform(trans: Vector[Exp] => Vector[Exp]): Wrapper = {
@@ -314,7 +360,16 @@ object TranslatorUtils {
           case (e, i)                   => vpr.LocalVarDecl(s"$$p$i", e.typ)()
         }
 
-        QuantWrapper(transedDecls, trans(args), condition)
+        if (transedDecls.nonEmpty) {
+          QuantWrapper(transedDecls, trans(args), condition)
+        } else{
+          UnitWrapper(Vector.empty)
+        }
+      }
+
+      override def wrapExtWithoutCondition(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = ext match {
+        case UnitWrapperExt(e) => vpr.Forall(decls, triggers(decls map (_.localVar)), e)(e.pos, e.info, e.errT)
+        case QuantWrapperExt(ds, e) => vpr.Forall(decls ++: ds, triggers((decls ++: ds) map (_.localVar)), e)(e.pos, e.info, e.errT)
       }
     }
 
