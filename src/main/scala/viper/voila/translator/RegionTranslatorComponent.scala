@@ -318,6 +318,28 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           regionStateTriggerFunction(region)))
   }
 
+  def extractBoundedRegionInstance(id: PIdnUse): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
+
+    semanticAnalyser.entity(id) match {
+      case entity: LogicalVariableEntity =>
+
+        val binder = entity.declaration
+
+        semanticAnalyser.boundBy(binder) match {
+          case predicateExp@PPredicateExp(_, innerArgs) if innerArgs.last eq binder =>
+            Some(getRegionPredicateDetails(predicateExp))
+
+          case PInterferenceClause(`binder`, _, regId) =>
+            Some(getRegionPredicateDetails(semanticAnalyser.usedWithRegionPredicate(regId)))
+
+          case _ => None
+        }
+
+      case _ => None
+    }
+
+  }
+
   def getRegionPredicateDetails(predicateExp: PPredicateExp)
                                : (PRegion, Vector[PExpression], Vector[PExpression]) = {
 
@@ -478,6 +500,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
+  def actionBinderRename(name: String): String = s"$$_action_$name" // TODO naming convention
+
   def stateConstraintsFromAction(action: PAction,
                                          vprFrom: vpr.Exp,
                                          vprTo: vpr.Exp,
@@ -519,6 +543,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       action.binders map localVariableDeclaration,
       vprExistentialBody
     )()
+
+
   }
 
   def assembleCheckIfEnvironmentMayHoldActionGuard(region: PRegion,
@@ -565,6 +591,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     def collectMember(obj: PRegion): Vector[vpr.Declaration] =
       collectMember(TranslatorUtils.ManagedObject(obj, obj.formalInArgs map translate))
 
-    collectingFunctions ::= (collectMember(_: PRegion)) // TODO: not sure if this is safe
+    if (this.isInstanceOf[TranslatorUtils.FrontSelector[PRegion]]) {
+      collectingFunctions ::= (collectMember(_: PRegion)) // TODO: not sure if this is safe
+    }
+
+    if (this.isInstanceOf[TranslatorUtils.FootprintManager[PRegion]]) {
+      initializingFunctions ::= (this.asInstanceOf[TranslatorUtils.FootprintManager[PRegion]].initialize(_: PRegion))
+    }
   }
 }

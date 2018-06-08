@@ -6,10 +6,11 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{Exp, Trigger}
+import viper.silver.ast.{Declaration, Exp, Trigger}
 
 import scala.collection.mutable
 import viper.silver.{ast => vpr}
+import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend.{PMember, PRegion}
 
 object TranslatorUtils {
@@ -35,11 +36,12 @@ object TranslatorUtils {
     def selectArgs(id: T, args: Vector[vpr.Exp]): Vector[vpr.Exp]
 
     def formalArgSelection(obj: ManagedObject[T]): Vector[vpr.LocalVarDecl] = {
+
       val vars = obj.decls map (_.localVar)
       val selectedVars = selectArgs(obj.id, vars)
 
       selectedVars.zipWithIndex map {
-        case (v: vpr.LocalVarDecl, _) => vpr.LocalVarDecl(v.name, v.typ)()
+        case (v: vpr.LocalVar, _) => vpr.LocalVarDecl(v.name, v.typ)()
         case (e, i)                   => vpr.LocalVarDecl(s"$$p$i", e.typ)()
       }
     }
@@ -95,6 +97,8 @@ object TranslatorUtils {
       m +: ds
     }
 
+    def collectGlobalDeclarations: Vector[vpr.Declaration] = Vector.empty
+
     def application(id: T, args: Vector[vpr.Exp]): A
   }
 
@@ -116,8 +120,7 @@ object TranslatorUtils {
     override protected def memberName(objName: String): String = s"${objName}_${name}_fp"
 
     override protected def toMember(obj: ManagedObject[T]): (vpr.Predicate, Vector[vpr.Declaration]) =
-      (
-        vpr.Predicate(
+      (vpr.Predicate(
           name = memberName(idToName(obj.id)),
           formalArgs = formalArgSelection(obj),
           body = None
@@ -133,6 +136,31 @@ object TranslatorUtils {
         )(),
         vpr.FullPerm()()
       )()
+
+    def initialize(id: T): vpr.Stmt = {
+      val pred = collectedMember(idToName(id))
+      val decls = pred.formalArgs
+      val vars = decls map (_.localVar)
+
+      val access =
+        vpr.PredicateAccessPredicate(
+          vpr.PredicateAccess(
+            predicateName = memberName(idToName(id)),
+            args = vars
+          )(),
+          vpr.FullPerm()()
+        )()
+
+      val result = vpr.Inhale(
+        vpr.Forall(
+          decls,
+          Vector.empty,
+          access
+        )()
+      )()
+
+      ViperAstUtils.sanitizeBoundVariableNames(result)
+    }
 
     def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
       vpr.Seqn(
@@ -171,17 +199,19 @@ object TranslatorUtils {
 
     override protected def memberName(objName: String): String = s"${objName}_${name}_df"
 
-    private val domainName: String = s"${name}_Domain"
+    private lazy val domainName: String = s"${name}_Domain"
 
-    protected val dfltAxioms: Vector[vpr.DomainAxiom] = Vector.empty
+    protected lazy val dfltAxioms: Vector[vpr.DomainAxiom] = Vector.empty
 
-    val domain: vpr.Domain =
+    lazy val domain: vpr.Domain =
       vpr.Domain(
         name = domainName,
         functions = Vector.empty,
         axioms = dfltAxioms,
         typVars = Vector.empty
       )()
+
+    override def collectGlobalDeclarations: Vector[Declaration] = Vector(domain)
 
     override protected def toMember(obj: ManagedObject[T]): (vpr.DomainFunc, Vector[vpr.Declaration]) =
       (
@@ -212,7 +242,8 @@ object TranslatorUtils {
 
     def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
 
-    def select(id: T, constraint: Constraint)(wrapper: TranslatorUtils.BetterQuantifierWrapper.QuantWrapper): vpr.Stmt = {
+    def select(id: T, constraint: Constraint)(wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+
 
       val args = wrapper.args
 
@@ -229,10 +260,12 @@ object TranslatorUtils {
         case Some(skolemize) => skolemize(args)(selectCode)
       }
 
-      vpr.Seqn(
+      val result = vpr.Seqn(
         Vector(havocCode, finalizedSelectCode),
         Vector.empty
       )()
+
+      ViperAstUtils.sanitizeBoundVariableNames(result)
     }
 
   }
@@ -283,14 +316,14 @@ object TranslatorUtils {
         args = selectArgs(id, args)
       )()
 
-    protected def triggerApplication(id: T, args: Vector[vpr.Exp]): vpr.Exp =
+    def triggerApplication(id: T, args: Vector[vpr.Exp]): vpr.Exp =
       triggerManager.application(id, selectArgs(id, args))
 
     def applyTrigger(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger] =
       Vector(vpr.Trigger(Vector(triggerApplication(id, args)))())
 
     def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
-      footprintManager.havoc(id)(wrapper)
+      footprintManager.havoc(id)(wrapper.transform(selectArgs(id,_)))
 
     def inhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
       footprintManager.inhaleFootprint(id)(wrapper)
@@ -346,7 +379,7 @@ object TranslatorUtils {
 
     case class QuantWrapper(decls: Vector[vpr.LocalVarDecl], args: Vector[vpr.Exp], condition: vpr.Exp) extends Wrapper {
       override def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = ext match {
-        case UnitWrapperExt(e) => vpr.Forall(decls, triggers(decls map (_.localVar)), e)(e.pos, e.info, e.errT)
+        case UnitWrapperExt(e) => vpr.Forall(decls, triggers(decls map (_.localVar)), vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
         case QuantWrapperExt(ds, e) => vpr.Forall(decls ++: ds, triggers((decls ++: ds) map (_.localVar)), vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
       }
 
@@ -356,7 +389,7 @@ object TranslatorUtils {
         val transedDeclVars = trans(declVars)
 
         val transedDecls = transedDeclVars.zipWithIndex map {
-          case (v: vpr.LocalVarDecl, _) => vpr.LocalVarDecl(v.name, v.typ)()
+          case (v: vpr.LocalVar, _) => vpr.LocalVarDecl(v.name, v.typ)()
           case (e, i)                   => vpr.LocalVarDecl(s"$$p$i", e.typ)()
         }
 

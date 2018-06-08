@@ -43,7 +43,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
     }
 
-    val havoc1 = stabilizeSingleInstances("before atomic", (region, regionInArgs))
+    val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
 
     val havoc2 = stabilizeSingleInstances("after atomic", (region, regionInArgs))
 
@@ -425,6 +425,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
 
+    val tranitionInterferenceContext
+      = linkInterferenceContext(region, vprInArgs)
+
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
         OpenRegionError(openRegion, InsufficientRegionPermissionError(openRegion.regionPredicate))
@@ -474,6 +477,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           preOpenLabel,
           unfoldRegionPredicate,
+          tranitionInterferenceContext,
           ruleBody,
           foldRegionPredicate,
           stateUnchanged),

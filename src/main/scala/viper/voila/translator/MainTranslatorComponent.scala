@@ -101,6 +101,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
+  protected var collectedDeclarations: List[vpr.Declaration] = Nil
+  protected var initializingFunctions: List[PRegion => vpr.Stmt] = Nil
+
   protected var collectedVariableDeclarations: Vector[vpr.LocalVarDecl] = Vector.empty
 
   def declareFreshVariable(typ: PType, basename: String): vpr.LocalVarDecl =
@@ -226,6 +229,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             diamondField,
             regionStateTriggerFunctionDomain,
             atomicityContextsDomain(tree.root.regions))
+      ++ collectedDeclarations
       ++ usedVariableHavocs(tree)
       ++ recordedSetComprehensions.values
       ++ tree.root.regions.flatMap(region => {
@@ -328,6 +332,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             actionSkolemizationFunctionFootprintAccess(region.id.name)))
       )()
 
+    val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
+
+    evaluateInLastInfer = exp => vpr.Old(exp)()
+
 //    val inhaleInterferenceFunctionFootprints =
 //      vpr.Inhale(
 //        viper.silicon.utils.ast.BigAnd(
@@ -349,7 +357,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vprMethod.body.map(actualBody =>
         actualBody.copy(
           ss =
-            inhaleSkolemizationFunctionFootprints +: // inhaleInterferenceFunctionFootprints +:
+            inhaleSkolemizationFunctionFootprints +: initializeFootprints ++:
             actualBody.ss,
           scopedDecls =
               actualBody.scopedDecls ++
@@ -402,7 +410,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translateAbstractlyAtomicProcedure(procedure: PProcedure): vpr.Method = {
     case class Entry(clause: PInterferenceClause,
                      regionPredicate: PPredicateExp,
-                     atomicityContext: vpr.DomainFuncApp)
+                     atomicityContext: vpr.DomainFuncApp,
+                     interferenceSet: vpr.FuncApp)
 
     val regionInterferenceVariables: Map[PIdnUse, Entry] =
       procedure.inters.map(inter => {
@@ -418,20 +427,41 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           )()
         }
 
-        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicityContext)
+        val vprInterferenceSet = {
+          val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+
+          interferenceSetFunctions.application(reg, regionArguments)
+        }
+
+        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicityContext, vprInterferenceSet)
       }).toMap
 
     val vprLocals = procedure.locals.map(translate)
 
     val vprBody = {
       val vprSaveInferenceSets: Vector[vpr.Stmt] =
-        regionInterferenceVariables.map { case (_, entry) =>
-          vpr.Inhale(
-            vpr.EqCmp(
-              entry.atomicityContext,
-              translate(entry.clause.set)
-            )()
-          )()
+        regionInterferenceVariables.map { case (_, entry) => {
+
+
+          val translatedClauseSet = translate(entry.clause.set)
+
+          vpr.Seqn(
+            Vector(
+              vpr.Inhale( // TODO remove old atomicity context
+                vpr.EqCmp(
+                  entry.atomicityContext,
+                  translatedClauseSet
+                )()
+              )(),
+              vpr.Inhale( // TODO add label
+                vpr.EqCmp(
+                  entry.interferenceSet,
+                  translatedClauseSet
+                )()
+              )()
+            ),
+            Vector.empty
+          )()}
         }(breakOut)
 
       val vprMainBody =
@@ -456,6 +486,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       s"Expected procedure ${procedure.id} to have no interference clause, "
         + s"but found ${procedure.inters}")
 
+    val inferInterferenceSets = inferContextAllInstances("beginning of non atomic procedure")
+
     val vprBody = {
       val mainBody =
         procedure.body match {
@@ -463,7 +495,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           case None => vpr.Inhale(vpr.FalseLit()())()
         }
 
-      vpr.Seqn(Vector(mainBody), procedure.locals map translate)()
+      vpr.Seqn(Vector(inferInterferenceSets, mainBody), procedure.locals map translate)()
     }
 
     val vprStub = translatedProcedureStubs(procedure.id.name)
@@ -538,7 +570,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         if (alreadyHavoced) {
           None
         } else {
-          Some(stabilizeAllInstances(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
+          Some(nonAtomicStabilizeAllInstances(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
         }
       } else {
         None
@@ -590,8 +622,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 actionSkolemizationFunctionFootprintAccess(region.id.name)))
           )()
 
+        val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
+
         val vprBody =
-          vpr.Seqn(Vector(inhaleSkolemizationFunctionFootprints, translate(body)), Vector.empty)()
+          vpr.Seqn(
+            inhaleSkolemizationFunctionFootprints +:
+              initializeFootprints ++:
+              Vector(translate(body)),
+            Vector.empty
+          )()
 
         var vprWhile =
           vpr.While(
@@ -829,7 +868,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             case PAbstractAtomic() =>
               // TODO: Inject code comments at various places
 
-              val vprPreHavocLabel = freshLabel("pre_havoc")
+//              val vprPreHavocLabel = freshLabel("pre_havoc")
 
               /* Code that havocks parent regions instead of the current region. See also issue #29. */
               // def generateParentRegionHavockingCode(childRegion: vpr.PredicateAccess): (vpr.Exp, vpr.Seqn) = {
@@ -918,40 +957,68 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   //       Vector.empty
                   //     )()
                   //   )()
-                  val vprHavocRegion = stabilizeSingleInstances("call interference check", (region, vprRegionArguments))
-//                    prependComment(
-//                      s"Stabilising region $regionPredicate",
-//                      stabilizeRegionInstance(region, vprRegionArguments, vprPreHavocLabel))
-
-                  val vprCurrentState =
-                    vpr.FuncApp(
-                      regionStateFunction(region),
-                      vprRegionArguments
-                    )()
+//                  val vprHavocRegion = stabilizeSingleInstances("call interference check", (region, vprRegionArguments))
+////                    prependComment(
+////                      s"Stabilising region $regionPredicate",
+////                      stabilizeRegionInstance(region, vprRegionArguments, vprPreHavocLabel))
+//
+//                  val vprCurrentState =
+//                    vpr.FuncApp(
+//                      regionStateFunction(region),
+//                      vprRegionArguments
+//                    )()
 
                   val vprInterferenceSet = {
                     val vprFormalsToActuals =
                       callee.formalArgs.map(translate(_).localVar).zip(vprArguments).toMap
 
-                    translate(inter.set).replace(vprFormalsToActuals)
+                    System.out.println("hey")
+                    System.out.println(inter.set)
+
+                    translateWith(inter.set){
+                      case exp@ PIdnExp(id) => {
+
+                        System.out.println("heyo")
+                        System.out.println(id)
+
+                        val res = evaluateInterferenceContext(id, exp)
+
+                        System.out.println(res)
+
+                        res
+                      }
+                    }.replace(vprFormalsToActuals)
                   }
+
+                  val varName = "$_m"
+                  val typ = vprInterferenceSet.typ match { case vpr.SetType(e) => e }
+                  val decl = vpr.LocalVarDecl("$_m", typ)()
+                  val variable = decl.localVar
+
+                  val lhs = vpr.AnySetContains(
+                    variable,
+                    interferenceSetFunctions.application(region, vprRegionArguments)
+                  )()
+
+                  val rhs = vpr.AnySetContains(
+                    variable,
+                    vprInterferenceSet
+                  )()
 
                   val vprCheckStateUnchanged =
                     vpr.Assert(
-                      vpr.AnySetContains(
-                        vprCurrentState,
-                        vpr.LabelledOld(
-                          vprInterferenceSet,
-                          vprPreHavocLabel.name
-                        )()
+                      vpr.Forall(
+                        variables = Vector(decl),
+                        triggers = Vector.empty,
+                        vpr.Implies(lhs, rhs)()
                       )()
                     )()
 
                   errorBacktranslator.addErrorTransformer {
-                    case e @ vprerr.PreconditionInAppFalse(_, _: vprrea.InsufficientPermission, _)
-                         if e causedBy vprCurrentState =>
-
-                      PreconditionError(call, InsufficientRegionPermissionError(regionPredicate))
+//                    case e @ vprerr.PreconditionInAppFalse(_, _: vprrea.InsufficientPermission, _)
+//                         if e causedBy vprCurrentState =>
+//
+//                      PreconditionError(call, InsufficientRegionPermissionError(regionPredicate))
 
                     case e @ vprerr.AssertFailed(_, reason, _)
                          if (e causedBy vprCheckStateUnchanged) &&
@@ -960,37 +1027,40 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                       PreconditionError(call, InterferenceError(inter))
                   }
 
-                  vpr.Seqn(
-                    Vector(
-                      vprHavocRegion,
-                      /* See issue #29 */
-                      // havocCalleeRegion.constrainStateViaGuards,
-                      // havocCalleeRegion.constrainStateViaAtomicityContext,
-                      vprCheckStateUnchanged),
-                    Vector.empty
-                  )()
+//                  vpr.Seqn(
+//                    Vector(
+//                      vprHavocRegion,
+//                      /* See issue #29 */
+//                      // havocCalleeRegion.constrainStateViaGuards,
+//                      // havocCalleeRegion.constrainStateViaAtomicityContext,
+//                      vprCheckStateUnchanged),
+//                    Vector.empty
+//                  )()
+                  vprCheckStateUnchanged
                 })
 
-              val vprNonDetChoiceVariable = declareFreshVariable(PBoolType(), "nondet").localVar
+//              val vprNonDetChoiceVariable = declareFreshVariable(PBoolType(), "nondet").localVar
+//
+//              val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
+//
+//              val vprNonDetCheckBranch =
+//                vpr.If(
+//                  vprNonDetChoiceVariable,
+//                  vpr.Seqn(
+//                    vprPreHavocLabel +:
+//                    vprCheckInterferences :+
+//                    vpr.Inhale(vpr.FalseLit()())(),
+//                    Vector.empty
+//                  )(),
+//                  vpr.Seqn(Vector.empty, Vector.empty)()
+//                )()
+//
+//              vpr.Seqn(
+//                Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
+//                Vector.empty
+//              )()
 
-              val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
-
-              val vprNonDetCheckBranch =
-                vpr.If(
-                  vprNonDetChoiceVariable,
-                  vpr.Seqn(
-                    vprPreHavocLabel +:
-                    vprCheckInterferences :+
-                    vpr.Inhale(vpr.FalseLit()())(),
-                    Vector.empty
-                  )(),
-                  vpr.Seqn(Vector.empty, Vector.empty)()
-                )()
-
-              vpr.Seqn(
-                Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
-                Vector.empty
-              )()
+              vpr.Seqn(vprCheckInterferences, Vector.empty)()
           }
 
         val vprCall = {
@@ -1141,7 +1211,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           val elemType = semanticAnalyser.typ(expression).asInstanceOf[PSetType].elementType
           vpr.EmptySet(translate(elemType))().withSource(expression)
         } else {
-          vpr.ExplicitSet(elements map translate)().withSource(expression)
+          vpr.ExplicitSet(elements map go)().withSource(expression)
         }
 
       case PExplicitSeq(elements, _) =>
@@ -1149,7 +1219,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           val elemType = semanticAnalyser.typ(expression).asInstanceOf[PSeqType].elementType
           vpr.EmptySeq(translate(elemType))().withSource(expression)
         } else {
-          vpr.ExplicitSeq(elements map translate)().withSource(expression)
+          vpr.ExplicitSeq(elements map go)().withSource(expression)
         }
 
       case PSetContains(element, set) => vpr.AnySetContains(go(element), go(set))().withSource(expression)

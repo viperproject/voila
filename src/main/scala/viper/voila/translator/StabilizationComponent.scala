@@ -42,7 +42,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
       regions.map(region =>
         prependComment(
           s"Stabilising single instance of region ${region._1.id.name}",
-          stabilizeOneInstancesOfSingleRegionWithInference(region._1, region._2, preHavocLabel)))
+          stabilizeSingleInstance(region._1, region._2, preHavocLabel)))
 
     val result =
       vpr.Seqn(
@@ -69,7 +69,127 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
       regions.map(region =>
         prependComment(
           s"Stabilising all instances of region ${region.id.name}",
-          stabilizeAllInstancesOfSingleRegionWithInference(region, preHavocLabel)))
+          stabilizeAllInstances(region, preHavocLabel)))
+
+    val result =
+      vpr.Seqn(
+        preHavocLabel +: stabilizeInstances,
+        Vector.empty
+      )()
+
+    surroundWithSectionComments(stabilizationMessage, result)
+  }
+
+  private def beforeNonAtomic(): Unit = {
+    sequenceStabilizeSubject.nextVersion
+  }
+
+  private def afterNonAtomic(preHavocLabel: vpr.Label): Unit = {
+    evaluateInLastInfer = exp => vpr.LabelledOld(exp, preHavocLabel.name)()
+  }
+
+  def nonAtomicStabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
+    val stabilizationMessage =
+      s"Stabilising regions ${regions.map(_._1.id.name).mkString(",")} ($reason)"
+
+    beforeNonAtomic()
+
+    outputDebugInfo(stabilizationMessage)
+
+    val preHavocLabel = freshLabel("pre_havoc")
+
+    val stabilizeInstances =
+      regions.map(region =>
+        prependComment(
+          s"Stabilising single instance of region ${region._1.id.name}",
+          stabilizeAndInferContextSingleInstance(region._1, region._2, preHavocLabel)))
+
+    val result =
+      vpr.Seqn(
+        preHavocLabel +: stabilizeInstances,
+        Vector.empty
+      )()
+
+    afterNonAtomic(preHavocLabel)
+
+    surroundWithSectionComments(stabilizationMessage, result)
+  }
+
+  def nonAtomicStabilizeAllInstances(reason: String): vpr.Stmt = {
+    nonAtomicStabilizeAllInstances(reason, tree.root.regions : _*)
+  }
+
+  def nonAtomicStabilizeAllInstances(reason: String, regions: PRegion*): vpr.Stmt = {
+    val stabilizationMessage =
+      s"Stabilising regions ${regions.map(_.id.name).mkString(",")} ($reason)"
+
+    beforeNonAtomic()
+
+    outputDebugInfo(stabilizationMessage)
+
+    val preHavocLabel = freshLabel("pre_havoc")
+
+    val stabilizeInstances =
+      regions.map(region =>
+        prependComment(
+          s"Stabilising all instances of region ${region.id.name}",
+          stabilizeAndInferContextAllInstances(region, preHavocLabel)))
+
+    val result =
+      vpr.Seqn(
+        preHavocLabel +: stabilizeInstances,
+        Vector.empty
+      )()
+
+    afterNonAtomic(preHavocLabel)
+
+    surroundWithSectionComments(stabilizationMessage, result)
+  }
+
+  def inferContextSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
+    val stabilizationMessage =
+      s"Inferring interference Context ${regions.map(_._1.id.name).mkString(",")} ($reason)"
+
+    sequenceStabilizeSubject.nextVersion
+
+    outputDebugInfo(stabilizationMessage)
+
+    val preHavocLabel = freshLabel("pre_havoc")
+
+    val stabilizeInstances =
+      regions.map(region =>
+        prependComment(
+          s"Inferring interference single instance of region ${region._1.id.name}",
+          inferContextSingleInstance(region._1, region._2, preHavocLabel)))
+
+    val result =
+      vpr.Seqn(
+        preHavocLabel +: stabilizeInstances,
+        Vector.empty
+      )()
+
+    surroundWithSectionComments(stabilizationMessage, result)
+  }
+
+  def inferContextAllInstances(reason: String): vpr.Stmt = {
+    inferContextAllInstances(reason, tree.root.regions : _*)
+  }
+
+  def inferContextAllInstances(reason: String, regions: PRegion*): vpr.Stmt = {
+    val stabilizationMessage =
+      s"Inferring interference context ${regions.map(_.id.name).mkString(",")} ($reason)"
+
+    sequenceStabilizeSubject.nextVersion
+
+    outputDebugInfo(stabilizationMessage)
+
+    val preHavocLabel = freshLabel("pre_havoc")
+
+    val stabilizeInstances =
+      regions.map(region =>
+        prependComment(
+          s"Inferring interference all instances of region ${region.id.name}",
+          inferContextAllInstances(region, preHavocLabel)))
 
     val result =
       vpr.Seqn(
@@ -94,6 +214,94 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
       dfltSingleHavocWrapper(regionArguments),
       dfltSingleSelectWrapper(regionArguments)
     )
+
+  private def stabilizeSingleInstance(region: PRegion,
+                                       args: Vector[vpr.Exp],
+                                       preHavocLabel: vpr.Label)
+  : vpr.Stmt =
+    stabilizeSingleRegion(region, singleWrapper(args), preHavocLabel)
+
+  private def stabilizeAllInstances(region: PRegion,
+                                    preHavocLabel: vpr.Label)
+  : vpr.Stmt =
+    stabilizeSingleRegion(region, regionAllWrapper(region, dfltPrePermissions(preHavocLabel)), preHavocLabel)
+
+  private def stabilizeSingleRegion(region: PRegion,
+                   wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper,
+                   preHavocLabel: vpr.Label)
+  : vpr.Stmt = {
+    val prePermissions = dfltPrePermissions(preHavocLabel)(_)
+    val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
+    val postRegionState = dfltPostRegionState(region)(_)
+    val actionFilter = dfltActionFilter(region)(_)
+
+    val resource = RegionStateFrontResourceWrapper(prePermissions)
+    val constraint = possibleNextStateConstraint(region, actionFilter, preRegionState)
+
+    resource.select(region, constraint)(wrapper)
+  }
+
+  private def stabilizeAndInferContextSingleInstance(region: PRegion,
+                                                     args: Vector[vpr.Exp],
+                                                     preHavocLabel: vpr.Label)
+  : vpr.Stmt =
+    stabilizeAndInferContextSingleRegion(region, singleWrapper(args), preHavocLabel)
+
+  private def stabilizeAndInferContextAllInstances(region: PRegion,
+                                                   preHavocLabel: vpr.Label)
+  : vpr.Stmt =
+    stabilizeAndInferContextSingleRegion(region, regionAllWrapper(region, dfltPrePermissions(preHavocLabel)), preHavocLabel)
+
+  private def stabilizeAndInferContextSingleRegion(region: PRegion,
+                   wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper,
+                   preHavocLabel: vpr.Label)
+  : vpr.Stmt = {
+    val prePermissions = dfltPrePermissions(preHavocLabel)(_)
+    val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
+    val postRegionState = dfltPostRegionState(region)(_)
+    val actionFilter = dfltActionFilter(region)(_)
+
+    val resource1 = interferenceSetFunctions
+    val resource2 = RegionStateFrontResourceWrapper(prePermissions)
+
+    val baseConstraint = possibleNextStateConstraint(region, actionFilter, preRegionState)
+    val constraint1 = containsAllPossibleNextStatesConstraint(region, baseConstraint)
+    val constraint2 = nextStateContainedInInference(region)
+
+    vpr.Seqn(
+      Vector(
+        resource1.select(region, constraint1)(wrapper),
+        resource2.select(region, constraint2)(wrapper)
+      ),
+      Vector.empty
+    )()
+  }
+
+  private def inferContextSingleInstance(region: PRegion,
+                                                     args: Vector[vpr.Exp],
+                                                     preHavocLabel: vpr.Label)
+  : vpr.Stmt =
+    inferContextSingleRegion(region, singleWrapper(args), preHavocLabel)
+
+  private def inferContextAllInstances(region: PRegion,
+                                                   preHavocLabel: vpr.Label)
+  : vpr.Stmt =
+    inferContextSingleRegion(region, regionAllWrapper(region, dfltPrePermissions(preHavocLabel)), preHavocLabel)
+
+  private def inferContextSingleRegion(region: PRegion,
+                                       wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper,
+                                       preHavocLabel: vpr.Label)
+  : vpr.Stmt = {
+    val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
+    val actionFilter = dfltActionFilter(region)(_)
+
+    val resource = interferenceSetFunctions
+
+    val baseConstraint = possibleNextStateConstraint(region, actionFilter, preRegionState)
+    val constraint = containsAllPossibleNextStatesConstraint(region, baseConstraint)
+
+    resource.select(region, constraint)(wrapper)
+  }
 
   private def stabilizeOneInstancesOfSingleRegionWithInference(region: PRegion,
                                                   regionArguments: Vector[vpr.Exp],
@@ -476,7 +684,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
           perm = vprPreHavocRegionPermissions
         )()
 
-      val vprWrappedRegionAssertion = wrapper.wrap(vprRegionAssertion)
+      val vprWrappedRegionAssertion = wrapper.wrapWithoutCondition(vprRegionAssertion)
 
       /* exhale ∀ as · acc(R(as), π) */
       val vprExhaleAllRegionInstances = vpr.Exhale(vprWrappedRegionAssertion)()

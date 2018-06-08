@@ -136,7 +136,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         val from = desugareBinders(_from)
         val to = desugareBinders(_to)
 
-        PAction(binders, condition, guardId, guardArgs, from, to)
+        sanitizeAction(PAction(binders, condition, guardId, guardArgs, from, to))
     } |
     /* Matches
      *   ?xs | c(xs) | G(g(xs)): e(xs) ~> e'(xs)
@@ -150,7 +150,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         val binders = optBinders.getOrElse(Vector.empty)
         val condition = optCondition.getOrElse(PTrueLit().at(guardId))
 
-        PAction(binders, condition, guardId, guardArgs, from, to)
+        sanitizeAction(PAction(binders, condition, guardId, guardArgs, from, to))
     }
 
   lazy val predicate: Parser[PPredicate] =
@@ -568,6 +568,15 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     def range(from: PAstNode, to: PAstNode): N = {
       positions.dupRangePos(from, to, node)
     }
+  }
+
+  private def sanitizeAction(action: PAction): PAction = {
+
+    val renamings = (action.binders map { case PNamedBinder(id, typeAnnotation) =>
+      id.name -> s"$$_action_${id.name}" // TODO naming convention
+    }).toMap
+
+    positionedRewriter.deepcloneAndRename(action, renamings)
   }
 
   implicit def parseResultToTuple2[A, B](result: A~B): (A, B) =
