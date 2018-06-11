@@ -432,12 +432,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val ruleBody = translate(makeAtomic.body)
 
-    val vprAtomicityContextX =
-      vpr.DomainFuncApp(
-        atomicityContextFunction(regionId),
-        regionInArgs,
-        Map.empty[vpr.TypeVar, vpr.Type]
-      )()
+    val vprAtomicityContextX = atomicityContextFunctions.application(region, regionInArgs)
 
     val vprStepFrom =
       stepFromLocation(vprRegionIdArg, regionType).withSource(regionId)

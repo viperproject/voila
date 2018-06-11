@@ -65,35 +65,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def stepToAccess(rcvr: vpr.Exp, typ: PType): vpr.FieldAccessPredicate =
     vpr.FieldAccessPredicate(stepToLocation(rcvr, typ), vpr.FullPerm()())()
 
-  val atomicityContextsDomainName: String = "$AtomicityContexts"
-
-  def atomicityContextsDomain(regions: Vector[PRegion]): vpr.Domain =
-    vpr.Domain(
-      name = atomicityContextsDomainName,
-      functions = regions.map(atomicityContextFunction),
-      axioms = Vector.empty,
-      typVars = Vector.empty
-    )()
-
-  def atomicityContextFunctionName(regionName: String): String =
-    s"${regionName}X"
-
-  def atomicityContextFunction(regionId: PIdnNode): vpr.DomainFunc = {
-    val region = semanticAnalyser.usedWithRegion(regionId)
-
-    atomicityContextFunction(region)
-  }
-
-  def atomicityContextFunction(region: PRegion): vpr.DomainFunc = {
-    val vprType = vpr.SetType(regionStateFunction(region).typ)
-
-    vpr.DomainFunc(
-      name = atomicityContextFunctionName(region.id.name),
-      formalArgs = region.formalInArgs map translate,
-      typ = vprType
-    )(vpr.NoPosition, vpr.NoInfo, atomicityContextsDomainName, vpr.NoTrafos)
-  }
-
   def localVariableDeclaration(binder: PNamedBinder): vpr.LocalVarDecl = {
     vpr.LocalVarDecl(
       binder.id.name,
@@ -227,8 +198,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val topLevelDeclarations: Vector[vpr.Declaration] = (
          Vector(
             diamondField,
-            regionStateTriggerFunctionDomain,
-            atomicityContextsDomain(tree.root.regions))
+            regionStateTriggerFunctionDomain)
       ++ collectedDeclarations
       ++ usedVariableHavocs(tree)
       ++ recordedSetComprehensions.values
@@ -408,7 +378,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translateAbstractlyAtomicProcedure(procedure: PProcedure): vpr.Method = {
     case class Entry(clause: PInterferenceClause,
                      regionPredicate: PPredicateExp,
-                     atomicityContext: vpr.DomainFuncApp,
                      interferenceSet: vpr.FuncApp,
                      referencePoint: vpr.FuncApp,
                      regionState: vpr.FuncApp)
@@ -417,38 +386,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       procedure.inters.map(inter => {
         val regionId = inter.region
         val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
-        val vprAtomicityContext = {
-          val (_, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
 
-          vpr.DomainFuncApp(
-            atomicityContextFunction(regionId),
-            regionArguments,
-            Map.empty[vpr.TypeVar, vpr.Type]
-          )()
-        }
+        val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
 
-        val vprInterferenceSet = {
-          val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+        val vprInterferenceSet = interferenceSetFunctions.application(reg, regionArguments)
 
-          interferenceSetFunctions.application(reg, regionArguments)
-        }
+        val referencePoint = interferenceReferenceFunctions.application(reg, regionArguments)
 
-        val referencePoint = {
-          val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+        val regionState = vpr.FuncApp(regionStateFunction(reg), regionArguments)()
 
-          interferenceReferenceFunctions.application(reg, regionArguments)
-        }
-
-        val regionState = {
-          val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
-
-          vpr.FuncApp(
-            regionStateFunction(reg),
-            regionArguments
-          )()
-        }
-
-        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicityContext, vprInterferenceSet, referencePoint, regionState)
+        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprInterferenceSet, referencePoint, regionState)
       }).toMap
 
     val vprLocals = procedure.locals.map(translate)
@@ -462,12 +409,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           vpr.Seqn(
             Vector(
-              vpr.Inhale( // TODO remove old atomicity context
-                vpr.EqCmp(
-                  entry.atomicityContext,
-                  translatedClauseSet
-                )()
-              )(),
               vpr.Inhale( // TODO add label
                 vpr.EqCmp(
                   entry.interferenceSet,
