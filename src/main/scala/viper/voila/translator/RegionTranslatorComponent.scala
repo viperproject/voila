@@ -308,7 +308,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val skolemizationFunctions = collectActionSkolemizationFunctions(region)
 
     (   guardPredicates
-     ++ collectingFunctions.flatMap(_(region))
+     ++ collectingFunctions.flatMap(_(region)).distinct
      ++ Vector(skolemizationFunctionFootprint) // , interferenceFunctionFootprint)
      ++ skolemizationFunctions //  ++ interferenceFunctions
      ++ region.formalOutArgs.indices.map(regionOutArgumentFunction(region, _))
@@ -318,7 +318,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           regionStateTriggerFunction(region)))
   }
 
-  def extractBoundedRegionInstance(id: PIdnUse): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
+  def extractBoundRegionInstance(id: PIdnUse): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
 
     semanticAnalyser.entity(id) match {
       case entity: LogicalVariableEntity =>
@@ -339,6 +339,19 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
   }
+
+  def extractRegionInstance(pred: PPredicateExp): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
+
+    if (extractableRegionInstance(pred)) {
+      Some(getRegionPredicateDetails(pred))
+    } else {
+      None
+    }
+  }
+
+  def extractableRegionInstance(pred: PPredicateExp): Boolean =
+    semanticAnalyser.entity(pred.predicate).isInstanceOf[RegionEntity]
+
 
   def getRegionPredicateDetails(predicateExp: PPredicateExp)
                                : (PRegion, Vector[PExpression], Vector[PExpression]) = {

@@ -6,14 +6,379 @@
 
 package viper.voila.translator
 
+import viper.silver.ast.{DomainFuncApp, Exp, Type}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
+import viper.voila.backends.ViperAstUtils
+import viper.voila.translator.TranslatorUtils._
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   protected var currentlyOpenRegions: List[(PRegion, Vector[PExpression], vpr.Label)] = List.empty
     /* Important: use as a stack! */
+
+
+  val atomicityContextFunctions: HeapFunctionManager[PRegion] with RegionManager[vpr.Function, vpr.FuncApp] = {
+
+    val _name = "atomicity_context"
+    def _functionType(obj: PRegion): Type = vpr.SetType(regionStateFunction(obj).typ)
+
+    val _footprintManager = new FootprintManager[PRegion]
+      with RegionManager[vpr.Predicate, vpr.PredicateAccessPredicate]
+      with SubFullSelector[PRegion] {
+      override val name: String = _name
+    }
+
+    val _triggerManager =
+      new DomainFunctionManager[PRegion]
+        with RegionManager[vpr.DomainFunc, vpr.DomainFuncApp]
+        with SubFullSelector[PRegion] {
+        override val name: String = _name
+        override def functionTyp(obj: PRegion): Type = _functionType(obj)
+      }
+
+    collectedDeclarations ++= _triggerManager.collectGlobalDeclarations // TODO: this could be put into another trait
+
+    new HeapFunctionManager[PRegion]
+      with RegionManager[vpr.Function, vpr.FuncApp]
+      with FrontFullSelector[PRegion] {
+
+      override val footprintManager: FootprintManager[PRegion] with SubSelector[PRegion] = _footprintManager
+      override val triggerManager: DomainFunctionManager[PRegion] with SubSelector[PRegion] = _triggerManager
+
+      override def functionTyp(obj: PRegion): Type = _functionType(obj)
+      override val name: String = _name
+
+      override protected def post(trigger: DomainFuncApp): Vector[vpr.Exp] = {
+
+        val varName = "$_m" // TODO: naming convention
+        val varType = trigger.typ match { case vpr.SetType(t) => t }
+        val varDecl = vpr.LocalVarDecl(varName, varType)()
+        val variable = varDecl.localVar
+
+        val varInResult =
+          vpr.AnySetContains(
+            variable,
+            vpr.Result()(typ = trigger.typ)
+          )()
+
+        val varInTrigger =
+          vpr.AnySetContains(
+            variable,
+            trigger
+          )()
+
+        val triggerRelation =
+          vpr.Forall(
+            Vector(varDecl),
+            Vector(vpr.Trigger(Vector(varInResult))()),
+            vpr.Implies(varInResult, varInTrigger)()
+          )()
+
+        val postCondition = vpr.InhaleExhaleExp(
+          triggerRelation,
+          vpr.TrueLit()()
+        )()
+
+        Vector(postCondition)
+      }
+
+      override def triggerApplication(id: PRegion, args: Vector[Exp]): Exp = selectArgs(id,args) match {
+        case (xs :+ m) => vpr.AnySetContains(m, triggerManager.application(id, xs))()
+      }
+    }
+  }
+
+  private def atomicityContextAssignConstraint(region: PRegion): Constraint = Constraint( args => target =>
+    TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
+      vpr.EqCmp(
+        target,
+        interferenceSetFunctions.application(region, args)
+      )()
+    )
+  )
+
+  def frameRegions(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
+
+    var preExhales: List[vpr.Stmt] = Nil
+    var postInhales: List[vpr.Stmt] = Nil
+
+    tree.root.regions foreach { region =>
+
+      val decls = region.formalInArgs map translate
+      val vars = decls map (_.localVar)
+
+      /* R(as) */
+      val vprRegionPredicateInstance =
+        vpr.PredicateAccess(
+          args = vars,
+          predicateName = region.id.name
+        )()
+
+      /* π */
+      val vprPreHavocRegionPermissions =
+        vpr.LabelledOld(vpr.CurrentPerm(vprRegionPredicateInstance)(), preLabel.name)()
+
+      /* acc(R(as), π) */
+      val vprRegionAssertion =
+        vpr.PredicateAccessPredicate(
+          loc = vprRegionPredicateInstance,
+          perm = vprPreHavocRegionPermissions
+        )()
+
+      /* \/as. acc(R(as), π) */
+      val vprAllRegionAssertions =
+        vpr.Forall(
+          decls,
+          Vector.empty,
+          vprRegionAssertion
+        )()
+
+      val vprSanitizedAllRegionAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionAssertions)
+
+      preExhales ::= vpr.Exhale(vprSanitizedAllRegionAssertions)()
+      postInhales ::= vpr.Inhale(vprSanitizedAllRegionAssertions)()
+
+      /* none < π */
+      val vprIsRegionAccessible =
+        vpr.PermLtCmp(
+          vpr.NoPerm()(),
+          vprPreHavocRegionPermissions
+        )()
+
+      /* R_state(as) */
+      val regionState =
+        vpr.FuncApp(
+          regionStateFunction(region),
+          vars
+        )()
+
+      /* R_state(as) == old[preFrame](R_state(as)] */
+      val vprRegionStateStaysEqual =
+        vpr.EqCmp(
+          regionState,
+          vpr.LabelledOld(regionState, preLabel.name)()
+        )()
+
+      val triggers =
+        Vector(
+          vpr.Trigger(
+            Vector(
+              vpr.DomainFuncApp(
+                func = regionStateTriggerFunction(region.id.name),
+                args = vars,
+                typVarMap = Map.empty
+              )()
+            ))())
+
+      /* \/as. none < π ==> R_state(as) == old[preFrame](R_state(as)] */
+      val vprAllRegionStateStaysEqual =
+        vpr.Forall(
+          decls,
+          triggers,
+          vpr.Implies(vprIsRegionAccessible, vprRegionStateStaysEqual)()
+        )()
+
+      val vprSanitizedAllRegionStateStaysEqual = ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionStateStaysEqual)
+
+      postInhales ::= vpr.Inhale(vprSanitizedAllRegionStateStaysEqual)()
+    }
+
+    (
+      preExhales,
+      postInhales
+    )
+
+  }
+
+  def frameGuards(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
+    var preExhales: List[vpr.Stmt] = Nil
+    var postInhales: List[vpr.Stmt] = Nil
+
+    tree.root.regions foreach { region =>
+      region.guards foreach { guard =>
+
+        val guardDecls = guard.formalArguments map translate
+        val guardVars = guardDecls map (_.localVar)
+
+        /* G(xs) */
+        val vprGuardPredicate = guardPredicate(guard, region)
+
+        val vprGuardPredicateLoc =
+          vpr.PredicateAccess(
+            guardVars,
+            vprGuardPredicate.name
+          )()
+
+        /* π */
+        val vprPreHavocGuardPermissions =
+          vpr.LabelledOld(vpr.CurrentPerm(vprGuardPredicateLoc)(), preLabel.name)()
+
+        /* acc(G(xs), π) */
+        val vprGuardAssertion =
+          vpr.PredicateAccessPredicate(
+            vprGuardPredicateLoc,
+            vprPreHavocGuardPermissions
+          )()
+
+        /* \/as. acc(G(as), π) */
+        val vprAllGuardAssertions =
+          if (guardDecls.isEmpty) {
+            vprGuardAssertion
+          } else {
+            vpr.Forall(
+              guardDecls,
+              Vector.empty,
+              vprGuardAssertion
+            )()
+          }
+
+        val vprSanitizedAllGuardAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllGuardAssertions)
+
+        preExhales ::= vpr.Exhale(vprSanitizedAllGuardAssertions)()
+        postInhales ::= vpr.Inhale(vprSanitizedAllGuardAssertions)()
+      }
+    }
+
+    (
+      preExhales,
+      postInhales
+    )
+  }
+
+  def frameFields(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
+
+    var preExhales: List[vpr.Stmt] = Nil
+    var postInhales: List[vpr.Stmt] = Nil
+
+    tree.root.structs foreach { struct =>
+
+      val decl = vpr.LocalVarDecl("$$_r", vpr.Ref)()
+      val variable = decl.localVar
+
+      struct.fields foreach { field =>
+
+        /* r.field */
+        val fieldAccess =
+          vpr.FieldAccess(
+            variable,
+            toField(struct, field.id)
+          )()
+
+        /* π */
+        val vprPreHavocFieldPermissions =
+          vpr.LabelledOld(vpr.CurrentPerm(fieldAccess)(), preLabel.name)()
+
+        /* acc(r.field, π) */
+        val vprFieldAssertion =
+          vpr.FieldAccessPredicate(
+            fieldAccess,
+            vprPreHavocFieldPermissions
+          )()
+
+        /* \/as. acc(r.field, π) */
+        val vprAllFieldAssertions =
+          vpr.Forall(
+            Vector(decl),
+            Vector.empty,
+            vprFieldAssertion
+          )()
+
+        preExhales ::= vpr.Exhale(vprAllFieldAssertions)()
+        postInhales ::= vpr.Inhale(vprAllFieldAssertions)()
+
+        /* none < π */
+        val vprIsFieldAccessible =
+          vpr.PermLtCmp(
+            vpr.NoPerm()(),
+            vprPreHavocFieldPermissions
+          )()
+
+
+
+        /* r.field == old[preFrame](r.field) */
+        val vprFieldValueStaysEqual =
+          vpr.EqCmp(
+            fieldAccess,
+            vpr.LabelledOld(fieldAccess, preLabel.name)()
+          )()
+
+        val triggers =
+          Vector(
+            vpr.Trigger(
+              Vector(
+                fieldAccess
+              ))())
+
+        /* \/as. none < π ==> R_state(as) == old[preFrame](R_state(as)] */
+        val vprAllRegionStateStaysEqual =
+          vpr.Forall(
+            Vector(decl),
+            triggers,
+            vpr.Implies(vprIsFieldAccessible, vprFieldValueStaysEqual)()
+          )()
+
+        postInhales ::= vpr.Inhale(vprAllRegionStateStaysEqual)()
+      }
+    }
+
+    (
+      preExhales,
+      postInhales
+    )
+  }
+
+  def completeFrame: (vpr.Stmt, vpr.Stmt) = {
+
+    val framingFunctions: List[vpr.Label => (List[vpr.Stmt], List[vpr.Stmt])]
+      = List(frameFields, frameGuards, frameRegions)
+
+    val preFrame = freshLabel("preFrame")
+
+    var preExhales: List[vpr.Stmt] = Nil
+    var postInhales: List[vpr.Stmt] = Nil
+
+    framingFunctions foreach { f =>
+      val (pres, posts) = f(preFrame)
+      preExhales :::= pres
+      postInhales :::= posts
+    }
+
+    (
+      vpr.Seqn(
+        preFrame +: preExhales :+ stabilizeAllInstances("stabelizing the frame"),
+        Vector.empty
+      )(),
+      vpr.Seqn(
+        postInhales,
+        Vector.empty
+      )()
+    )
+  }
+
+  def atomicityContextWhileConstraint(region: PRegion, label: vpr.Label): Constraint = Constraint( args => target => {
+
+    val varName = "$_m" // TODO: naming convention
+    val varType = regionStateFunction(region).typ
+    val varDecl = vpr.LocalVarDecl(varName, varType)()
+    val variable = varDecl.localVar
+
+    TranslatorUtils.BetterQuantifierWrapper.QuantWrapperExt(
+      Vector(varDecl),
+      vpr.EqCmp(
+        target,
+        vpr.LabelledOld(atomicityContextFunctions.application(region, args), label.name)()
+      )()
+    )
+  })
+
+  private def assignAtomicityContext(region: PRegion, args: Vector[vpr.Exp]): vpr.Stmt = {
+    val wrapper = singleWrapper(args)
+    val constraint = atomicityContextAssignConstraint(region)
+    atomicityContextFunctions.select(region, constraint)(wrapper)
+  }
+
 
   def translate(makeAtomic: PMakeAtomic): vpr.Stmt = {
     val regionArgs = makeAtomic.regionPredicate.arguments
@@ -42,6 +407,28 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
         MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
     }
+
+    val regionPredicate =
+      vpr.PredicateAccessPredicate(
+        vpr.PredicateAccess(
+          args = regionInArgs,
+          predicateName = region.id.name
+        )(),
+        vpr.FullPerm()()
+      )()
+
+    val exhaleRegionPredicate = vpr.Exhale(regionPredicate)().withSource(makeAtomic)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.ExhaleFailed if e causedBy exhaleRegionPredicate =>
+        MakeAtomicError(makeAtomic, InsufficientRegionPermissionError(makeAtomic.regionPredicate))
+    }
+
+    val (preFrameExhales, postFrameInhales) = completeFrame
+
+    val inhaleRegionPredicate = vpr.Inhale(regionPredicate)()
+
+    val assignContext = assignAtomicityContext(region, regionInArgs)
 
     val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
 
@@ -170,8 +557,12 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val result =
       vpr.Seqn(
         Vector(
-          inhaleDiamond,
           exhaleGuard,
+          exhaleRegionPredicate,
+          preFrameExhales,
+          inhaleRegionPredicate,
+          inhaleDiamond,
+          assignContext,
           havoc1,
           ruleBody,
           checkUpdatePermitted,
@@ -180,7 +571,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           assumeCurrentStateIsStepTo,
           assumeOldStateWasStepFrom,
           inhaleGuard,
-          exhaleTrackingResource),
+          exhaleTrackingResource,
+          postFrameInhales),
         Vector.empty
       )()
 
@@ -216,6 +608,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))().withSource(updateRegion.regionPredicate)
+
+    val tranitionInterferenceContext
+    = linkInterferenceContext(region, vprInArgs)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
@@ -289,6 +684,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           exhaleDiamond,
           label,
           unfoldRegionPredicate,
+          tranitionInterferenceContext,
           stabilizeFrameRegions,
           ruleBody,
           foldRegionPredicate,
@@ -312,6 +708,9 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
+
+    val tranitionInterferenceContext
+    = linkInterferenceContext(region, vprInArgs)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
@@ -401,6 +800,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           exhaleGuard,
           stabilizeOtherRegionTypes,
           unfoldRegionPredicate,
+          tranitionInterferenceContext,
           stabilizeCurrentRegionTypes,
           inhaleGuard,
           ruleBody,

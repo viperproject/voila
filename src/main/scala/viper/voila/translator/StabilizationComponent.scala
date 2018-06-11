@@ -85,7 +85,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   private def afterNonAtomic(preHavocLabel: vpr.Label): Unit = {
-    evaluateInLastInfer = exp => vpr.LabelledOld(exp, preHavocLabel.name)()
+
   }
 
   def nonAtomicStabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
@@ -263,15 +263,18 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     val resource1 = interferenceSetFunctions
     val resource2 = RegionStateFrontResourceWrapper(prePermissions)
+    val resource3 = interferenceReferenceFunctions
 
     val baseConstraint = possibleNextStateConstraint(region, actionFilter, preRegionState)
     val constraint1 = containsAllPossibleNextStatesConstraint(region, baseConstraint)
     val constraint2 = nextStateContainedInInference(region)
+    val constraint3 = referencePointConstraint(region, prePermissions)
 
     vpr.Seqn(
       Vector(
         resource1.select(region, constraint1)(wrapper),
-        resource2.select(region, constraint2)(wrapper)
+        resource2.select(region, constraint2)(wrapper),
+        resource3.select(region, constraint3)(wrapper)
       ),
       Vector.empty
     )()
@@ -292,15 +295,24 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
                                        wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper,
                                        preHavocLabel: vpr.Label)
   : vpr.Stmt = {
+    val prePermissions = dfltPrePermissions(preHavocLabel)(_)
     val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
     val actionFilter = dfltActionFilter(region)(_)
 
-    val resource = interferenceSetFunctions
+    val resource1 = interferenceSetFunctions
+    val resource2 = interferenceReferenceFunctions
 
     val baseConstraint = possibleNextStateConstraint(region, actionFilter, preRegionState)
-    val constraint = containsAllPossibleNextStatesConstraint(region, baseConstraint)
+    val constraint1 = containsAllPossibleNextStatesConstraint(region, baseConstraint)
+    val constraint2 = referencePointConstraint(region, prePermissions)
 
-    resource.select(region, constraint)(wrapper)
+    vpr.Seqn(
+      Vector(
+        resource1.select(region, constraint1)(wrapper),
+        resource2.select(region, constraint2)(wrapper)
+      ),
+      Vector.empty
+    )()
   }
 
   private def stabilizeOneInstancesOfSingleRegionWithInference(region: PRegion,
@@ -783,12 +795,12 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
           )()
 
         /* X(as) */
-        val vprAtomicityContext =
-          vpr.DomainFuncApp(
-            atomicityContextFunction(region),
-            vprRegionArguments,
-            Map.empty[vpr.TypeVar, vpr.Type]
-          )()
+        val vprAtomicityContext = atomicityContextFunctions.application(region, vprRegionArguments)
+//          vpr.DomainFuncApp(
+//            atomicityContextFunction(region),
+//            vprRegionArguments,
+//            Map.empty[vpr.TypeVar, vpr.Type]
+//          )()
 
         vpr.Implies(
           vprDiamondHeld,

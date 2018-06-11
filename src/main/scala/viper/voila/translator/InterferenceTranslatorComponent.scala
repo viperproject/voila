@@ -19,27 +19,54 @@ import viper.voila.translator.TranslatorUtils._
 
 trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
-  var evaluateInLastInfer: vpr.Exp => vpr.Exp = vpr.Old(_)()
-
-  private var linkedRegions: List[(PRegion, Vector[PExpression], vpr.Label, Int)] = Nil
-
   def evaluateInterferenceContext(id: PIdnUse, origin: PExpression): vpr.Exp = {
 
     val dflt = translateUseOf(id).withSource(origin, overwrite = true)
 
-    extractBoundedRegionInstance(id) match {
+    extractBoundRegionInstance(id) match {
       case Some((region, inArgs, outArgs)) =>
 
-        System.out.println("wawa")
-        System.out.println(inArgs)
-        System.out.println(currentlyOpenRegions)
-
-        linkedRegions.find { case (r,in,l,v) => (r eq region) && (in eq inArgs)} match {
-          case Some((_,_,l,v)) => vpr.LabelledOld(dflt, l.name)()
-          case None => dflt
-        }
+        interferenceReferenceFunctions.application(region, inArgs map translate).withSource(origin, overwrite = true)
 
       case _ => dflt
+    }
+  }
+
+  private val interferenceContextFootprints = new FootprintManager[PRegion]
+    with RegionManager[vpr.Predicate, vpr.PredicateAccessPredicate]
+    with RemoveVersionSelector[PRegion] {
+    override val name: String = "interferenceContext"
+  }
+
+  val interferenceReferenceFunctions: HeapFunctionManager[PRegion] with RegionManager[vpr.Function, vpr.FuncApp] = {
+
+    val _name = "interferenceReference"
+    def _functionType(obj: PRegion): Type = regionStateFunction(obj).typ
+
+    val _triggerManager =
+      new DomainFunctionManager[PRegion]
+        with RegionManager[vpr.DomainFunc, vpr.DomainFuncApp]
+        with SubFullSelector[PRegion] {
+        override val name: String = _name
+        override def functionTyp(obj: PRegion): Type = vpr.Bool
+      }
+
+    collectedDeclarations ++= _triggerManager.collectGlobalDeclarations
+
+    new HeapFunctionManager[PRegion]
+      with RegionManager[vpr.Function, vpr.FuncApp]
+      with SequenceStabelizeVersionedSelector[PRegion] {
+
+      override val footprintManager: FootprintManager[PRegion] with SubSelector[PRegion] = interferenceContextFootprints
+      override val triggerManager: DomainFunctionManager[PRegion] with SubSelector[PRegion] = _triggerManager
+
+      override def functionTyp(obj: PRegion): Type = _functionType(obj)
+
+      override val name: String = _name
+
+      override def havoc(id: PRegion)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt =
+        ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "havoc performed by other front resource", "")))
+
     }
   }
 
@@ -47,12 +74,6 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
     val _name = "interferenceSet"
     def _functionType(obj: PRegion): Type = vpr.SetType(regionStateFunction(obj).typ)
 
-    val _footprintManager =
-      new FootprintManager[PRegion]
-        with RegionManager[vpr.Predicate, vpr.PredicateAccessPredicate]
-        with RemoveVersionSelector[PRegion] {
-        override val name: String = _name
-      }
     val _triggerManager =
       new DomainFunctionManager[PRegion]
         with RegionManager[vpr.DomainFunc, vpr.DomainFuncApp]
@@ -67,13 +88,13 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
       with RegionManager[vpr.Function, vpr.FuncApp]
       with SequenceStabelizeVersionedSelector[PRegion] {
 
-      override val footprintManager: FootprintManager[PRegion] with SubSelector[PRegion] = _footprintManager
+      override val footprintManager: FootprintManager[PRegion] with SubSelector[PRegion] = interferenceContextFootprints
       override val triggerManager: DomainFunctionManager[PRegion] with SubSelector[PRegion] = _triggerManager
 
       override def functionTyp(obj: PRegion): Type = _functionType(obj)
       override val name: String = _name
 
-      override protected def post(trigger: DomainFuncApp): Vector[Exp] = {
+      override protected def post(trigger: DomainFuncApp): Vector[vpr.Exp] = {
 
         val varName = "$_m" // TODO: naming convention
         val varType = trigger.typ match { case vpr.SetType(t) => t }
@@ -113,17 +134,35 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
+  def regionArgumentMapping(region: PRegion, args: Vector[vpr.Exp]): Map[vpr.LocalVar, vpr.Exp] = {
 
+    val inArgsSubst: Map[vpr.LocalVar, vpr.Exp] =
+      region.formalInArgs.map(translate(_).localVar)
+            .zip(args)
+            .map{case (formal, actual) => formal -> actual}(breakOut)
+
+    val outArgsSubst: Map[vpr.LocalVar, vpr.Exp] =
+      region.formalOutArgs.map(translate(_).localVar).zipWithIndex.map{ case (f, i) =>
+        f -> FuncApp(
+          regionOutArgumentFunction(region, i),
+          args
+        )()
+      }(breakOut)
+
+    inArgsSubst ++ outArgsSubst
+  }
 
   def linkInterferenceContext(region: PRegion, args: Vector[vpr.Exp]): vpr.Stmt = {
 
     var counter = 0
-    var tripples: List[(vpr.LocalVarDecl, PRegion, Vector[vpr.Exp])] = Nil
+    var stateDependencies: List[(vpr.LocalVarDecl, PRegion, Vector[vpr.Exp])] = Nil
+
+    val mapping = regionArgumentMapping(region, args)
 
     val state = translateWith(region.state){
       case exp@ PIdnExp(id) =>
 
-        extractBoundedRegionInstance(id) match {
+        extractBoundRegionInstance(id) match {
           case Some((innerRegion, inArgs, outArgs)) =>
 
             val varName = s"$$_m${counter}" // TODO: naming convention
@@ -133,56 +172,86 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
             val varDecl = vpr.LocalVarDecl(varName, regionStateType)()
             val variable = varDecl.localVar
 
-            tripples ::= (varDecl, innerRegion, inArgs map translate)
+            stateDependencies ::= (varDecl, innerRegion, inArgs map (translate(_).replace(mapping)))
 
             variable
 
           case _ => translateUseOf(id).withSource(exp, overwrite = true)
         }
+    }.replace(mapping)
+
+    val refLabel = freshLabel("transitionPre")
+
+    var allRegions: List[(PRegion, Vector[vpr.Exp])] = Nil
+
+    translateWith(region.interpretation) {
+      case pred: PPredicateExp if extractableRegionInstance(pred) =>
+
+        val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
+
+        allRegions ::= (innerRegion, inArgs map (translate(_).replace(mapping)))
+
+        translate(pred)
     }
 
-    if (tripples.nonEmpty) {
+    if (allRegions.nonEmpty) {
 
-      val rhsContainTerms = tripples map { case (decl, innerRegion, innerArgs) =>
-        vpr.AnySetContains(
-          decl.localVar,
-          interferenceSetFunctions.application(innerRegion, innerArgs)
-        )()
+      val footprintHavocs = allRegions map { case (innerRegion, innerArgs) =>
+        val wrapper = singleWrapper(innerArgs)
+        interferenceSetFunctions.havoc(innerRegion)(wrapper)
       }
-
-      val triggerTerms = tripples map { case (decl, innerRegion, innerArgs) =>
-        interferenceSetFunctions.triggerApplication(innerRegion, innerArgs :+ decl.localVar)
-      }
-
-      val decls = tripples map { case (decl, _, _) => decl }
-
-      val lhsContainTerm =
-        vpr.AnySetContains(
-          state,
-          interferenceSetFunctions.application(region, args)
-        )()
-
-      val body = vpr.EqCmp(lhsContainTerm, viper.silicon.utils.ast.BigAnd(rhsContainTerms))()
 
       val tranformStmt =
-        vpr.Inhale(
-          vpr.Forall(
-            decls,
-            Vector(vpr.Trigger(triggerTerms)()),
-            body
-          )()
-        )()
+        if (stateDependencies.nonEmpty) {
+          val rhsContainTerms = stateDependencies map { case (decl, innerRegion, innerArgs) =>
+            vpr.AnySetContains(
+              decl.localVar,
+              interferenceSetFunctions.application(innerRegion, innerArgs)
+            )()
+          }
 
-      val footprintHavocs = tripples map { case (decl, innerRegion, innerArgs) =>
+          val triggerTerms = stateDependencies map { case (decl, innerRegion, innerArgs) =>
+            interferenceSetFunctions.triggerApplication(innerRegion, innerArgs :+ decl.localVar)
+          }
+
+          val decls = stateDependencies map { case (decl, _, _) => decl }
+
+          val lhsContainTerm =
+            vpr.AnySetContains(
+              state,
+              interferenceSetFunctions.application(region, args)
+            )()
+
+          val body = vpr.EqCmp(lhsContainTerm, viper.silicon.utils.ast.BigAnd(rhsContainTerms))()
+
+          // TODO maybe add contains assertions for better trigger usage
+
+          vpr.Inhale(
+            vpr.Forall(
+              decls,
+              Vector(vpr.Trigger(triggerTerms)()),
+              body
+            )()
+          )()
+
+        } else {
+          ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no additional linking requried", "")))
+        }
+
+      val referencePointSelections = allRegions map { case (innerRegion, innerArgs) =>
         val wrapper = singleWrapper(innerArgs)
-          interferenceSetFunctions.havoc(innerRegion)(wrapper)
+        val prePermissions = vpr.LabelledOld(_: vpr.Exp, refLabel.name)()
+
+        val constraint = referencePointConstraint(innerRegion, prePermissions)
+
+        interferenceReferenceFunctions.select(innerRegion, constraint)(wrapper)
       }
 
-      // TODO maybe add contains assertions for better trigger usage
-
       vpr.Seqn(
-        footprintHavocs :+
-          tranformStmt,
+        refLabel ::
+        footprintHavocs :::
+        tranformStmt ::
+        referencePointSelections,
         Vector.empty
       )()
 
@@ -250,14 +319,19 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
     QuantifierWrapper.AllWrapper(Vector(varDecl), regionArgs, triggers)(post, pre)
   }
 
-
-  def initInterference(statement: vpr.Stmt): vpr.Stmt = {
-    ???
-  }
-
-  def linkInterference() = ???
-
-  def queryInterference() = ???
+  def referencePointConstraint(region: PRegion, prePermissions: vpr.Exp => vpr.Exp): Constraint = Constraint( args => target =>
+    TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
+      vpr.EqCmp(
+        target,
+        prePermissions(
+          vpr.FuncApp(
+            regionStateFunction(region),
+            args
+          )()
+        )
+      )()
+    )
+  )
 
   def nextStateContainedInInference(region: PRegion): Constraint = Constraint( args => target =>
     TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(

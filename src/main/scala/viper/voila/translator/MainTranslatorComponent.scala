@@ -334,8 +334,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
 
-    evaluateInLastInfer = exp => vpr.Old(exp)()
-
 //    val inhaleInterferenceFunctionFootprints =
 //      vpr.Inhale(
 //        viper.silicon.utils.ast.BigAnd(
@@ -411,7 +409,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case class Entry(clause: PInterferenceClause,
                      regionPredicate: PPredicateExp,
                      atomicityContext: vpr.DomainFuncApp,
-                     interferenceSet: vpr.FuncApp)
+                     interferenceSet: vpr.FuncApp,
+                     referencePoint: vpr.FuncApp,
+                     regionState: vpr.FuncApp)
 
     val regionInterferenceVariables: Map[PIdnUse, Entry] =
       procedure.inters.map(inter => {
@@ -433,7 +433,22 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           interferenceSetFunctions.application(reg, regionArguments)
         }
 
-        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicityContext, vprInterferenceSet)
+        val referencePoint = {
+          val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+
+          interferenceReferenceFunctions.application(reg, regionArguments)
+        }
+
+        val regionState = {
+          val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+
+          vpr.FuncApp(
+            regionStateFunction(reg),
+            regionArguments
+          )()
+        }
+
+        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicityContext, vprInterferenceSet, referencePoint, regionState)
       }).toMap
 
     val vprLocals = procedure.locals.map(translate)
@@ -457,6 +472,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 vpr.EqCmp(
                   entry.interferenceSet,
                   translatedClauseSet
+                )()
+              )(),
+              vpr.Inhale(
+                vpr.EqCmp(
+                  entry.referencePoint,
+                  vpr.Old(entry.regionState)()
                 )()
               )()
             ),
@@ -624,10 +645,21 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
 
+        val preAtomicityLabel = freshLabel("preWhile")
+
+        val atomicityConstraints = tree.root.regions map (region => {
+          val wrapper = regionAllWrapper(region, exp => exp)
+          val constraint = atomicityContextWhileConstraint(region, preAtomicityLabel)
+          atomicityContextFunctions.select(region, constraint)(wrapper)
+        })
+
+        val inferContext = inferContextAllInstances("infer context inside while")
+
         val vprBody =
           vpr.Seqn(
             inhaleSkolemizationFunctionFootprints +:
               initializeFootprints ++:
+              atomicityConstraints ++:
               Vector(translate(body)),
             Vector.empty
           )()
@@ -641,7 +673,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         vprWhile = vprWhile.withSource(statement)
 
-        surroundWithSectionComments(statement.statementName, vprWhile)
+        val total = vpr.Seqn(
+          Vector(preAtomicityLabel, vprWhile),
+          Vector.empty
+        )()
+
+        surroundWithSectionComments(statement.statementName, total)
 
       case PAssign(lhs, rhs) =>
         var vprAssign =
@@ -972,20 +1009,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     val vprFormalsToActuals =
                       callee.formalArgs.map(translate(_).localVar).zip(vprArguments).toMap
 
-                    System.out.println("hey")
-                    System.out.println(inter.set)
-
                     translateWith(inter.set){
                       case exp@ PIdnExp(id) => {
 
-                        System.out.println("heyo")
-                        System.out.println(id)
-
-                        val res = evaluateInterferenceContext(id, exp)
-
-                        System.out.println(res)
-
-                        res
+                        evaluateInterferenceContext(id, exp)
                       }
                     }.replace(vprFormalsToActuals)
                   }
@@ -1009,7 +1036,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     vpr.Assert(
                       vpr.Forall(
                         variables = Vector(decl),
-                        triggers = Vector.empty,
+                        triggers = Vector(vpr.Trigger(Vector(rhs))()),
                         vpr.Implies(lhs, rhs)()
                       )()
                     )()
@@ -1020,7 +1047,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 //
 //                      PreconditionError(call, InsufficientRegionPermissionError(regionPredicate))
 
-                    case e @ vprerr.AssertFailed(_, reason, _)
+                    case e @ vprerr.AssertFailed(node, reason, _)
                          if (e causedBy vprCheckStateUnchanged) &&
                             (reason causedBy vprCheckStateUnchanged.exp) =>
 

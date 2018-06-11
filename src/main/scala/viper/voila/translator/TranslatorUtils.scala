@@ -280,7 +280,7 @@ object TranslatorUtils {
     val triggerManager: DomainFunctionManager[T] with SubSelector[T]
 
     protected def post(trigger: vpr.DomainFuncApp): Vector[vpr.Exp] =
-      Vector.empty
+      Vector(vpr.InhaleExhaleExp(trigger, vpr.TrueLit()())())
 
     protected def body(obj: ManagedObject[T]): (Option[vpr.Exp], Option[vpr.DecClause]) =
       (None, None)
