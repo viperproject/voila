@@ -724,12 +724,20 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             case _: PUnfold =>
               val vprUnfold = vpr.Unfold(vprPredicateAccess)().withSource(statement)
 
-              optVprCheckConstraints.fold(vprUnfold: vpr.Stmt)(vprCheck =>
+              val checkConstraints = optVprCheckConstraints.fold(vprUnfold: vpr.Stmt)(vprCheck =>
                 vpr.Seqn(
                   vprAssignments ++ Vector(vprCheck, vprUnfold),
                   Vector.empty
                 )()
               )
+
+              val inferInterferenceContext = inferContextAllInstances("recompute interference context after unfold")
+
+              // TODO: generalize context inference after ghost statements
+              vpr.Seqn(
+                Vector(checkConstraints, inferInterferenceContext),
+                Vector.empty
+              )()
           }
 
         val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
@@ -863,11 +871,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val vprFoldRegion = vpr.Fold(vprRegionPredicateAccess)()
 
+        // TODO: generalize interference context inference after ghost code
+        val inferInterferenceContext = inferContextAllInstances("infer interference context after use-region interpretation")
+
         val result =
           vpr.Seqn(
               vprUnfoldRegion +:
               vprPermissionConstraintsForUniqueGuards :+
-              vprFoldRegion,
+              vprFoldRegion :+
+              inferInterferenceContext,
             Vector.empty
           )().withSource(statement)
 

@@ -261,63 +261,6 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
 
-  /* Interference-Set Domain and Domain-Functions */
-
-
-  def interfereceWrapperExtension(region: PRegion, postState: Vector[vpr.Exp] => vpr.Exp)
-                                 (selectWrapper: QuantifierWrapper.StmtWrapper): QuantifierWrapper.StmtWrapper = {
-
-    val varName = "$_m" // TODO: naming convention
-    val varType = regionStateFunction(region).typ
-    val varDecl = vpr.LocalVarDecl(varName, varType)()
-    val variable = varDecl.localVar
-
-    val regionArgs = selectWrapper.param
-    val newState = postState(regionArgs)
-
-    /* exp in X(xs)*/
-    def expInSet(exp: vpr.Exp) = vpr.AnySetContains(
-      exp,
-      interferenceSetFunctions.application(region, regionArgs)
-    )()
-
-    /* m in X(xs) <==> e(xs)[postState(xs) -> m] */
-    def pre(exp: vpr.Exp): vpr.Exp = {
-      val substExp = exp.transform{ case `newState` => variable}
-      vpr.EqCmp(expInSet(variable), substExp)()
-    }
-
-    /* inhale exp; Q(postState(xs) in X(xs)) */
-    def post(exp: vpr.Exp): vpr.Stmt = {
-      val selectSet = vpr.Inhale(exp)()
-      val selectState = selectWrapper.wrap(expInSet(newState))
-
-      /* acc(R_inference_fp()) */
-      val interferenceFootprintAccess = null
-
-      /* exhale acc(R_inference_fp()) */
-      val vprExhaleInterferenceFootprintAccess =
-        vpr.Exhale(interferenceFootprintAccess)()
-
-      /* inhale acc(R_inference_fp()) */
-      val vprInhaleInterferenceFootprintAccess =
-        vpr.Inhale(interferenceFootprintAccess)()
-
-      vpr.Seqn(
-        Vector(
-          vprExhaleInterferenceFootprintAccess,
-          vprInhaleInterferenceFootprintAccess,
-          selectSet,
-          selectState
-        ),
-        Vector.empty
-      )()
-    }
-
-    val triggers = Vector(vpr.Trigger(Vector(expInSet(variable)))())
-
-    QuantifierWrapper.AllWrapper(Vector(varDecl), regionArgs, triggers)(post, pre)
-  }
 
   def referencePointConstraint(region: PRegion, prePermissions: vpr.Exp => vpr.Exp): Constraint = Constraint( args => target =>
     TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(

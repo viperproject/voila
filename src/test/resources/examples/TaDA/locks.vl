@@ -85,8 +85,6 @@ procedure non_atomic_unlock(id r, id a, memcell x)
   // unfold CAPLock(r, a, x);
   // fold L(a, x);
 
-  skip;
-
   use_atomic
     using CAPLock(r, a, x) with K@r;
   {
@@ -134,8 +132,6 @@ procedure non_atomic_lock(id r, id a, memcell x)
   // ensures  isLock(r, a, x);
 {
   unfold isLock(r, a, x);
-
-  skip;
 
   use_atomic
     using CAPLock(r, a, x) with Z@r;

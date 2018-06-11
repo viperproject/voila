@@ -199,11 +199,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     tree.root.regions foreach { region =>
       region.guards foreach { guard =>
 
-        val guardDecls = guard.formalArguments map translate
-        val guardVars = guardDecls map (_.localVar)
-
         /* G(xs) */
         val vprGuardPredicate = guardPredicate(guard, region)
+
+        val guardDecls = vprGuardPredicate.formalArgs
+        val guardVars = guardDecls map (_.localVar)
 
         val vprGuardPredicateLoc =
           vpr.PredicateAccess(
@@ -224,15 +224,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
         /* \/as. acc(G(as), π) */
         val vprAllGuardAssertions =
-          if (guardDecls.isEmpty) {
+          vpr.Forall(
+            guardDecls,
+            Vector.empty,
             vprGuardAssertion
-          } else {
-            vpr.Forall(
-              guardDecls,
-              Vector.empty,
-              vprGuardAssertion
-            )()
-          }
+          )()
 
         val vprSanitizedAllGuardAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllGuardAssertions)
 
