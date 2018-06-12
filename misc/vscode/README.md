@@ -247,12 +247,13 @@ that runs Voila.
 
       cd /c/demo/
 
-- Skip the next step if you're not using Nailgun. In any case, ensure that Voila
-  colours its output (errors) by passing the Logback configuration
+- Skip the *next* step if you're not using Nailgun. In any case, ensure that
+  Voila colours its output (errors) by passing the Logback configuration
   `./conf/logback-color.xml` to the JVM at start-up
     
-- Assuming that Voila has been checked out into `/c/voila/`, start Nailgun as
-  follows (this will open a new terminal):
+- Assuming that Voila has been checked out into `/c/voila/`, make sure that the
+  environment variable `JAVA_HOME` is set, and start Nailgun as follows (this 
+  will open a new terminal):
 
       /c/msys64/msys2_shell.cmd -mingw64 -c "/c/voila/misc/nailgun/voila-ng-daemon.bat logback=/c/voila/conf/logback-color.xml"
 
