@@ -30,7 +30,7 @@ verifyVoilaFile(basename, extension) {
 
 #^f::toggleSplitWindowsPseudoFullscreen(vscProc, ttyProc, false) ; Win+Ctrl+f
 
-#if (WinActive(epProc))
+; #if (WinActive(epProc))
   #space:: toggleVisibility(epProc)
 
 #if (WinActive(vscProc))
