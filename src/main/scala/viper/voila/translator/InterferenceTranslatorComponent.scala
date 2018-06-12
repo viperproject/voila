@@ -32,7 +32,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
-  private val interferenceContextFootprints = new FootprintManager[PRegion]
+  private val interferenceContextFootprints = new LavishFootprintManager[PRegion]
     with RegionManager[vpr.Predicate, vpr.PredicateAccessPredicate]
     with RemoveVersionSelector[PRegion] {
     override val name: String = "interferenceContext"
@@ -64,7 +64,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
       override val name: String = _name
 
-      override def havoc(id: PRegion)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt =
+      override def havoc(id: PRegion, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt =
         ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "havoc performed by other front resource", "")))
 
     }
@@ -198,7 +198,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
       val footprintHavocs = allRegions map { case (innerRegion, innerArgs) =>
         val wrapper = singleWrapper(innerArgs)
-        interferenceSetFunctions.havoc(innerRegion)(wrapper)
+        interferenceSetFunctions.havoc(innerRegion, refLabel)(wrapper)
       }
 
       val tranformStmt =
@@ -244,7 +244,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
         val constraint = referencePointConstraint(innerRegion, prePermissions)
 
-        interferenceReferenceFunctions.select(innerRegion, constraint)(wrapper)
+        interferenceReferenceFunctions.select(innerRegion, constraint, refLabel)(wrapper)
       }
 
       vpr.Seqn(

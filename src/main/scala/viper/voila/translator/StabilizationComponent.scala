@@ -6,7 +6,7 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{Exp, Stmt, Trigger}
+import viper.silver.ast.{Exp, Label, Stmt, Trigger}
 import viper.silver.ast.utility.Rewriter.Traverse
 
 import scala.collection.breakOut
@@ -220,10 +220,10 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     val postRegionState = dfltPostRegionState(region)(_)
     val actionFilter = dfltActionFilter(region)(_)
 
-    val resource = RegionStateFrontResourceWrapper(prePermissions)
+    val resource = RegionStateFrontResourceWrapper
     val constraint = possibleNextStateConstraint(region, actionFilter, preRegionState)
 
-    resource.select(region, constraint)(wrapper)
+    resource.select(region, constraint, preHavocLabel)(wrapper)
   }
 
   private def stabilizeAndInferContextSingleInstance(region: PRegion,
@@ -247,7 +247,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     val actionFilter = dfltActionFilter(region)(_)
 
     val resource1 = interferenceSetFunctions
-    val resource2 = RegionStateFrontResourceWrapper(prePermissions)
+    val resource2 = RegionStateFrontResourceWrapper
     val resource3 = interferenceReferenceFunctions
 
     val baseConstraint = possibleNextStateConstraint(region, actionFilter, preRegionState)
@@ -257,9 +257,9 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     vpr.Seqn(
       Vector(
-        resource1.select(region, constraint1)(wrapper),
-        resource2.select(region, constraint2)(wrapper),
-        resource3.select(region, constraint3)(wrapper)
+        resource1.select(region, constraint1, preHavocLabel)(wrapper),
+        resource2.select(region, constraint2, preHavocLabel)(wrapper),
+        resource3.select(region, constraint3, preHavocLabel)(wrapper)
       ),
       Vector.empty
     )()
@@ -293,8 +293,8 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     vpr.Seqn(
       Vector(
-        resource1.select(region, constraint1)(wrapper),
-        resource2.select(region, constraint2)(wrapper)
+        resource1.select(region, constraint1, preHavocLabel)(wrapper),
+        resource2.select(region, constraint2, preHavocLabel)(wrapper)
       ),
       Vector.empty
     )()
@@ -357,7 +357,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     )(vprSkolemizedResult.pos, vprSkolemizedResult.info, vprSkolemizedResult.errT)
   }
 
-  case class RegionStateFrontResourceWrapper(prePermissions: vpr.Exp => vpr.Exp) extends TranslatorUtils.FrontResource[PRegion] {
+  object RegionStateFrontResourceWrapper extends TranslatorUtils.FrontResource[PRegion] {
     override def application(id: PRegion, args: Vector[Exp]): Exp =
       vpr.FuncApp(
         regionStateFunction(id),
@@ -376,7 +376,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
           ))())
 
 
-    override def havoc(id: PRegion)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt = {
+    override def havoc(id: PRegion, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt = {
       val vprRegionArguments = wrapper.args
 
       /* R(as) */
@@ -389,7 +389,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
       /* π */
       val vprPreHavocRegionPermissions =
-        prePermissions(vpr.CurrentPerm(vprRegionPredicateInstance)())
+        vpr.LabelledOld(vpr.CurrentPerm(vprRegionPredicateInstance)(), label.name)()
 
       /* Note: It is assumed that havocking a region R(as) should not affect the permission
        * amount. Hence, π is used everywhere, i.e. there is not dedicated post-havoc permission
@@ -418,6 +418,39 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
         ),
         Vector.empty
       )()
+    }
+
+    override def inhaleFootprint(id: PRegion, label: Label)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt = {
+      val vprRegionArguments = wrapper.args
+
+      /* R(as) */
+      val vprRegionPredicateInstance =
+        vpr.PredicateAccess(
+          args = vprRegionArguments,
+          predicateName = id.id.name
+        )()
+
+
+      /* π */
+      val vprPreHavocRegionPermissions =
+        vpr.LabelledOld(vpr.CurrentPerm(vprRegionPredicateInstance)(), label.name)()
+
+      /* Note: It is assumed that havocking a region R(as) should not affect the permission
+       * amount. Hence, π is used everywhere, i.e. there is not dedicated post-havoc permission
+       * amount in use.
+       */
+
+      /* acc(R(as), π) */
+      val vprRegionAssertion =
+        vpr.PredicateAccessPredicate(
+          loc = vprRegionPredicateInstance,
+          perm = vprPreHavocRegionPermissions
+        )()
+
+      val vprWrappedRegionAssertion = wrapper.wrapWithoutCondition(vprRegionAssertion)
+
+      /* inhale ∀ as · acc(R(as), π) */
+      vpr.Inhale(vprWrappedRegionAssertion)()
     }
   }
 
@@ -501,6 +534,13 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
             vpr.CurrentPerm(diamondAccess(vprRegionId).loc)()
           )()
 
+        /* none < perm(X_fp(as)) */
+        val vprAtomicityContextFootprintHeld =
+          vpr.PermLtCmp(
+            vpr.NoPerm()(),
+            atomicityContextFunctions.footprintCurrentPerm(region, vprRegionArguments)
+          )()
+
         /* X(as) */
         val vprAtomicityContext = atomicityContextFunctions.application(region, vprRegionArguments)
 //          vpr.DomainFuncApp(
@@ -510,7 +550,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 //          )()
 
         vpr.Implies(
-          vprDiamondHeld,
+          vpr.And(vprDiamondHeld, vprAtomicityContextFootprintHeld)(),
           vpr.AnySetContains(
             vprPostRegionState,
             vprAtomicityContext

@@ -275,11 +275,33 @@ case class InsufficientRegionPermissionError(offendingNode: PPredicateExp, detai
 }
 
 case class RegionStateError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
-    extends AbstractVerificationError {
+  extends AbstractVerificationError {
 
   type OffendingNode = PPredicateExp
   def localId: String = "region_state_error"
   val localMessage: String = s"Region ${offendingNode.formatForUsers} might not be in the expected state"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class RegionAtomicityContextTrackingError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PPredicateExp
+  def localId: String = "region_atomicity_context_tracking_error"
+  val localMessage: String = s"Use_Atomic or Make_Atomic might have already been applied to Region ${offendingNode.formatForUsers}"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class InsufficientRegionAtomicityContextTrackingError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PPredicateExp
+  def localId: String = "region_atomicity_context_tracking_permission_error"
+  val localMessage: String = s"Not enough permission to access atomicity context for region ${offendingNode.formatForUsers}"
 
   protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
     copy(offendingNode, detail)

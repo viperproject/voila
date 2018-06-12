@@ -24,6 +24,7 @@ procedure test02(id r, cell c)
 {
   inhale r |=> <D>;
 
+  //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
   update_region
     using Cell(r, c);
   {

@@ -6,12 +6,13 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{Declaration, Exp, Trigger}
+import viper.silver.ast.{Declaration, Exp, Stmt, Trigger}
 
 import scala.collection.mutable
 import viper.silver.{ast => vpr}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend.{PMember, PRegion}
+import viper.voila.translator.TranslatorUtils.BetterQuantifierWrapper
 
 object TranslatorUtils {
 
@@ -129,24 +130,100 @@ object TranslatorUtils {
       )
 
     override def application(id: T, args: Vector[vpr.Exp]): vpr.PredicateAccessPredicate =
-      vpr.PredicateAccessPredicate(
-        vpr.PredicateAccess(
-          predicateName = memberName(idToName(id)),
-          args = selectArgs(id, args)
-        )(),
-        vpr.FullPerm()()
+      accessWithPermission(id, args, vpr.FullPerm()())
+
+    protected def application(id: T, args: Vector[vpr.Exp], label: vpr.Label): vpr.PredicateAccessPredicate =
+      accessWithPermission(id, args, oldPerm(id, args, label))
+
+    protected def access(id: T, args: Vector[vpr.Exp]): vpr.PredicateAccess =
+      vpr.PredicateAccess(
+        predicateName = memberName(idToName(id)),
+        args = selectArgs(id, args)
       )()
 
-    def initialize(id: T): vpr.Stmt = {
+    protected def accessWithPermission(id: T, args: Vector[vpr.Exp], perm: vpr.Exp): vpr.PredicateAccessPredicate =
+      vpr.PredicateAccessPredicate(
+        access(id, args),
+        perm
+      )()
+
+    def oldPerm(id: T, args: Vector[vpr.Exp], label: vpr.Label): vpr.Exp =
+      vpr.LabelledOld(currentPerm(id, args), label.name)()
+
+    def currentPerm(id: T, args: Vector[vpr.Exp]): vpr.Exp =
+      vpr.CurrentPerm(access(id, args))()
+
+    def initialize(id: T): vpr.Stmt
+
+    def havoc(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
+
+    def inhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Inhale = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
+
+      /* No trigger yet available */
+      vpr.Inhale(transedWrapper.wrapWithoutCondition(application(id, args)))()
+    }
+
+    def inhaleFootprint(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Inhale = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
+
+      /* No trigger yet available */
+      vpr.Inhale(transedWrapper.wrapWithoutCondition(application(id, args, label)))()
+    }
+
+    def exhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Exhale = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
+
+      /* No trigger yet available */
+      vpr.Exhale(transedWrapper.wrapWithoutCondition(application(id, args)))()
+    }
+
+    def exhaleFootprint(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Exhale = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
+
+      /* No trigger yet available */
+      vpr.Exhale(transedWrapper.wrapWithoutCondition(application(id, args, label)))()
+    }
+
+    def assertFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Assert = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
+
+      /* No trigger yet available */
+      vpr.Assert(transedWrapper.wrapWithoutCondition(application(id, args)))()
+    }
+
+    def assertNoFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Assert = {
+      val args = wrapper.args
+      val transedWrapper = wrapper.transform(selectArgs(id,_))
+
+      vpr.Assert(transedWrapper.wrapWithoutCondition(
+        vpr.EqCmp(
+          currentPerm(id, args),
+          vpr.NoPerm()()
+        )()
+      ))()
+    }
+  }
+
+  trait LavishFootprintManager[T] extends FootprintManager[T] {
+
+    this: BaseSelector[T] =>
+
+    override def initialize(id: T): vpr.Stmt = {
       val pred = collectedMember(idToName(id))
-      val decls = pred.formalArgs
+      val decls = pred.formalArgs.toVector
       val vars = decls map (_.localVar)
 
       val access =
         vpr.PredicateAccessPredicate(
           vpr.PredicateAccess(
             predicateName = memberName(idToName(id)),
-            args = vars
+            args = vars // no selector
           )(),
           vpr.FullPerm()()
         )()
@@ -162,27 +239,26 @@ object TranslatorUtils {
       ViperAstUtils.sanitizeBoundVariableNames(result)
     }
 
-    def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+    override def havoc(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
       vpr.Seqn(
         Vector(exhaleFootprint(id)(wrapper), inhaleFootprint(id)(wrapper)),
         Vector.empty
       )()
     }
 
-    def inhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
-      val args = wrapper.args
-      val transedWrapper = wrapper.transform(selectArgs(id,_))
+  }
 
-      /* No trigger yet available */
-      vpr.Inhale(transedWrapper.wrapWithoutCondition(application(id, args)))()
-    }
+  trait FrugalFootprintManager[T] extends FootprintManager[T] {
+    this: BaseSelector[T] =>
 
-    def exhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
-      val args = wrapper.args
-      val transedWrapper = wrapper.transform(selectArgs(id,_))
+    override def initialize(id: T): Stmt =
+      ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no init required", "")))
 
-      /* No trigger yet available */
-      vpr.Exhale(transedWrapper.wrapWithoutCondition(application(id, args)))()
+    override def havoc(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+      vpr.Seqn(
+        Vector(inhaleFootprint(id)(wrapper)),
+        Vector.empty
+      )()
     }
   }
 
@@ -240,14 +316,15 @@ object TranslatorUtils {
 
     def applyTrigger(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger]
 
-    def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
+    def havoc(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
 
-    def select(id: T, constraint: Constraint)(wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+    def inhaleFootprint(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
 
+    def select(id: T, constraint: Constraint, label: vpr.Label)(wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
 
       val args = wrapper.args
 
-      val havocCode = havoc(id)(wrapper)
+      val havocCode = havoc(id, label)(wrapper)
 
       val selectCondition = constraint.constrain(args)(application(id, args))
 
@@ -268,9 +345,65 @@ object TranslatorUtils {
       ViperAstUtils.sanitizeBoundVariableNames(result)
     }
 
+    def refSelect(id: T, constraint: Constraint, label: vpr.Label)(wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+
+      val args = wrapper.args
+
+      val inhaleCode = inhaleFootprint(id, label)(wrapper)
+
+      val selectCondition = constraint.constrain(args)(application(id, args))
+
+      val selectExp = wrapper.wrapExt(selectCondition, applyTrigger(id, _))
+
+      val selectCode = vpr.Inhale(selectExp)()
+
+      val finalizedSelectCode = constraint.skolemization match {
+        case None => selectCode
+        case Some(skolemize) => skolemize(args)(selectCode)
+      }
+
+      val result = vpr.Seqn(
+        Vector(inhaleCode, finalizedSelectCode),
+        Vector.empty
+      )()
+
+      ViperAstUtils.sanitizeBoundVariableNames(result)
+    }
   }
 
-  trait HeapFunctionManager[T] extends FunctionManager[T, vpr.Function, vpr.FuncApp] with FrontResource[T] {
+  trait FrugalFrontResource[T] extends FrontResource[T] {
+
+    def inhaleFootprint(t: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
+
+    def exhaleFootprint(t: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt
+
+    def freshSelect(id: T, constraint: Constraint)(wrapper: TranslatorUtils.BetterQuantifierWrapper.Wrapper): vpr.Stmt = {
+
+      val args = wrapper.args
+
+      val inhaleCode = inhaleFootprint(id)(wrapper)
+
+      val selectCondition = constraint.constrain(args)(application(id, args))
+
+      val selectExp = wrapper.wrapExt(selectCondition, applyTrigger(id, _))
+
+      val selectCode = vpr.Inhale(selectExp)()
+
+      val finalizedSelectCode = constraint.skolemization match {
+        case None => selectCode
+        case Some(skolemize) => skolemize(args)(selectCode)
+      }
+
+      val result = vpr.Seqn(
+        Vector(inhaleCode, finalizedSelectCode),
+        Vector.empty
+      )()
+
+      ViperAstUtils.sanitizeBoundVariableNames(result)
+    }
+  }
+
+  trait HeapFunctionManager[T] extends FunctionManager[T, vpr.Function, vpr.FuncApp] with FrugalFrontResource[T] {
 
     this: BaseSelector[T] =>
 
@@ -322,14 +455,32 @@ object TranslatorUtils {
     def applyTrigger(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger] =
       Vector(vpr.Trigger(Vector(triggerApplication(id, args)))())
 
-    def havoc(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
-      footprintManager.havoc(id)(wrapper.transform(selectArgs(id,_)))
+    def footprintOldPerm(id: T, args: Vector[vpr.Exp], label: vpr.Label): vpr.Exp =
+      footprintManager.oldPerm(id, selectArgs(id, args), label)
 
-    def inhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
-      footprintManager.inhaleFootprint(id)(wrapper)
+    def footprintCurrentPerm(id: T, args: Vector[vpr.Exp]): vpr.Exp =
+      footprintManager.currentPerm(id, selectArgs(id, args))
 
-    def exhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
-      footprintManager.exhaleFootprint(id)(wrapper)
+    def havoc(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Stmt =
+      footprintManager.havoc(id, label)(wrapper.transform(selectArgs(id,_)))
+
+    def inhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Inhale =
+      footprintManager.inhaleFootprint(id)(wrapper.transform(selectArgs(id,_)))
+
+    def inhaleFootprint(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Inhale =
+      footprintManager.inhaleFootprint(id, label)(wrapper.transform(selectArgs(id,_)))
+
+    def exhaleFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Exhale =
+      footprintManager.exhaleFootprint(id)(wrapper.transform(selectArgs(id,_)))
+
+    def exhaleFootprint(id: T, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Exhale =
+      footprintManager.exhaleFootprint(id, label)(wrapper.transform(selectArgs(id,_)))
+
+    def assertFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Assert =
+      footprintManager.assertFootprint(id)(wrapper.transform(selectArgs(id,_)))
+
+    def assertNoFootprint(id: T)(wrapper: BetterQuantifierWrapper.Wrapper): vpr.Assert =
+      footprintManager.assertNoFootprint(id)(wrapper.transform(selectArgs(id,_)))
   }
 
   object BetterQuantifierWrapper {

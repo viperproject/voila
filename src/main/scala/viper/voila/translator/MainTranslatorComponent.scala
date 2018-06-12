@@ -38,6 +38,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
    * Immutable state and utility methods
    */
 
+  val levelVariableDecl: vpr.LocalVarDecl = vpr.LocalVarDecl("$$_current_level", vpr.Int)()
+
+  val levelVariable: vpr.LocalVar = levelVariableDecl.localVar
+
   val diamondField: vpr.Field =
     vpr.Field("$diamond", vpr.Int)()
 
@@ -328,8 +332,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             inhaleSkolemizationFunctionFootprints +: initializeFootprints ++:
             actualBody.ss,
           scopedDecls =
-              actualBody.scopedDecls ++
-              procedureWideBoundLogicalVariableDeclarations ++
+              levelVariableDecl +:
+              actualBody.scopedDecls ++:
+              procedureWideBoundLogicalVariableDeclarations ++:
               collectedVariableDeclarations
         )(actualBody.pos, actualBody.info, actualBody.errT))
 
@@ -589,9 +594,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val preAtomicityLabel = freshLabel("preWhile")
 
         val atomicityConstraints = tree.root.regions map (region => {
-          val wrapper = regionAllWrapper(region, exp => exp)
-          val constraint = atomicityContextWhileConstraint(region, preAtomicityLabel)
-          atomicityContextFunctions.select(region, constraint)(wrapper)
+          val wrapper = atomicityContextAllWrapper(region, preAtomicityLabel)
+          val constraint = atomicityContextEqualsOldConstraint(region, preAtomicityLabel)
+          atomicityContextFunctions.refSelect(region, constraint, preAtomicityLabel)(wrapper)
         })
 
         val inferContext = inferContextAllInstances("infer context inside while")

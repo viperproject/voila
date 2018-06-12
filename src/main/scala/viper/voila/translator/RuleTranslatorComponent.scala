@@ -24,7 +24,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val _name = "atomicity_context"
     def _functionType(obj: PRegion): Type = vpr.SetType(regionStateFunction(obj).typ)
 
-    val _footprintManager = new FootprintManager[PRegion]
+    val _footprintManager = new FrugalFootprintManager[PRegion]
       with RegionManager[vpr.Predicate, vpr.PredicateAccessPredicate]
       with SubFullSelector[PRegion] {
       override val name: String = _name
@@ -35,7 +35,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         with RegionManager[vpr.DomainFunc, vpr.DomainFuncApp]
         with SubFullSelector[PRegion] {
         override val name: String = _name
-        override def functionTyp(obj: PRegion): Type = _functionType(obj)
+        override def functionTyp(obj: PRegion): Type = vpr.Bool
       }
 
     collectedDeclarations ++= _triggerManager.collectGlobalDeclarations // TODO: this could be put into another trait
@@ -49,45 +49,29 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
       override def functionTyp(obj: PRegion): Type = _functionType(obj)
       override val name: String = _name
-
-      override protected def post(trigger: DomainFuncApp): Vector[vpr.Exp] = {
-
-        val varName = "$_m" // TODO: naming convention
-        val varType = trigger.typ match { case vpr.SetType(t) => t }
-        val varDecl = vpr.LocalVarDecl(varName, varType)()
-        val variable = varDecl.localVar
-
-        val varInResult =
-          vpr.AnySetContains(
-            variable,
-            vpr.Result()(typ = trigger.typ)
-          )()
-
-        val varInTrigger =
-          vpr.AnySetContains(
-            variable,
-            trigger
-          )()
-
-        val triggerRelation =
-          vpr.Forall(
-            Vector(varDecl),
-            Vector(vpr.Trigger(Vector(varInResult))()),
-            vpr.Implies(varInResult, varInTrigger)()
-          )()
-
-        val postCondition = vpr.InhaleExhaleExp(
-          triggerRelation,
-          vpr.TrueLit()()
-        )()
-
-        Vector(postCondition)
-      }
-
-      override def triggerApplication(id: PRegion, args: Vector[Exp]): Exp = selectArgs(id,args) match {
-        case (xs :+ m) => vpr.AnySetContains(m, triggerManager.application(id, xs))()
-      }
     }
+  }
+
+  def atomicityContextAllWrapper(region: PRegion, label: vpr.Label): TranslatorUtils.BetterQuantifierWrapper.Wrapper = {
+
+    /* Arguments as for region R */
+    val vprRegionArgumentDecls: Vector[vpr.LocalVarDecl] = region.formalInArgs.map(translate)
+
+    /* Arguments as for region R */
+    val vprRegionArguments: Vector[vpr.LocalVar] = vprRegionArgumentDecls map (_.localVar)
+
+    /* π */
+    val vprPreHavocAtomicityPermissions =
+      atomicityContextFunctions.footprintOldPerm(region, vprRegionArguments, label)
+
+    /* none < π */
+    val vprIsAtomicityAccessible =
+      vpr.PermLtCmp(
+        vpr.NoPerm()(),
+        vprPreHavocAtomicityPermissions
+      )()
+
+    TranslatorUtils.BetterQuantifierWrapper.QuantWrapper(vprRegionArgumentDecls, vprRegionArguments, vprIsAtomicityAccessible)
   }
 
   private def atomicityContextAssignConstraint(region: PRegion): Constraint = Constraint( args => target =>
@@ -95,6 +79,15 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.EqCmp(
         target,
         interferenceSetFunctions.application(region, args)
+      )()
+    )
+  )
+
+  protected def atomicityContextEqualsOldConstraint(region: PRegion, label: vpr.Label): Constraint = Constraint( args => target =>
+    TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
+      vpr.EqCmp(
+        target,
+        vpr.LabelledOld(atomicityContextFunctions.application(region, args), label.name)()
       )()
     )
   )
@@ -369,10 +362,26 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     )
   })
 
+  private def checkAtomicityNotYetCaptured(region: PRegion, args: Vector[vpr.Exp]): vpr.Assert = {
+    val wrapper = singleWrapper(args)
+    atomicityContextFunctions.assertNoFootprint(region)(wrapper)
+  }
+
   private def assignAtomicityContext(region: PRegion, args: Vector[vpr.Exp]): vpr.Stmt = {
     val wrapper = singleWrapper(args)
     val constraint = atomicityContextAssignConstraint(region)
-    atomicityContextFunctions.select(region, constraint)(wrapper)
+    atomicityContextFunctions.freshSelect(region, constraint)(wrapper)
+  }
+
+  private def assignOldAtomicityContext(region: PRegion, args: Vector[vpr.Exp], label: vpr.Label): vpr.Stmt = {
+    val wrapper = singleWrapper(args)
+    val constraint = atomicityContextEqualsOldConstraint(region, label)
+    atomicityContextFunctions.freshSelect(region, constraint)(wrapper)
+  }
+
+  private def deselectAtomicityContext(region: PRegion, args: Vector[vpr.Exp]): vpr.Exhale = {
+    val wrapper = singleWrapper(args)
+    atomicityContextFunctions.exhaleFootprint(region)(wrapper)
   }
 
 
@@ -423,6 +432,13 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val (preFrameExhales, postFrameInhales) = completeFrame
 
     val inhaleRegionPredicate = vpr.Inhale(regionPredicate)()
+
+    val contextCheck = checkAtomicityNotYetCaptured(region, regionInArgs)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy contextCheck =>
+        MakeAtomicError(makeAtomic, RegionAtomicityContextTrackingError(makeAtomic.regionPredicate))
+    }
 
     val assignContext = assignAtomicityContext(region, regionInArgs)
 
@@ -545,6 +561,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       exhale
     }
 
+    val deselectContext = deselectAtomicityContext(region, regionInArgs)
+
     val result =
       vpr.Seqn(
         Vector(
@@ -553,6 +571,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           preFrameExhales,
           inhaleRegionPredicate,
           inhaleDiamond,
+          contextCheck,
           assignContext,
           havoc1,
           ruleBody,
@@ -563,6 +582,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           assumeOldStateWasStepFrom,
           inhaleGuard,
           exhaleTrackingResource,
+          deselectContext,
           postFrameInhales),
         Vector.empty
       )()
@@ -593,6 +613,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UpdateRegionError(updateRegion)
           .dueTo(InsufficientDiamondResourcePermissionError(updateRegion.regionPredicate, regionId))
           .dueTo(hintAtEnclosingLoopInvariants(regionId))
+    }
+
+    val exhaleAtomicityTracking = deselectAtomicityContext(region, vprInArgs)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.ExhaleFailed if e causedBy exhaleAtomicityTracking =>
+        UpdateRegionError(updateRegion)
+          .dueTo(InsufficientRegionAtomicityContextTrackingError(updateRegion.regionPredicate))
     }
 
     val label = freshLabel("pre_region_update")
@@ -669,17 +697,21 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.Seqn(Vector(inhaleDiamond), Vector.empty)()
       )()
 
+    val inhaleAtomicityTracking = assignOldAtomicityContext(region, vprInArgs, label)
+
     val result =
       vpr.Seqn(
         Vector(
           exhaleDiamond,
           label,
+          exhaleAtomicityTracking,
           unfoldRegionPredicate,
           tranitionInterferenceContext,
           stabilizeFrameRegions,
           ruleBody,
           foldRegionPredicate,
-          postRegionUpdate),
+          postRegionUpdate,
+          inhaleAtomicityTracking),
         Vector.empty
       )()
 
@@ -697,10 +729,17 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val preUseAtomicLabel = freshLabel("pre_use_atomic")
 
+    val contextCheck = checkAtomicityNotYetCaptured(region, vprInArgs)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy contextCheck =>
+        UseAtomicError(useAtomic, RegionAtomicityContextTrackingError(useAtomic.regionPredicate))
+    }
+
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
 
-    val tranitionInterferenceContext
+    val transitionInterferenceContext
     = linkInterferenceContext(region, vprInArgs)
 
     errorBacktranslator.addErrorTransformer {
@@ -785,13 +824,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Seqn(
         Vector(
           preUseAtomicLabel,
+          contextCheck,
           /* Note: Guard must be checked!
            * I.e. the check is independent of the technical treatment of frame stabilisation.
            */
           exhaleGuard,
           stabilizeOtherRegionTypes,
           unfoldRegionPredicate,
-          tranitionInterferenceContext,
+          transitionInterferenceContext,
           stabilizeCurrentRegionTypes,
           inhaleGuard,
           ruleBody,
