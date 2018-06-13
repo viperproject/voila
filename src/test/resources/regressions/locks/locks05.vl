@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Lock(id a, memcell x)
+region Lock(id a, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
     x.f |-> ?v && 0 <= v // [XXX] Changed constraint: was "v == 0 || v == 1"
@@ -15,13 +15,13 @@ region Lock(id a, memcell x)
 
 predicate Inv()
 
-region CAPLock(id r, id a, memcell x)
+region CAPLock(id r, int alvl, id a, int lvl, memcell x)
   guards {
     duplicable Z;
     unique K;
   }
   interpretation {
-       Lock(a, x, ?v) && G@a
+       Lock(a, lvl, x, ?v) && lvl < alvl && G@a
     && (v == 0 ==> K@r && Inv())
     && (v == 1 ==> true)
   }
@@ -33,32 +33,32 @@ region CAPLock(id r, id a, memcell x)
 
 
 
-abstract_atomic procedure unlock01(id a, memcell x)
+abstract_atomic procedure unlock01(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
 {
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     //:: ExpectedOutput(update-region_error:assertion_error)
     update_region
-      using Lock(a, x);
+      using Lock(a, lvl, x);
     {
       x.f := -1;
     }
   }
 }
 
-abstract_atomic procedure unlock02(id a, memcell x)
+abstract_atomic procedure unlock02(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
 {
   //:: ExpectedOutput(make-atomic_error:illegal_state_change_error)
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     update_region
-      using Lock(a, x);
+      using Lock(a, lvl, x);
     {
       x.f := 2;
     }

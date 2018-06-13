@@ -4,30 +4,30 @@ struct cell {
 
 predicate resource(int v)
 
-region Buffer(id r, cell buf)
+region Buffer(id r, int lvl, cell buf)
   guards { duplicable Z; }
   interpretation { buf.value |-> ?v && (v != 0 ==> resource(v)) }
   state { v }
   actions { Z: ?n ~> ?m; }
 
-abstract_atomic procedure send(id r, cell buf, int x)
+abstract_atomic procedure send(id r, int lvl, cell buf, int x)
   interference ?v in Int on r;
-  requires Buffer(r, buf, v) && resource(x) && x != 0;
+  requires Buffer(r, lvl, buf, v) && resource(x) && x != 0;
   requires Z@r;
   ensures  v == 0;
 {
   bool b;
 
   make_atomic
-    using Buffer(r, buf) with Z@r;
+    using Buffer(r, lvl, buf) with Z@r;
   {
     do
-      invariant Buffer(r, buf);
+      invariant Buffer(r, lvl, buf);
       invariant !b ==> r |=> <D> && resource(x);
       invariant  b ==> r |=> (0, x);
     {
       update_region
-        using Buffer(r, buf);
+        using Buffer(r, lvl, buf);
       {
         b := CAS(buf, 0, x);
       }
@@ -35,9 +35,9 @@ abstract_atomic procedure send(id r, cell buf, int x)
   }
 }
 
-abstract_atomic procedure recv(id r, cell buf) returns (int ret)
+abstract_atomic procedure recv(id r, int lvl, cell buf) returns (int ret)
   interference ?v in Int on r;
-  requires Buffer(r, buf, v);
+  requires Buffer(r, lvl, buf, v);
   requires Z@r;
   ensures  resource(ret);
   ensures  ret == v;
@@ -45,15 +45,15 @@ abstract_atomic procedure recv(id r, cell buf) returns (int ret)
   bool b;
 
   make_atomic
-    using Buffer(r, buf) with Z@r;
+    using Buffer(r, lvl, buf) with Z@r;
   {
     do
-      invariant Buffer(r, buf);
+      invariant Buffer(r, lvl, buf);
       invariant !b ==> r |=> <D>;
       invariant  b ==> r |=> (ret, 0) && resource(ret);
     {
       open_region
-        using Buffer(r, buf);
+        using Buffer(r, lvl, buf);
       {
         ret := buf.value;
       }
@@ -62,7 +62,7 @@ abstract_atomic procedure recv(id r, cell buf) returns (int ret)
         b := false;
       } else {
         update_region
-          using Buffer(r, buf);
+          using Buffer(r, lvl, buf);
         {
           b := CAS(buf, ret, 0);
         }

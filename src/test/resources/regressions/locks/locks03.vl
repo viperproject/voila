@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Lock(id a, memcell x)
+region Lock(id a, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
     x.f |-> ?v && (v == 0 || v == 1)
@@ -15,13 +15,13 @@ region Lock(id a, memcell x)
 
 predicate Inv()
 
-region CAPLock(id r, id a, memcell x)
+region CAPLock(id r, int alvl, id a, int lvl, memcell x)
   guards {
     duplicable Z;
     unique K;
   }
   interpretation {
-       Lock(a, x, ?v) && G@a
+       Lock(a, lvl, x, ?v) && lvl < alvl && G@a
     && (v == 0 ==> K@r && Inv())
     && (v == 1 ==> true)
   }
@@ -33,25 +33,25 @@ region CAPLock(id r, id a, memcell x)
 
 
 
-abstract_atomic procedure lock(id a, memcell x)
+abstract_atomic procedure lock(id a, int lvl, memcell x)
   interference ?s in Set(0, 1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures Lock(a, x, 1) && G@a && s == 0;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures Lock(a, lvl, x, 1) && G@a && s == 0;
 
-abstract_atomic procedure unlock(id a, memcell x)
+abstract_atomic procedure unlock(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures Lock(a, x, 0) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures Lock(a, lvl, x, 0) && G@a;
 
 
 
-procedure test01(id r, id a, memcell x)
-  requires CAPLock(r, a, x, ?v) && (v == 0 || v == 1) && Z@r;
+procedure test01(id r, int alvl, id a, int lvl, memcell x)
+  requires CAPLock(r, alvl, a, lvl, x, ?v) && (v == 0 || v == 1) && Z@r;
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
   use_atomic
-    using CAPLock(r, a, x) with Z@r;
+    using CAPLock(r, alvl, a, lvl, x) with Z@r;
   {
-    lock(a, x);
+    lock(a, lvl, x);
   }
 }

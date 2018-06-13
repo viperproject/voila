@@ -1,4 +1,4 @@
-region R(id s)
+region R(id s, int lvl)
   guards { unique G; }
   interpretation { true }
   state { 0 }
@@ -7,8 +7,8 @@ region R(id s)
     ?n | n == 1 | G: 1 ~> n;
   }
 
-procedure test01(id s)
-  requires R(s, ?b);
+procedure test01(id s, int lvl)
+  requires R(s, lvl, ?b);
 {
   set<int> bs;
 

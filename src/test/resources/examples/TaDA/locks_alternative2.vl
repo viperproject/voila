@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Lock(id a, memcell x)
+region Lock(id a, int lvl, memcell x)
   guards { unique G; }
   interpretation {
     x.f |-> ?v && (v == 0 || v == 1)
@@ -14,16 +14,16 @@ region Lock(id a, memcell x)
   }
 
 /* Original implementation */
-abstract_atomic procedure unlock0(id a, memcell x)
+abstract_atomic procedure unlock0(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures  Lock(a, x, 0) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures  Lock(a, lvl, x, 0) && G@a;
 {
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     update_region
-      using Lock(a, x);
+      using Lock(a, lvl, x);
     {
       x.f := 0;
     }
@@ -31,22 +31,22 @@ abstract_atomic procedure unlock0(id a, memcell x)
 }
 
 /* Alternative implementation (but same specs) */
-abstract_atomic procedure unlock1(id a, memcell x)
+abstract_atomic procedure unlock1(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures  Lock(a, x, 0) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures  Lock(a, lvl, x, 0) && G@a;
 {
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     update_region
-      using Lock(a, x);
+      using Lock(a, lvl, x);
     {
       x.f := 1;
     }
 
     update_region
-      using Lock(a, x);
+      using Lock(a, lvl, x);
     {
       x.f := 0;
     }
@@ -54,18 +54,18 @@ abstract_atomic procedure unlock1(id a, memcell x)
 }
 
 /* Alternative implementation (but same specs) */
-abstract_atomic procedure unlock2(id a, memcell x)
+abstract_atomic procedure unlock2(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures  Lock(a, x, 0) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures  Lock(a, lvl, x, 0) && G@a;
 {
   int nonDet;
 
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     do
-      invariant Lock(a, x, ?si);
+      invariant Lock(a, lvl, x, ?si);
       invariant 0 <= nonDet <= 1;
       invariant nonDet == 1 ==> a |=> <D> && si == 1;
       invariant nonDet == 0 ==> a |=> (1, 0);
@@ -74,7 +74,7 @@ abstract_atomic procedure unlock2(id a, memcell x)
       assume 0 <= nonDet <= 1;
 
       update_region
-        using Lock(a, x);
+        using Lock(a, lvl, x);
       {
         x.f := nonDet;
       }

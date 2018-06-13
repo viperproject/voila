@@ -57,7 +57,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def assignOldLevel(label: vpr.Label): vpr.Stmt =
     assignLevel(vpr.LabelledOld(levelLocation, label.name)())
 
-  def levelHigherThanOccuringRegionLevels(exp: PExpression): vpr.Exp = {
+  def levelHigherThanOccuringRegionLevels(exp: PExpression): vpr.Exp =
+    levelHigherThanOccuringRegionLevels(exp, e => e)
+
+  def levelHigherThanOccuringRegionLevels(exp: PExpression, evaluationState: vpr.Exp => vpr.Exp): vpr.Exp = {
 
     var collectedExpLevels: List[vpr.Exp] = Nil
 
@@ -66,7 +69,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
 
-        collectedExpLevels ::= translate(inArgs(1))
+        collectedExpLevels ::= evaluationState(translate(inArgs(1)))
 
         translate(pred)
     }
@@ -75,6 +78,21 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       collectedExpLevels map (vpr.GtCmp(levelLocation, _)())
     )
   }
+
+  var checkLevelLater: Boolean = true
+  var levelChecksForLater: List[vpr.Assert] = Nil
+
+  def levelHigherOrEqualToProcedureLevel(procedure: PProcedure): vpr.Exp =
+    levelHigherOrEqualToProcedureLevel(procedure, e => e)
+
+  def levelHigherOrEqualToProcedureLevel(procedure: PProcedure, evaluationState: vpr.Exp => vpr.Exp): vpr.Exp =
+    viper.silver.ast.utility.Simplifier.simplify(
+      viper.silicon.utils.ast.BigAnd(
+        levelAccess +:
+          (procedure.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion, evaluationState) }) // ++:
+          //(procedure.posts map { post => levelHigherThanOccuringRegionLevels(post.assertion, evaluationState) })
+      )
+    )
 
 
   val diamondField: vpr.Field =
@@ -321,6 +339,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(procedure: PProcedure): vpr.Method = {
     assert(collectedVariableDeclarations.isEmpty)
 
+    // checkLevelLater = true
+
     val vprMethod =
       procedure.atomicity match {
         case PAbstractAtomic() =>
@@ -334,12 +354,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
     }
 
-    val initializeLvl =
-      vpr.Inhale(
-        viper.silicon.utils.ast.BigAnd(
-          levelAccess +: (procedure.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion) })
-        )
-      )()
+    val initializeLvl = //  vpr.Inhale(levelAccess)()
+      vpr.Inhale(levelHigherOrEqualToProcedureLevel(procedure))()
+
 
     val inhaleSkolemizationFunctionFootprints =
       vpr.Inhale(
@@ -1054,7 +1071,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     vpr.Assert(
                       vpr.Forall(
                         variables = Vector(decl),
-                        triggers = Vector(vpr.Trigger(Vector(rhs))()),
+                        triggers = Vector(vpr.Trigger(Vector(lhs))()), // TODO: investigate the requirements of a trigger in this position
                         vpr.Implies(lhs, rhs)()
                       )()
                     )()
@@ -1115,11 +1132,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val vprLvlConstraint =
             vpr.utility.Expressions.instantiateVariables(
-              viper.silicon.utils.ast.BigAnd(
-                callee.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion) }
-              ),
+              levelHigherOrEqualToProcedureLevel(callee),
               vprStub.formalArgs,
-              vprArguments)
+              vprArguments
+            )
 
           val vprPre =
             vpr.utility.Expressions.instantiateVariables(
@@ -1139,10 +1155,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               },
               vpr.utility.Rewriter.Traverse.TopDown)
 
-          val vprExhaleLvlConstraint = vpr.Exhale(vprLvlConstraint)()
+          val vprAssertLvlConstraint = vpr.Assert(vprLvlConstraint)()
 
           errorBacktranslator.addErrorTransformer {
-            case e: vprerr.ExhaleFailed if e causedBy vprExhaleLvlConstraint =>
+            case e: vprerr.AssertFailed if e causedBy vprAssertLvlConstraint =>
               PreconditionError(call, CalleeLevelTooHighError(call))
           }
 
@@ -1161,9 +1177,47 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val vprInhalePosts = vpr.Inhale(vprPost)()
 
+//          val vprLevelCheck = {
+//
+//            val levelCheckLabel = freshLabel("levelCheck")
+//
+//            val evaluationState: vpr.Exp => vpr.Exp =
+//              if (checkLevelLater) {
+//                identity
+//              } else {
+//                vpr.LabelledOld(_, levelCheckLabel.name)()
+//              }
+//
+//            val vprLvlConstraint =
+//              vpr.utility.Expressions.instantiateVariables(
+//                levelHigherOrEqualToProcedureLevel(callee, evaluationState),
+//                vprStub.formalArgs ++ vprStub.formalReturns,
+//                vprArguments ++ vprReturns
+//              ).transform(
+//                {
+//                  case old: vpr.Old =>
+//                    vpr.LabelledOld(old.exp, vprPreCallLabel.name)(old.pos, old.info, old.errT)
+//                },
+//                vpr.utility.Rewriter.Traverse.TopDown)
+//
+//            val vprAssertLvlConstraint = vpr.Assert(vprLvlConstraint)()
+//
+//            errorBacktranslator.addErrorTransformer {
+//              case e: vprerr.AssertFailed if e causedBy vprAssertLvlConstraint =>
+//                PreconditionError(call, CalleeLevelTooHighError(call))
+//            }
+//
+//            if (checkLevelLater) {
+//              levelChecksForLater ::= vprAssertLvlConstraint
+//              levelCheckLabel
+//            } else {
+//              vprAssertLvlConstraint
+//            }
+//          }
+
           vpr.Seqn(
             vprPreCallLabel +:
-            vprExhaleLvlConstraint +:
+            vprAssertLvlConstraint +:
             vprExhalePres +:
             stabilizeFrameRegions +:
             vprHavocTargets :+

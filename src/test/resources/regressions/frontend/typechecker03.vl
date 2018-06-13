@@ -1,4 +1,4 @@
-region Join(id r)
+region Join(id r, int lvl)
   guards { unique SET; }
   interpretation { true }
   state { true }

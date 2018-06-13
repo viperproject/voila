@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Counter(id c, memcell x)
+region Counter(id c, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
     x.f |-> ?n
@@ -12,15 +12,15 @@ region Counter(id c, memcell x)
     G: ?n ~> ?m;
   }
 
-abstract_atomic procedure read01(id c, memcell x) returns (int ret)
+abstract_atomic procedure read01(id c, int lvl, memcell x) returns (int ret)
   interference ?n in Int on c;
-  requires Counter(c, x, n) && G@c;
-  ensures Counter(c, x, n) && G@c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n) && G@c;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures ret == n;
 {
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     skip;
   }

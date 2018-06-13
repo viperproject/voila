@@ -20,7 +20,7 @@ struct arcell {
   int _absstate; // ghost
 }
 
-region ARCounter(id r, arcell c)
+region ARCounter(id r, int lvl, arcell c)
   guards {
     duplicable ARC(int n);
     duplicable Z;
@@ -67,9 +67,9 @@ macro counting_algebra_constraints(n, m)
 
 // ----- Functionality -----
 
-procedure init() returns (id r, arcell c)
+procedure init() returns (id r, int lvl, arcell c)
   requires true;
-  ensures  ARCounter(r, c) && ARC(1)@r;
+  ensures  ARCounter(r, lvl, c) && ARC(1)@r;
 {
   create();
 
@@ -78,17 +78,17 @@ procedure init() returns (id r, arcell c)
 
   c.value := 1;
 
-  // Create region ARCounter(r, c)
+  // Create region ARCounter(r, lvl, c)
   inhale ARC(-1)@r;
   inhale c._absstate |-> 0;
-  fold ARCounter(r, c);
+  fold ARCounter(r, lvl, c);
 
   // Manipulate abstract state and guard to establish postcondition (TODO: view shift?)
-  unfold ARCounter(r, c);
+  unfold ARCounter(r, lvl, c);
   exhale c._absstate |-> _;
   inhale c._absstate |-> 1;
   use ARC_split(r, -2, 1);
-  fold ARCounter(r, c);
+  fold ARCounter(r, lvl, c);
 }
 
 macro prune_infeasible_proof_branch(r, c) {
@@ -100,20 +100,20 @@ macro prune_infeasible_proof_branch(r, c) {
   }
 }
 
-procedure clone(id r, arcell c)
-  requires ARCounter(r, c) && ARC(1)@r;
+procedure clone(id r, int lvl, arcell c)
+  requires ARCounter(r, lvl, c) && ARC(1)@r;
   requires Z@r;
-  ensures  ARCounter(r, c) && ARC(2)@r;
+  ensures  ARCounter(r, lvl, c) && ARC(2)@r;
 {
   int cnt;
   bool b;
 
   do
-    invariant !b ? ARCounter(r, c) && ARC(1)@r && Z@r : ARCounter(r, c) && ARC(2)@r;
+    invariant !b ? ARCounter(r, lvl, c) && ARC(1)@r && Z@r : ARCounter(r, lvl, c) && ARC(2)@r;
   {
     // cnt := [c];
     open_region
-      using ARCounter(r, c);
+      using ARCounter(r, lvl, c);
     {
       prune_infeasible_proof_branch(r, c); // ghost
 
@@ -122,7 +122,7 @@ procedure clone(id r, arcell c)
 
     // b := CAS(c,cnt,cnt+1);
     use_atomic
-      using ARCounter(r, c) with Z@r;
+      using ARCounter(r, lvl, c) with Z@r;
     {
       prune_infeasible_proof_branch(r, c); // ghost
 
@@ -139,8 +139,8 @@ procedure clone(id r, arcell c)
   } while (!b);
 }
 
-procedure drop(id r, arcell c)
-  requires ARCounter(r, c) && ARC(1)@r;
+procedure drop(id r, int lvl, arcell c)
+  requires ARCounter(r, lvl, c) && ARC(1)@r;
   requires Z@r;
   ensures  true;
 {
@@ -148,10 +148,10 @@ procedure drop(id r, arcell c)
   bool b;
 
   do
-    invariant !b ? ARCounter(r, c) && ARC(1)@r && Z@r : (cnt == 1 ==> object());
+    invariant !b ? ARCounter(r, lvl, c) && ARC(1)@r && Z@r : (cnt == 1 ==> object());
   {
     open_region
-      using ARCounter(r, c);
+      using ARCounter(r, lvl, c);
     {
       prune_infeasible_proof_branch(r, c); // ghost
 
@@ -159,7 +159,7 @@ procedure drop(id r, arcell c)
     }
 
     use_atomic
-      using ARCounter(r, c) with Z@r;
+      using ARCounter(r, lvl, c) with Z@r;
     {
       prune_infeasible_proof_branch(r, c); // ghost
 

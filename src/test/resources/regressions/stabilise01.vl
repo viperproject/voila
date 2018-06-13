@@ -2,23 +2,23 @@ struct memcell {
   int f;
 }
 
-region Cell(id c, memcell x)
+region Cell(id c, int lvl, memcell x)
   guards { duplicable G; }
   interpretation { x.f |-> ?n }
   state { n }
   actions { G: ?n ~> ?m; }
 
-abstract_atomic procedure test02(id c, memcell x)
-  requires Cell(c, x, ?v);
-  ensures Cell(c, x, ?w);
+abstract_atomic procedure test02(id c, int lvl, memcell x)
+  requires Cell(c, lvl, x, ?v);
+  ensures Cell(c, lvl, x, ?w);
   ensures v == w; // OK
 {
   skip;
 }
 
-procedure test03(id c, memcell x)
-  requires Cell(c, x, ?v);
-  ensures Cell(c, x, ?w);
+procedure test03(id c, int lvl, memcell x)
+  requires Cell(c, lvl, x, ?v);
+  ensures Cell(c, lvl, x, ?w);
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures v == w;
 {

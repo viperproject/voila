@@ -4,7 +4,7 @@ struct cell {
 
 
 
-region R1(id r, cell x)
+region R1(id r, int lvl, cell x)
   guards {
     unique G1(int n);
   }
@@ -14,27 +14,27 @@ region R1(id r, cell x)
     ?n | G1(n): n ~> n + 1;
   }
 
-procedure test01R1(id r, cell x)
-  requires R1(r, x, ?v0) && G1(v0)@r;
-  ensures  R1(r, x, ?v1) && v1 == v0;
+procedure test01R1(id r, int lvl, cell x)
+  requires R1(r, lvl, x, ?v0) && G1(v0)@r;
+  ensures  R1(r, lvl, x, ?v1) && v1 == v0;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  false;
 {
   skip;
 }
 
-procedure test02R1(id r, cell x)
-  requires R1(r, x, ?v0) && G1(v0+1)@r;
-  ensures  R1(r, x, ?v1) && v0 <= v1 <= v0 + 1;
+procedure test02R1(id r, int lvl, cell x)
+  requires R1(r, lvl, x, ?v0) && G1(v0+1)@r;
+  ensures  R1(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 1;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  v1 == v0;
 {
   skip;
 }
 
-procedure test03R1(id r, cell x)
-  requires R1(r, x, ?v0) && G1(v0+2)@r;
-  ensures  R1(r, x, ?v1) && v0 <= v1 <= v0 + 2;
+procedure test03R1(id r, int lvl, cell x)
+  requires R1(r, lvl, x, ?v0) && G1(v0+2)@r;
+  ensures  R1(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 2;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  v1 == v0 || v1 == v0 + 2;
 {
@@ -43,7 +43,7 @@ procedure test03R1(id r, cell x)
 
 
 
-region R2(id r, cell x)
+region R2(id r, int lvl, cell x)
   guards {
     unique G2(int n);
   }
@@ -53,27 +53,27 @@ region R2(id r, cell x)
     ?n, ?m | m == n + 1 | G2(n): n ~> m;
   }
 
-procedure test01R2(id r, cell x)
-  requires R2(r, x, ?v0) && G2(v0)@r;
-  ensures  R2(r, x, ?v1) && v1 == v0;
+procedure test01R2(id r, int lvl, cell x)
+  requires R2(r, lvl, x, ?v0) && G2(v0)@r;
+  ensures  R2(r, lvl, x, ?v1) && v1 == v0;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  false;
 {
   skip;
 }
 
-procedure test02R2(id r, cell x)
-  requires R2(r, x, ?v0) && G2(v0+1)@r;
-  ensures  R2(r, x, ?v1) && v0 <= v1 <= v0 + 1;
+procedure test02R2(id r, int lvl, cell x)
+  requires R2(r, lvl, x, ?v0) && G2(v0+1)@r;
+  ensures  R2(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 1;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  v1 == v0;
 {
   skip;
 }
 
-procedure test03R2(id r, cell x)
-  requires R2(r, x, ?v0) && G2(v0+2)@r;
-  ensures  R2(r, x, ?v1) && v0 <= v1 <= v0 + 2;
+procedure test03R2(id r, int lvl, cell x)
+  requires R2(r, lvl, x, ?v0) && G2(v0+2)@r;
+  ensures  R2(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 2;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  v1 == v0 || v1 == v0 + 2;
 {
@@ -82,7 +82,7 @@ procedure test03R2(id r, cell x)
 
 
 
-region R3(id r, cell x)
+region R3(id r, int lvl, cell x)
   guards {
     unique G3(int n);
   }
@@ -92,34 +92,34 @@ region R3(id r, cell x)
     ?n, ?m | n < m | G3(n): n ~> m;
   }
 
-procedure test01R3(id r, cell x)
-  requires R3(r, x, ?v0) && G3(v0)@r;
-  ensures  R3(r, x, ?v1) && v1 == v0;
+procedure test01R3(id r, int lvl, cell x)
+  requires R3(r, lvl, x, ?v0) && G3(v0)@r;
+  ensures  R3(r, lvl, x, ?v1) && v1 == v0;
   //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures  false;
 {
   skip;
 }
 
-procedure test02R3(id r, cell x)
-  requires R3(r, x, ?v0) && G3(v0+1)@r;
+procedure test02R3(id r, int lvl, cell x)
+  requires R3(r, lvl, x, ?v0) && G3(v0+1)@r;
   //:: ExpectedOutput(postcondition_error:assertion_error)
-  ensures  R3(r, x, ?v1) && v0 <= v1 <= v0 + 1;
+  ensures  R3(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 1;
 {
   skip;
 }
 
-procedure test03R3(id r, cell x)
-  requires R3(r, x, ?v0) && G3(v0+2)@r;
+procedure test03R3(id r, int lvl, cell x)
+  requires R3(r, lvl, x, ?v0) && G3(v0+2)@r;
   //:: ExpectedOutput(postcondition_error:assertion_error)
-  ensures  R3(r, x, ?v1) && v0 <= v1 <= v0 + 2;
+  ensures  R3(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 2;
 {
   skip;
 }
 
 
 
-region R4(id r, cell x)
+region R4(id r, int lvl, cell x)
   guards {
     unique G4(int n);
   }
@@ -129,26 +129,26 @@ region R4(id r, cell x)
     ?n, ?m, ?k | n < m | G4(k): n ~> m;
   }
 
-procedure test01R4(id r, cell x)
-  requires R4(r, x, ?v0) && G4(v0)@r;
+procedure test01R4(id r, int lvl, cell x)
+  requires R4(r, lvl, x, ?v0) && G4(v0)@r;
   //:: ExpectedOutput(postcondition_error:assertion_error)
-  ensures  R4(r, x, ?v1) && v1 == v0;
+  ensures  R4(r, lvl, x, ?v1) && v1 == v0;
 {
   skip;
 }
 
-procedure test02R4(id r, cell x)
-  requires R4(r, x, ?v0) && G4(v0+1)@r;
+procedure test02R4(id r, int lvl, cell x)
+  requires R4(r, lvl, x, ?v0) && G4(v0+1)@r;
   //:: ExpectedOutput(postcondition_error:assertion_error)
-  ensures  R4(r, x, ?v1) && v0 <= v1 <= v0 + 1;
+  ensures  R4(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 1;
 {
   skip;
 }
 
-procedure test03R4(id r, cell x)
-  requires R4(r, x, ?v0) && G4(v0+2)@r;
+procedure test03R4(id r, int lvl, cell x)
+  requires R4(r, lvl, x, ?v0) && G4(v0+2)@r;
   //:: ExpectedOutput(postcondition_error:assertion_error)
-  ensures  R4(r, x, ?v1) && v0 <= v1 <= v0 + 2;
+  ensures  R4(r, lvl, x, ?v1) && v0 <= v1 <= v0 + 2;
 {
   skip;
 }

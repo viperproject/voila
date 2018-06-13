@@ -1,4 +1,4 @@
-region R(id s)
+region R(id s, int lvl)
   guards { unique RG; }
   interpretation { true }
   state { true }
@@ -16,16 +16,16 @@ procedure test02() {
   // bs := Set(?c | c); // TODO: Requires better type inference
 }
 
-procedure test03(id s)
-  requires R(s, ?b);
+procedure test03(id s, int lvl)
+  requires R(s, lvl, ?b);
 {
   set<bool> bs;
 
   bs := Set[bool](?c | c == b);
 }
 
-procedure test04(id s)
-  requires R(s, ?b);
+procedure test04(id s, int lvl)
+  requires R(s, lvl, ?b);
 {
   set<bool> bs;
 
@@ -34,7 +34,7 @@ procedure test04(id s)
 
 
 
-region RR(id s)
+region RR(id s, int lvl)
   guards { unique RRG; }
   interpretation { true }
   state { 0 }
@@ -42,14 +42,14 @@ region RR(id s)
 
 procedure callee01(set<int> xs)
 
-procedure test05(id s)
-  requires RR(s, ?v);
+procedure test05(id s, int lvl)
+  requires RR(s, lvl, ?v);
 {
   callee01(Set[int](?w | w <= v));
 }
 
-procedure test06(id s)
-  requires RR(s, ?v);
+procedure test06(id s, int lvl)
+  requires RR(s, lvl, ?v);
 {
   callee01(Set(?w | w <= v));
 }

@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Counter(id c, memcell x)
+region Counter(id c, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
     x.f |-> ?n
@@ -12,24 +12,24 @@ region Counter(id c, memcell x)
     G: ?n ~> ?m;
   }
 
-abstract_atomic procedure test01(id c, memcell x) returns (int ret)
+abstract_atomic procedure test01(id c, int lvl, memcell x) returns (int ret)
   interference ?n in Int on c;
-  requires Counter(c, x, n) && G@c;
+  requires Counter(c, lvl, x, n) && G@c;
 {
   //:: ExpectedOutput(open-region_error:illegal_state_change_error)
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     x.f := n + 1;
   }
 }
 
-abstract_atomic procedure test02(id c, memcell x) returns (int ret)
+abstract_atomic procedure test02(id c, int lvl, memcell x) returns (int ret)
   interference ?n in Int on c;
-  requires Counter(c, x, n) && G@c;
+  requires Counter(c, lvl, x, n) && G@c;
 {
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     x.f := n;
   }

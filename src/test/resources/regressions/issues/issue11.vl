@@ -23,20 +23,20 @@ predicate P(cell c) { c.f |-> _ }
 //  fold P(_);
 //}
 
-region R(id r, cell c; int v)
+region R(id r, int lvl, cell c; int v)
   guards { unique G; }
   interpretation { c.f |-> ?v }
   state { 0 }
   actions {}
 
-procedure test03(id r, cell c)
-  requires R(r, c, _, ?a);
-  ensures  R(r, c, _);
+procedure test03(id r, int lvl, cell c)
+  requires R(r, lvl, c, _, ?a);
+  ensures  R(r, lvl, c, _);
 {
-  unfold R(r, c, ?v, _);
-  fold R(r, c, _, _);
-  unfold R(r, c, v, a);
-  fold R(r, c);
+  unfold R(r, lvl, c, ?v, _);
+  fold R(r, lvl, c, _, _);
+  unfold R(r, lvl, c, v, a);
+  fold R(r, lvl, c);
   //:: ExpectedOutput(unfold_error)
-  unfold R(r, c, a, v);
+  unfold R(r, lvl, c, a, v);
 }

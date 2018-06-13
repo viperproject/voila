@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Counter(id c, memcell x)
+region Counter(id c, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
     x.f |-> ?n
@@ -12,35 +12,35 @@ region Counter(id c, memcell x)
     G: ?n ~> ?m;
   }
 
-abstract_atomic procedure read(id c, memcell x) returns (int ret)
+abstract_atomic procedure read(id c, int lvl, memcell x) returns (int ret)
   interference ?n in Int on c;
-  requires Counter(c, x, n) && G@c;
-  ensures Counter(c, x, n) && G@c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n) && G@c;
   ensures ret == n;
 {
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     ret := x.f;
   }
 }
 
-procedure test01(id c, memcell x)
-  requires Counter(c, x, ?n) && G@c;
+procedure test01(id c, int lvl, memcell x)
+  requires Counter(c, lvl, x, ?n) && G@c;
 {
   int v;
-  v := read(c, x);
+  v := read(c, lvl, x);
   assert v == n;
 }
 
-procedure noop(id c, memcell x)
-  requires (false ==> Counter(c, x)) && G@c;
-  ensures  (false ==> Counter(c, x)) && G@c;
+procedure noop(id c, int lvl, memcell x)
+  requires (false ==> Counter(c, lvl, x)) && G@c;
+  ensures  (false ==> Counter(c, lvl, x)) && G@c;
 
-procedure test02(id c, memcell x)
-  requires Counter(c, x);
+procedure test02(id c, int lvl, memcell x)
+  requires Counter(c, lvl, x);
   ensures  true;
 {
   //:: ExpectedOutput(precondition_error:guard_permission_error)
-  noop(c, x);
+  noop(c, lvl, x);
 }

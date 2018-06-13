@@ -31,7 +31,7 @@ macro QPAcc_pack(r, x, v, h2) {
 }
 
 
-region MCAS(id r, mcas m, id a, cell l)
+region MCAS(id r, int lvl, mcas m, id a, int alvl, cell l)
   guards {
     duplicable Z;
     /* TODO: Neither unique nor duplicable are an ideal choice for the *four* next guards. See also issue #43. */
@@ -44,7 +44,7 @@ region MCAS(id r, mcas m, id a, cell l)
   interpretation {
     m._h1 |-> ?h1 && m._h2 |-> ?h2 && disj(h1, h2) && // Ghost: Existentially quantified h1, h2
     OWNED(keys(h1) union keys(h2))@r &&
-    Lock(a, l, ?s) && G@a && // Contained in U(l) and L(l) (from the locks library)
+    Lock(a, alvl, l, ?s) && alvl < lvl && G@a && // Contained in U(l) and L(l) (from the locks library)
     (s == 0
         ? UNLOCKED@r   && QPAcc(r, uni(h1, h2))
         : LOCKED(h1)@r && QPAcc(r, h2))
@@ -126,119 +126,119 @@ region MCAS(id r, mcas m, id a, cell l)
  * As far as I can see (for this example), this results in equally strong specifications.
  */
 
-abstract_atomic procedure read(id r, mcas m, id a, cell l, cell x) returns (int ret)
+abstract_atomic procedure read(id r, int lvl, mcas m, id a, int alvl, cell l, cell x) returns (int ret)
   interference ?h0 in Set[heap](?u | true) on r;
-  requires MCAS(r, m, a, l, h0) && x in keys(h0) && OWN(x)@r;
+  requires MCAS(r, lvl, m, a, alvl, l, h0) && x in keys(h0) && OWN(x)@r;
   requires Z@r; // TODO: Should not be necessary, see issue #19
-  ensures  MCAS(r, m, a, l, ?h1) && x in keys(h1) && OWN(x)@r;
+  ensures  MCAS(r, lvl, m, a, alvl, l, ?h1) && x in keys(h1) && OWN(x)@r;
   ensures  lkup(h1, x) == lkup(h0, x);
   ensures  ret == lkup(h0, x);
 {
   make_atomic
-    using MCAS(r, m, a, l) with Z@r; // TODO: Use OWN(x) here, once the MCAS actions have been properly encoded
+    using MCAS(r, lvl, m, a, alvl, l) with Z@r; // TODO: Use OWN(x) here, once the MCAS actions have been properly encoded
   {
     /* ########## lock(a, l); ########## */
     open_region // Open-region suffices since we don't change the region's abstract state
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
-      /* Acquire the lock at Lock(a, l) and take permissions to x.value (with abstract value h0(x))
-       * out of region MCAS(r, m, a, l).
+      /* Acquire the lock at Lock(a, alvl, l) and take permissions to x.value (with abstract value h0(x))
+       * out of region MCAS(r, lvl, m, a, alvl, l).
        */
-      lock_and_take_permissions(r, m, a, l, x, lkup(h0, x));
+      lock_and_take_permissions(r, lvl, m, a, alvl, l, x, lkup(h0, x));
     }
 
     /* ########## ret := [x]; ########## */
     open_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
       ret := x.value;
     }
 
     /* ########## unlock(a, l); ########## */
-    assert MCAS(r, m, a, l, ?hPreUpdRgn); /* TODO: Issue #8*/
+    assert MCAS(r, lvl, m, a, alvl, l, ?hPreUpdRgn); /* TODO: Issue #8*/
     update_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
-      /* Release the lock at Lock(a, l) and put permissions to x.value back into the MCAS region,
+      /* Release the lock at Lock(a, alvl, l) and put permissions to x.value back into the MCAS region,
        * which (potentially) modifies the region's abstract state. This (currently) requires knowing
        * the old (second-to-last argument) and the new (last argument) abstract value of x, both of
        * which are in this case both h0(x).
        */
-      unlock_and_return_permissions(r, m, a, l, x, lkup(h0, x), lkup(h0, x));
+      unlock_and_return_permissions(r, lvl, m, a, alvl, l, x, lkup(h0, x), lkup(h0, x));
     }
     /* TODO: To work around issue #8, we explicitly exchange the diamond for the tracking resource
      *       if the abstract state wasn't changed inside the update-region block
      */
-    assert MCAS(r, m, a, l, ?hPostUpdRgn);
+    assert MCAS(r, lvl, m, a, alvl, l, ?hPostUpdRgn);
     if (hPreUpdRgn == hPostUpdRgn) {
-      fix_issue8_updateregion_noop(r, m, a, l);
+      fix_issue8_updateregion_noop(r, lvl, m, a, alvl, l);
     }
   }
 }
 
 /* TODO: 'write' clashes with Viper's keyword; need to sanitise identifiers. See issue #58. */
-abstract_atomic procedure _write(id r, mcas m, id a, cell l, cell x, int w)
+abstract_atomic procedure _write(id r, int lvl, mcas m, id a, int alvl, cell l, cell x, int w)
   interference ?h0 in Set[heap](?u | true) on r; // TODO: See read's comment
-  requires MCAS(r, m, a, l, h0) && x in keys(h0) && OWN(x)@r;
+  requires MCAS(r, lvl, m, a, alvl, l, h0) && x in keys(h0) && OWN(x)@r;
   requires Z@r; // TODO: See read's comment
-  ensures  MCAS(r, m, a, l, ?h1) && x in keys(h1) && OWN(x)@r;
+  ensures  MCAS(r, lvl, m, a, alvl, l, ?h1) && x in keys(h1) && OWN(x)@r;
   ensures  lkup(h1, x) == w; // TODO: Specs could be more concise, see issue #59
 {
   make_atomic
-    using MCAS(r, m, a, l) with Z@r; // TODO: See read's comment
+    using MCAS(r, lvl, m, a, alvl, l) with Z@r; // TODO: See read's comment
   {
     /* ########## lock(a, l); ########## */
     open_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
-      lock_and_take_permissions(r, m, a, l, x, lkup(h0, x));
+      lock_and_take_permissions(r, lvl, m, a, alvl, l, x, lkup(h0, x));
     }
 
     /* ########## [x] := w; ########## */
     open_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
       x.value := w;
     }
 
     /* ########## unlock(a, l); ########## */
-    assert MCAS(r, m, a, l, ?hPreUpdRgn); // TODO: See read's comment
+    assert MCAS(r, lvl, m, a, alvl, l, ?hPreUpdRgn); // TODO: See read's comment
     update_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
-      unlock_and_return_permissions(r, m, a, l, x, lkup(h0, x), w);
+      unlock_and_return_permissions(r, lvl, m, a, alvl, l, x, lkup(h0, x), w);
     }
     /* TODO: See read's comment */
-    assert MCAS(r, m, a, l, ?hPostUpdRgn);
+    assert MCAS(r, lvl, m, a, alvl, l, ?hPostUpdRgn);
     if (hPreUpdRgn == hPostUpdRgn) {
-      fix_issue8_updateregion_noop(r, m, a, l);
+      fix_issue8_updateregion_noop(r, lvl, m, a, alvl, l);
     }
   }
 }
 
-abstract_atomic procedure cas1(id r, mcas m, id a, cell l, cell x, int w1, int w2) returns (bool b)
+abstract_atomic procedure cas1(id r, int lvl, mcas m, id a, int alvl, cell l, cell x, int w1, int w2) returns (bool b)
   interference ?h0 in Set[heap](?u | true) on r; // TODO: See read's comment
-  requires MCAS(r, m, a, l, h0) && x in keys(h0) && OWN(x)@r;
+  requires MCAS(r, lvl, m, a, alvl, l, h0) && x in keys(h0) && OWN(x)@r;
   requires Z@r; // TODO: See read's comment
-  ensures  MCAS(r, m, a, l, ?h1) && x in keys(h1) && OWN(x)@r;
+  ensures  MCAS(r, lvl, m, a, alvl, l, ?h1) && x in keys(h1) && OWN(x)@r;
   ensures  b <==> lkup(h0, x) == w1;
   ensures  b ? lkup(h1, x) == w2 : lkup(h1, x) == lkup(h0, x);
 {
   int v;
 
   make_atomic
-    using MCAS(r, m, a, l) with Z@r; // TODO: See read's comment
+    using MCAS(r, lvl, m, a, alvl, l) with Z@r; // TODO: See read's comment
   {
     /* ########## lock(a, l); ########## */
     open_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
-      lock_and_take_permissions(r, m, a, l, x, lkup(h0, x));
+      lock_and_take_permissions(r, lvl, m, a, alvl, l, x, lkup(h0, x));
     }
 
     /* ########## v := [x]; ########## */
     open_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
       v := x.value;
     }
@@ -246,7 +246,7 @@ abstract_atomic procedure cas1(id r, mcas m, id a, cell l, cell x, int w1, int w
     if (v == w1) {
       /* ########## [x] := w2; ########## */
       open_region
-        using MCAS(r, m, a, l);
+        using MCAS(r, lvl, m, a, alvl, l);
       {
         x.value := w2;
       }
@@ -256,16 +256,16 @@ abstract_atomic procedure cas1(id r, mcas m, id a, cell l, cell x, int w1, int w
     }
 
     /* ########## unlock(a, l); ########## */
-    assert MCAS(r, m, a, l, ?hPreUpdRgn); /* TODO: Issue #8*/
+    assert MCAS(r, lvl, m, a, alvl, l, ?hPreUpdRgn); /* TODO: Issue #8*/
     update_region
-      using MCAS(r, m, a, l);
+      using MCAS(r, lvl, m, a, alvl, l);
     {
-      unlock_and_return_permissions(r, m, a, l, x, lkup(h0, x), b ? w2 : lkup(h0, x));
+      unlock_and_return_permissions(r, lvl, m, a, alvl, l, x, lkup(h0, x), b ? w2 : lkup(h0, x));
     }
     /* TODO: See read's comment */
-    assert MCAS(r, m, a, l, ?hPostUpdRgn);
+    assert MCAS(r, lvl, m, a, alvl, l, ?hPostUpdRgn);
     if (hPreUpdRgn == hPostUpdRgn) {
-      fix_issue8_updateregion_noop(r, m, a, l);
+      fix_issue8_updateregion_noop(r, lvl, m, a, alvl, l);
     }
   }
 }
@@ -273,12 +273,12 @@ abstract_atomic procedure cas1(id r, mcas m, id a, cell l, cell x, int w1, int w
 // TODO: function dcas
 
 
-/* Acquire the lock at Lock(a, l) and take x.value |-> v out of region MCAS(r, m, a, l) */
-macro lock_and_take_permissions(r, m, a, l, x, v) {
+/* Acquire the lock at Lock(a, alvl, l) and take x.value |-> v out of region MCAS(r, lvl, m, a, alvl, l) */
+macro lock_and_take_permissions(r, lvl, m, a, alvl, l, x, v) {
   /* Learn that the lock's state is in {0, 1} */
-  use_region_interpretation Lock(a, l);
+  use_region_interpretation Lock(a, alvl, l);
 
-  lock(a, l);
+  lock(a, alvl, l);
 
   /* OWN(x)@r ensures that x is still protected by MCAS(r, ..., h), i.e. that x in h */
   fix_duplicable_OWN_guard(r, m, x);
@@ -322,13 +322,13 @@ macro take_permissions_out(r, m, x, v) {
   QPAcc_unpack(r, x, v, h2_1);
 }
 
-/* Release the lock at Lock(a, l) and put x.value |-> v1 back into region MCAS(r, m, a, l).
+/* Release the lock at Lock(a, alvl, l) and put x.value |-> v1 back into region MCAS(r, lvl, m, a, alvl, l).
  * This currently requires knowing the old (abstract) state of x.value, denoted by v0.
  */
-macro unlock_and_return_permissions(r, m, a, l, x, v0, v1) {
-  learn_lock_held_from_KEY(r, Map(x := v0), a, l);
+macro unlock_and_return_permissions(r, lvl, m, a, alvl, l, x, v0, v1) {
+  learn_lock_held_from_KEY(r, lvl, Map(x := v0), a, alvl, l);
 
-  unlock(a, l);
+  unlock(a, alvl, l);
 
   /* At this point we know that
    *   (1) x.value |-> v1 ⚹ KEY({x -> v0})@r
@@ -373,10 +373,10 @@ macro give_permissions_back(r, m, x, v0, v1) {
   QPAcc_pack(r, x, v1, h2_1);
 }
 
-/* Learn from KEY(h)@r that we hold Lock(a, l), i.e. that the lock's abstract state is 0 */
-macro learn_lock_held_from_KEY(r, h, a, l) {
-  assert Lock(a, l, ?s);
-  use_region_interpretation Lock(a, l); // Learn that s1 in {0, 1}
+/* Learn from KEY(h)@r that we hold Lock(a, alvl, l), i.e. that the lock's abstract state is 0 */
+macro learn_lock_held_from_KEY(r, lvl, h, a, alvl, l) {
+  assert Lock(a, alvl, l, ?s);
+  use_region_interpretation Lock(a, alvl, l); // Learn that s1 in {0, 1}
   if (s == 0) { // Cannot hold; but we need ghost code to prune this proof branch.
     use UNLOCKED_KEY_exclusivity(r, h);
   }
@@ -395,10 +395,10 @@ macro fix_duplicable_OWN_guard(r, m, x) {
 }
 
 /* Work around issue #8 by manually exchanging the diamond resource r |=> <D> for the tracking
- * resource r |=> (h, h), where h is the abstract state of MCAS(r, m, a, l).
+ * resource r |=> (h, h), where h is the abstract state of MCAS(r, lvl, m, a, alvl, l).
  */
-macro fix_issue8_updateregion_noop(r, m, a, l) {
-  assert MCAS(r, m, a, l, ?h);
+macro fix_issue8_updateregion_noop(r, lvl, m, a, alvl, l) {
+  assert MCAS(r, lvl, m, a, alvl, l, ?h);
   exhale r |=> <D>;
   inhale r |=> (h, h);
 }
@@ -411,7 +411,7 @@ struct cell {
   int value;
 }
 
-region Lock(id a, cell x)
+region Lock(id a, int lvl, cell x)
   guards { unique G; }
   interpretation {
     x.value |-> ?v && (v == 0 || v == 1)
@@ -422,15 +422,15 @@ region Lock(id a, cell x)
     G: 1 ~> 0;
   }
 
-abstract_atomic procedure unlock(id a, cell x)
+abstract_atomic procedure unlock(id a, int lvl, cell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures Lock(a, x, 0) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures Lock(a, lvl, x, 0) && G@a;
 
-abstract_atomic procedure lock(id a, cell x)
+abstract_atomic procedure lock(id a, int lvl, cell x)
   interference ?s in Set(0, 1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures Lock(a, x, 1) && G@a && s == 0;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures Lock(a, lvl, x, 1) && G@a && s == 0;
 
 primitive_atomic procedure CAS(cell x, int now, int thn) returns (bool ret)
   requires x.value |-> ?v;

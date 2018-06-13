@@ -2,16 +2,16 @@ struct cell {
   int value;
 }
 
-region R(id r, cell x)
+region R(id r, int lvl, cell x)
   guards { unique G; }
   interpretation { x.value |-> ?v }
   state { v }
   actions {}
 
-abstract_atomic procedure test01(id r, cell x)
+abstract_atomic procedure test01(id r, int lvl, cell x)
   //:: ExpectedOutput(typechecker_error)
   interference ?n in Set(n) on r;
-  requires R(r, x);
+  requires R(r, lvl, x);
 
 procedure test02() {
   int n;

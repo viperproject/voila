@@ -2,6 +2,12 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/CounterClient.t
 //
 
+region LevelDummy(id r, int lvl)
+  guards { duplicable LevelDummyG; }
+  interpretation { true }
+  state { 0 }
+  actions {  }
+
 struct cell {
   int value;
 }
@@ -16,32 +22,33 @@ primitive_atomic procedure CAS(cell x, int now, int thn) returns (bool ret)
 
 // Macro thread_incr's precondition such that it can be easily reused when encoding
 // fork statements via exhales
-macro thread_incr_PRE(r, x, s, y)
-  Counter(r, x, _) && AUTH(1)@r && INCR@r && Join(s, y, r, x, 0) && SET@s;
+macro thread_incr_PRE(r, lvl, x, s, alvl, y)
+  Counter(r, lvl, x, _) && AUTH(1)@r && INCR@r && Join(s, alvl, y, r, lvl, x, 0) && SET@s && lvl < alvl;
 
-procedure thread_incr(id r, cell x, id s, fjcell y)
-  requires thread_incr_PRE(r, x, s, y);
+procedure thread_incr(id r, int lvl, cell x, id s, int alvl, fjcell y)
+  requires thread_incr_PRE(r, lvl, x, s, alvl, y);
   ensures  true;
 {
-  incr(r, x);
-  set_to_one(s, y, r, x);
+  incr(r, lvl, x);
+  set_to_one(s, alvl, y, r, lvl, x);
 }
 
-procedure parallel_incr() returns (id r, cell x)
-  requires true;
-  ensures  Counter(r, x, _) && CONT(2)@r && AUTH(-1-2)@r && INCR@r;
-    // TODO: Caper can guarantee Counter(r, x, 2) because INCR is a fractional guard and after
+procedure parallel_incr(id dummy, int methodLvl) returns (id r, int lvl, cell x)
+  requires LevelDummy(dummy, methodLvl);
+  ensures  Counter(r, lvl, x, _) && CONT(2)@r && AUTH(-1-2)@r && INCR@r;
+    // TODO: Caper can guarantee Counter(r, lvl, x, 2) because INCR is a fractional guard and after
     //       the two wait-calls, we hold the full INCR permission, which means that no other thread
     //       can modify the Counter region. See also issue #52.
 {
   fjcell y1, y2;
   id s1, s2;
+  int s1_lvl, s2_lvl;
 
-  r, x := makeCounter();
+  r, lvl, x := makeCounter();
 
   // Duplicate Counter region assertion
-  assert Counter(r, x);
-  inhale Counter(r, x) && Counter(r, x) && Counter(r, x) && Counter(r, x);
+  assert Counter(r, lvl, x);
+  inhale Counter(r, lvl, x) && Counter(r, lvl, x) && Counter(r, lvl, x) && Counter(r, lvl, x);
   // Duplicate INCR@r
   assert INCR@r;
   inhale INCR@r;
@@ -49,39 +56,38 @@ procedure parallel_incr() returns (id r, cell x)
   use AUTH_split(r, -1-1, 1);
   use AUTH_split(r, -1-2, 1);
 
-  s1, y1 := make_join(r, x);
-  s2, y2 := make_join(r, x);
+  s1, s1_lvl, y1 := make_join(r, lvl, x);
+  s2, s2_lvl, y2 := make_join(r, lvl, x);
 
   // Duplicate Join regions
-  assert Join(s1, y1, r, x) && Join(s2, y2, r, x);
-  inhale Join(s1, y1, r, x) && Join(s2, y2, r, x);
+  assert Join(s1, s1_lvl, y1, r, lvl, x) && Join(s2, s2_lvl, y2, r, lvl, x);
+  inhale Join(s1, s1_lvl, y1, r, lvl, x) && Join(s2, s2_lvl, y2, r, lvl, x);
 
   // fork thread_incr(x, y1);
-  exhale thread_incr_PRE(r, x, s1, y1);
+  exhale thread_incr_PRE(r, lvl, x, s1, s1_lvl, y1);
   // fork thread_incr(x, y2);
-  exhale thread_incr_PRE(r, x, s2, y2);
+  exhale thread_incr_PRE(r, lvl, x, s2, s2_lvl, y2);
 
-  wait(s1, y1, r, x);
-  wait(s2, y2, r, x);
+  wait(s1, s1_lvl, y1, r, lvl, x);
+  wait(s2, s2_lvl, y2, r, lvl, x);
 
   // At this point, we know
-  //   CONT(1)@r && CONT(1)@r && AUTH(-1-2)@r && Counter(r, x, _)
+  //   CONT(1)@r && CONT(1)@r && AUTH(-1-2)@r && Counter(r, lvl, x, _)
   // We want to conclude
-  //   Counter(r, x, 2)
+  //   Counter(r, lvl, x, 2)
   // but that requires applying a few lemmas and using the definition of the Counter region
   use CONT_join(r, 1, 1); // Apply CONT(1) * CONT(1) ==> CONT(2)
-  unfold Counter(r, x, ?n);
+  unfold Counter(r, lvl, x, ?n);
   use CONT_max1(r, 2, n); // Apply CONT(2) * CONT(-1-n) ==> 2 <= n
   use AUTH_max1(r, n, 2); // Apply AUTH(n) * AUTH(-1-2) ==> n <= 2
-  fold Counter(r, x, 2);
+  fold Counter(r, lvl, x, 2);
 
   skip;
 }
 
-
 // ----- Counter Library -----
 
-region Counter(id r, cell x)
+region Counter(id r, int lvl, cell x)
   guards {
     duplicable INCR; // %INCR
     duplicable CONT(int n); // |CONT|
@@ -144,10 +150,10 @@ macro counting_algebra_constraints(n, m)
 
 // Functionality
 
-procedure makeCounter() returns(id r, cell x)
+procedure makeCounter() returns(id r, int lvl, cell x)
   requires true;
-  ensures  Counter(r, x, _) && INCR@r && AUTH(-1)@r;
-    // TODO: Caper ensures Counter(r, x, 0) because there, INCR is a fractional guard (rather than
+  ensures  Counter(r, lvl, x, _) && INCR@r && AUTH(-1)@r;
+    // TODO: Caper ensures Counter(r, lvl, x, 0) because there, INCR is a fractional guard (rather than
     //       'duplicable' as it is here) and since we have full permission to INCR, nobody else can
     //       modify the region. See also issue #52.
 {
@@ -156,37 +162,37 @@ procedure makeCounter() returns(id r, cell x)
 
   x.value := 0;
 
-  // Create region Counter(r, x)
+  // Create region Counter(r, lvl, x)
   inhale INCR@r && CONT(-1)@r && AUTH(-1)@r;
   use AUTH_split(r, -1, 0); // Apply AUTH(-1) ==> AUTH(-2) * AUTH(1)
-  fold Counter(r, x);
+  fold Counter(r, lvl, x);
 }
 
 // TODO: Encode example TaDA-style (similar to Lock vs CAPLock):
 //         1. Abstract-atomic incr that manipulates a "permissive" Cell region
 //         2. Counter region plus non-atomic incr on top of Cell and its incr
 
-procedure incr(id r, cell x)
-  requires Counter(r, x, _) && AUTH(1)@r && INCR@r;
-  ensures  Counter(r, x, _) && CONT(1)@r && INCR@r;
+procedure incr(id r, int lvl, cell x)
+  requires Counter(r, lvl, x, _) && AUTH(1)@r && INCR@r;
+  ensures  Counter(r, lvl, x, _) && CONT(1)@r && INCR@r;
 {
   bool b;
   int v;
 
   do
-    invariant Counter(r, x, _) && INCR@r;
+    invariant Counter(r, lvl, x, _) && INCR@r;
     invariant !b ? AUTH(1)@r : CONT(1)@r;
   {
     // v := [x];
     open_region
-      using Counter(r, x);
+      using Counter(r, lvl, x);
     {
       v := x.value;
     }
 
     // b := CAS(x, v, v + 1);
     use_atomic
-      using Counter(r, x) with INCR@r;
+      using Counter(r, lvl, x) with INCR@r;
     {
       b := CAS(x, v, v + 1);
 
@@ -208,46 +214,47 @@ struct fjcell {
   bool _payload; // ghost field to resolve nondeterministic choice (disjunction) in Join's interpretation
 }
 
-region Join(id s, fjcell y, id r, cell x)
+region Join(id s, int alvl, fjcell y, id r, int lvl, cell x)
   guards {
     unique SET;
     unique JOIN;
   }
   interpretation {
 //    0 : y |-> 0;
-//    1 : y |-> 1 &*& (s@JOIN \/ Counter(r,x,_) &*& r@(CONT|1| * INCR[p]));
+//    1 : y |-> 1 &*& (s@JOIN \/ Counter(r, lvl,x,_) &*& r@(CONT|1| * INCR[p]));
     y.value |-> ?n && (n == 0 || n == 1) &&
     y._payload |-> ?loaded &&
     (n == 1 ==>
-      (loaded ? Counter(r, x, _) && CONT(1)@r && INCR@r : JOIN@s))
+      (loaded ? Counter(r, lvl, x, _) && lvl < alvl && CONT(1)@r && INCR@r : JOIN@s))
   }
   state { n }
   actions {
     SET: 0 ~> 1;
   }
 
-procedure make_join(id r, cell x) returns (id s, fjcell y)
-  requires Counter(r, x, _);
-  ensures  Join(s, y, r, x, 0) && SET@s && JOIN@s;
+procedure make_join(id r, int lvl, cell x) returns (id s, int alvl, fjcell y)
+  requires Counter(r, lvl, x, _);
+  ensures  Join(s, alvl, y, r, lvl, x, 0) && SET@s && JOIN@s && alvl > lvl;
 {
   // y := alloc(1);
   inhale y.value |-> _;
 
   y.value := 0;
 
-  // Create region Join(s, y, r, x, 0)
+  // Create region Join(s, alvl, y, r, lvl, x, 0)
   inhale SET@s && JOIN@s;
   inhale y._payload |-> true;
-  fold Join(s, y, r, x, 0);
+  inhale lvl < alvl;
+  fold Join(s, alvl, y, r, lvl, x, 0);
 }
 
-procedure set_to_one(id s, fjcell y, id r, cell x)
-  requires Counter(r, x, _) && CONT(1)@r && INCR@r && Join(s, y, r, x, 0) && SET@s;
-  ensures  Join(s, y, r, x, 1);
+procedure set_to_one(id s, int alvl, fjcell y, id r, int lvl, cell x)
+  requires Counter(r, lvl, x, _) && CONT(1)@r && INCR@r && Join(s, alvl, y, r, lvl, x, 0) && SET@s && lvl < alvl;
+  ensures  Join(s, alvl, y, r, lvl, x, 1);
 {
   // [y] := 1;
   use_atomic
-    using Join(s, y, r, x) with SET@s;
+    using Join(s, alvl, y, r, lvl, x) with SET@s;
   {
     y.value := 1;
 
@@ -257,19 +264,19 @@ procedure set_to_one(id s, fjcell y, id r, cell x)
   }
 }
 
-procedure wait(id s, fjcell y, id r, cell x)
-  requires Counter(r, x, _) && JOIN@s && Join(s, y, r, x, _);
-  ensures  Counter(r, x, _) && CONT(1)@r && INCR@r && Join(s, y, r, x, 1);
+procedure wait(id s, int alvl, fjcell y, id r, int lvl, cell x)
+  requires Counter(r, lvl, x, _) && JOIN@s && Join(s, alvl, y, r, lvl, x, _);
+  ensures  Counter(r, lvl, x, _) && CONT(1)@r && INCR@r && Join(s, alvl, y, r, lvl, x, 1);
 {
   int v;
 
   do
-    invariant Counter(r, x, _) && Join(s, y, r, x, ?j);
+    invariant Counter(r, lvl, x, _) && Join(s, alvl, y, r, lvl, x, ?j);
     invariant v == 0 ? JOIN@s : CONT(1)@r && INCR@r && j == 1;
   {
     // v := [y];
     open_region
-      using Join(s, y, r, x);
+      using Join(s, alvl, y, r, lvl, x);
     {
       v := y.value;
 
@@ -277,9 +284,9 @@ procedure wait(id s, fjcell y, id r, cell x)
       if (v != 0) {
         // TODO: Next block is "only" necessary in order to learn that y._payload |-> true,
         //       which follows from the uniqueness of JOIN@s.
-        fold Join(s, y, r, x);
-        use_region_interpretation Join(s, y, r, x);
-        unfold Join(s, y, r, x);
+        fold Join(s, alvl, y, r, lvl, x);
+        use_region_interpretation Join(s, alvl, y, r, lvl, x);
+        unfold Join(s, alvl, y, r, lvl, x);
 
         exhale y._payload |-> true;
         inhale y._payload |-> false;
