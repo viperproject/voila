@@ -94,8 +94,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
   def frameRegions(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
 
-    var preExhales: List[vpr.Stmt] = Nil
-    var postInhales: List[vpr.Stmt] = Nil
+    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
 
     tree.root.regions foreach { region =>
 
@@ -130,8 +130,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
       val vprSanitizedAllRegionAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionAssertions)
 
-      preExhales ::= vpr.Exhale(vprSanitizedAllRegionAssertions)()
-      postInhales ::= vpr.Inhale(vprSanitizedAllRegionAssertions)()
+      preExhales += vpr.Exhale(vprSanitizedAllRegionAssertions)()
+      postInhales += vpr.Inhale(vprSanitizedAllRegionAssertions)()
 
       /* none < π */
       val vprIsRegionAccessible =
@@ -175,19 +175,20 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
       val vprSanitizedAllRegionStateStaysEqual = ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionStateStaysEqual)
 
-      postInhales ::= vpr.Inhale(vprSanitizedAllRegionStateStaysEqual)()
+      postInhales += vpr.Inhale(vprSanitizedAllRegionStateStaysEqual)()
     }
 
     (
-      preExhales,
-      postInhales
+      preExhales.toList,
+      postInhales.toList
     )
 
   }
 
   def frameGuards(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
-    var preExhales: List[vpr.Stmt] = Nil
-    var postInhales: List[vpr.Stmt] = Nil
+
+    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
 
     tree.root.regions foreach { region =>
       region.guards foreach { guard =>
@@ -225,21 +226,21 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
         val vprSanitizedAllGuardAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllGuardAssertions)
 
-        preExhales ::= vpr.Exhale(vprSanitizedAllGuardAssertions)()
-        postInhales ::= vpr.Inhale(vprSanitizedAllGuardAssertions)()
+        preExhales += vpr.Exhale(vprSanitizedAllGuardAssertions)()
+        postInhales += vpr.Inhale(vprSanitizedAllGuardAssertions)()
       }
     }
 
     (
-      preExhales,
-      postInhales
+      preExhales.toList,
+      postInhales.toList
     )
   }
 
   def frameFields(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
 
-    var preExhales: List[vpr.Stmt] = Nil
-    var postInhales: List[vpr.Stmt] = Nil
+    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
 
     tree.root.structs foreach { struct =>
 
@@ -274,8 +275,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
             vprFieldAssertion
           )()
 
-        preExhales ::= vpr.Exhale(vprAllFieldAssertions)()
-        postInhales ::= vpr.Inhale(vprAllFieldAssertions)()
+        preExhales += vpr.Exhale(vprAllFieldAssertions)()
+        postInhales += vpr.Inhale(vprAllFieldAssertions)()
 
         /* none < π */
         val vprIsFieldAccessible =
@@ -308,13 +309,13 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
             vpr.Implies(vprIsFieldAccessible, vprFieldValueStaysEqual)()
           )()
 
-        postInhales ::= vpr.Inhale(vprAllRegionStateStaysEqual)()
+        postInhales += vpr.Inhale(vprAllRegionStateStaysEqual)()
       }
     }
 
     (
-      preExhales,
-      postInhales
+      preExhales.toList,
+      postInhales.toList
     )
   }
 
@@ -625,6 +626,17 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val label = freshLabel("pre_region_update")
 
+    val levelCheck = vpr.Assert(levelHigherThanOccuringRegionLevels(updateRegion.regionPredicate))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy levelCheck =>
+        UpdateRegionError(updateRegion, InspectLevelTooHighError(updateRegion.regionPredicate))
+    }
+
+    val newLevelAssignment = assignLevel(vprInArgs(1))
+
+    val oldLevelAssignment = assignOldLevel(label)
+
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))().withSource(updateRegion.regionPredicate)
 
@@ -704,6 +716,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           exhaleDiamond,
           label,
+          levelCheck,
+          newLevelAssignment,
           exhaleAtomicityTracking,
           unfoldRegionPredicate,
           tranitionInterferenceContext,
@@ -711,7 +725,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           ruleBody,
           foldRegionPredicate,
           postRegionUpdate,
-          inhaleAtomicityTracking),
+          inhaleAtomicityTracking,
+          oldLevelAssignment),
         Vector.empty
       )()
 
@@ -735,6 +750,17 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       case e: vprerr.AssertFailed if e causedBy contextCheck =>
         UseAtomicError(useAtomic, RegionAtomicityContextTrackingError(useAtomic.regionPredicate))
     }
+
+    val levelCheck = vpr.Assert(levelHigherThanOccuringRegionLevels(useAtomic.regionPredicate))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy levelCheck =>
+        UseAtomicError(useAtomic, InspectLevelTooHighError(useAtomic.regionPredicate))
+    }
+
+    val newLevelAssignment = assignLevel(vprInArgs(1))
+
+    val oldLevelAssignment = assignOldLevel(preUseAtomicLabel)
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
@@ -825,6 +851,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         Vector(
           preUseAtomicLabel,
           contextCheck,
+          levelCheck,
+          newLevelAssignment,
           /* Note: Guard must be checked!
            * I.e. the check is independent of the technical treatment of frame stabilisation.
            */
@@ -836,7 +864,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           inhaleGuard,
           ruleBody,
           foldRegionPredicate,
-          stateChangeAllowed),
+          stateChangeAllowed,
+          oldLevelAssignment),
         Vector.empty
       )()
 
@@ -852,6 +881,17 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       outArgs.isEmpty,
        "Using-clauses expect region assertions without out-arguments, but got " +
       s"${openRegion.regionPredicate} at ${openRegion.regionPredicate.position}")
+
+    val levelCheck = vpr.Assert(levelHigherThanOccuringRegionLevels(openRegion.regionPredicate))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy levelCheck =>
+        OpenRegionError(openRegion, InspectLevelTooHighError(openRegion.regionPredicate))
+    }
+
+    val newLevelAssignment = assignLevel(vprInArgs(1))
+
+    val oldLevelAssignment = assignOldLevel(preOpenLabel)
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
@@ -907,11 +947,14 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       vpr.Seqn(
         Vector(
           preOpenLabel,
+          levelCheck,
+          newLevelAssignment,
           unfoldRegionPredicate,
           tranitionInterferenceContext,
           ruleBody,
           foldRegionPredicate,
-          stateUnchanged),
+          stateUnchanged,
+          oldLevelAssignment),
         Vector.empty
       )()
 

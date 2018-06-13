@@ -263,6 +263,28 @@ case class InterferenceError(offendingNode: PInterferenceClause, detail: Option[
     copy(offendingNode, detail)
 }
 
+case class CalleeLevelTooHighError(offendingNode: PProcedureCall, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PProcedureCall
+  def localId: String = "callee_level_too_high_error"
+  val localMessage: String = s"The current level might be too low to call '${offendingNode.formatForUsers}'"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class InspectLevelTooHighError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PPredicateExp
+  def localId: String = "inspect_level_too_high_error"
+  val localMessage: String = s"The current level might be too low to apply an inspection rule on region '${offendingNode.formatForUsers}'"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class InsufficientRegionPermissionError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 

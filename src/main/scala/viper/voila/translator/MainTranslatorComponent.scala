@@ -12,7 +12,7 @@ import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, RegionStateError, UnfoldError}
+import viper.voila.reporting.{FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, CalleeLevelTooHighError, MakeAtomicError, PreconditionError, RegionStateError, UnfoldError}
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -38,9 +38,44 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
    * Immutable state and utility methods
    */
 
-  val levelVariableDecl: vpr.LocalVarDecl = vpr.LocalVarDecl("$$_current_level", vpr.Int)()
+  val levelVariableDecl: vpr.LocalVarDecl = vpr.LocalVarDecl("$$_current_level", vpr.Ref)()
 
   val levelVariable: vpr.LocalVar = levelVariableDecl.localVar
+
+  val levelField: vpr.Field =
+    vpr.Field("$$_level", vpr.Int)()
+
+  def levelLocation: vpr.FieldAccess =
+    vpr.FieldAccess(levelVariable, levelField)()
+
+  def levelAccess: vpr.FieldAccessPredicate =
+    vpr.FieldAccessPredicate(levelLocation, vpr.FullPerm()())()
+
+  def assignLevel(rhs: vpr.Exp): vpr.Stmt =
+    vpr.FieldAssign(levelLocation, rhs)()
+
+  def assignOldLevel(label: vpr.Label): vpr.Stmt =
+    assignLevel(vpr.LabelledOld(levelLocation, label.name)())
+
+  def levelHigherThanOccuringRegionLevels(exp: PExpression): vpr.Exp = {
+
+    var collectedExpLevels: List[vpr.Exp] = Nil
+
+    translateWith(exp) {
+      case pred: PPredicateExp if extractableRegionInstance(pred) =>
+
+        val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
+
+        collectedExpLevels ::= translate(inArgs(1))
+
+        translate(pred)
+    }
+
+    viper.silicon.utils.ast.BigAnd(
+      collectedExpLevels map (vpr.GtCmp(levelLocation, _)())
+    )
+  }
+
 
   val diamondField: vpr.Field =
     vpr.Field("$diamond", vpr.Int)()
@@ -202,6 +237,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val topLevelDeclarations: Vector[vpr.Declaration] = (
          Vector(
             diamondField,
+            levelField,
             regionStateTriggerFunctionDomain)
       ++ collectedDeclarations
       ++ usedVariableHavocs(tree)
@@ -298,6 +334,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
     }
 
+    val initializeLvl =
+      vpr.Inhale(
+        viper.silicon.utils.ast.BigAnd(
+          levelAccess +: (procedure.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion) })
+        )
+      )()
+
     val inhaleSkolemizationFunctionFootprints =
       vpr.Inhale(
         viper.silicon.utils.ast.BigAnd(
@@ -329,7 +372,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       vprMethod.body.map(actualBody =>
         actualBody.copy(
           ss =
-            inhaleSkolemizationFunctionFootprints +: initializeFootprints ++:
+            initializeLvl +:
+            inhaleSkolemizationFunctionFootprints +:
+            initializeFootprints ++:
             actualBody.ss,
           scopedDecls =
               levelVariableDecl +:
@@ -601,6 +646,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val inferContext = inferContextAllInstances("infer context inside while")
 
+        val lvlInvariant =
+          vpr.And(
+            levelAccess,
+            vpr.EqCmp(
+              levelLocation,
+              vpr.LabelledOld(levelLocation, preAtomicityLabel.name)()
+            )()
+          )()
+
+
         val vprBody =
           vpr.Seqn(
             inhaleSkolemizationFunctionFootprints +:
@@ -613,9 +668,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         var vprWhile =
           vpr.While(
             cond = translate(cond),
-            invs = invs map (inv => translate(inv.assertion).withSource(inv, overwrite = true)),
+            invs = lvlInvariant +: (invs map (inv => translate(inv.assertion).withSource(inv, overwrite = true))),
             body = vprBody
           )()
+
+//        errorBacktranslator.addErrorTransformer {
+//          case e: vprerr.LoopInvariantNotPreserved if e causedBy lvlInvariant =>
+//            ???
+//        }
 
         vprWhile = vprWhile.withSource(statement)
 
@@ -1053,6 +1113,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val vprPreCallLabel = freshLabel("pre_call")
 
+          val vprLvlConstraint =
+            vpr.utility.Expressions.instantiateVariables(
+              viper.silicon.utils.ast.BigAnd(
+                callee.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion) }
+              ),
+              vprStub.formalArgs,
+              vprArguments)
+
           val vprPre =
             vpr.utility.Expressions.instantiateVariables(
               viper.silicon.utils.ast.BigAnd(vprStub.pres),
@@ -1071,6 +1139,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               },
               vpr.utility.Rewriter.Traverse.TopDown)
 
+          val vprExhaleLvlConstraint = vpr.Exhale(vprLvlConstraint)()
+
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.ExhaleFailed if e causedBy vprExhaleLvlConstraint =>
+              PreconditionError(call, CalleeLevelTooHighError(call))
+          }
+
           val vprExhalePres = vpr.Exhale(vprPre)()
 
           val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
@@ -1088,6 +1163,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           vpr.Seqn(
             vprPreCallLabel +:
+            vprExhaleLvlConstraint +:
             vprExhalePres +:
             stabilizeFrameRegions +:
             vprHavocTargets :+
