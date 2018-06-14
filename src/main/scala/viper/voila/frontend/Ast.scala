@@ -68,6 +68,7 @@ sealed trait PGuardModifier extends PModifier
 
 case class PUniqueGuard() extends PGuardModifier
 case class PDuplicableGuard() extends PGuardModifier
+case class PDivisibleGuard() extends PGuardModifier
 
 /*
  * Identifiers
@@ -129,12 +130,7 @@ case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
  * Actions
  */
 
-case class PAction(binders: Vector[PNamedBinder],
-                   condition: PExpression,
-                   guardId: PIdnUse,
-                   guardArguments: Vector[PExpression],
-                   from: PExpression,
-                   to: PExpression)
+case class PAction(binders: Vector[PNamedBinder], condition: PExpression, guards: Vector[PBaseGuardExp], from: PExpression, to: PExpression)
     extends PAstNode with PBindingContext with PScope {
 
   def binds(binder: PLogicalVariableBinder): Boolean =
@@ -297,7 +293,7 @@ sealed trait PRuleStatement extends PStatement {
   def body: PStatement
 }
 
-case class PMakeAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+case class PMakeAtomic(regionPredicate: PPredicateExp, guards: Vector[PRegionedGuardExp], body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "make-atomic"
@@ -311,7 +307,7 @@ case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
   val components: Vector[PStatement] = Vector(body)
 }
 
-case class PUseAtomic(regionPredicate: PPredicateExp, guard: PGuardExp, body: PStatement)
+case class PUseAtomic(regionPredicate: PPredicateExp, guards: Vector[PRegionedGuardExp], body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "use-atomic"
@@ -452,9 +448,20 @@ case class PMapLookup(map: PExpression, key: PExpression) extends PMapExp
 case class PPointsTo(location: PLocation, value: PExpression)
     extends PExpression with PBindingContext
 
-case class PGuardExp(guard: PIdnUse, arguments: Vector[PExpression]) extends PExpression {
-  lazy val regionId: PIdnExp = arguments.head.asInstanceOf[PIdnExp]
-}
+
+sealed trait PGuardExp extends PExpression
+
+case class PBaseGuardExp(guard: PIdnUse, argument: PGuardArg) extends PGuardExp
+
+case class PRegionedGuardExp(guard: PIdnUse, regionId: PIdnExp, argument: PGuardArg) extends PGuardExp
+
+
+sealed trait PGuardArg extends PAstNode with PrettyExpression
+
+case class PStandartGuardArg(arguments: Vector[PExpression]) extends PGuardArg
+
+case class PSetGuardArg(set: PExpression) extends PGuardArg
+
 
 sealed trait PTrackingResource extends PExpression {
   def regionId: PIdnUse

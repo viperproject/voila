@@ -402,16 +402,16 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val vprRegionIdArg = regionInArgs.head
 
     val inhaleDiamond =
-      vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId.id)))()
+      vpr.Inhale(diamondAccess(translateUseOf(regionId)))()
 
-    val guard = translate(makeAtomic.guard)
+    val guard = viper.silicon.utils.ast.BigAnd(makeAtomic.guards map translate)
 
     val exhaleGuard =
-      vpr.Exhale(guard)().withSource(makeAtomic.guard)
+      vpr.Exhale(guard)().withSource(makeAtomic.guards.head)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
-        MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
+        MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guards.head))
     }
 
     val regionPredicate =
@@ -442,6 +442,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val assignContext = assignAtomicityContext(region, regionInArgs)
+
+    val guardArgEvaluationLabel = freshLabel("pre_havoc")
 
     val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
 
@@ -492,16 +494,16 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         regionStateChangeAllowedByGuard(
           region,
           regionInArgs,
-          makeAtomic.guard.guard.name,
-          guard,
+          makeAtomic.guards, /* FIXME: only temporal placeholder, guard is going to be a vector itself */
           vprStepFrom,
-          vprStepTo
+          vprStepTo,
+          guardArgEvaluationLabel
         ).withSource(makeAtomic)
 
       errorBacktranslator.addErrorTransformer {
         case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
           MakeAtomicError(makeAtomic)
-            .dueTo(IllegalRegionStateChangeError(makeAtomic.guard))
+            .dueTo(IllegalRegionStateChangeError(makeAtomic.guards.head))
             .dueTo(hintAtEnclosingLoopInvariants(regionId))
       }
 
@@ -567,6 +569,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val result =
       vpr.Seqn(
         Vector(
+          guardArgEvaluationLabel,
           exhaleGuard,
           exhaleRegionPredicate,
           preFrameExhales,
@@ -794,7 +797,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           .dueTo(ebt.translate(e.reason))
     }
 
-    val guard = translate(useAtomic.guard)
+    val guard = viper.silicon.utils.ast.BigAnd(useAtomic.guards map translate)
 
     /* Temporarily exhale the guard used in the use-atomic rule so that it is no longer held
      * when stabilising the frame.
@@ -802,11 +805,12 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
      * Note: The guard must be checked in any case! I.e. the check is independent of the
      * technical treatment of frame stabilisation.
      */
-    val exhaleGuard = vpr.Exhale(guard)().withSource(useAtomic.guard)
+    // FIXME: currently head is taken as source
+    val exhaleGuard = vpr.Exhale(guard)().withSource(useAtomic.guards.head)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
-        UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
+        UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guards.head))
     }
 
     val inhaleGuard = vpr.Inhale(guard)()
@@ -835,10 +839,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       regionStateChangeAllowedByGuard(
         region,
         vprInArgs,
-        useAtomic.guard.guard.name,
-        guard,
+        useAtomic.guards,
         oldState,
-        currentState
+        currentState,
+        preUseAtomicLabel
       ).withSource(useAtomic)
 
     errorBacktranslator.addErrorTransformer {

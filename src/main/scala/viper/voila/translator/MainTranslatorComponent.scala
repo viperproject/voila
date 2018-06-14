@@ -946,10 +946,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
 
 
-        val collectAllGuardExps = collect[Vector, PGuardExp] { case exp: PGuardExp => exp }
+        val collectAllGuardExps = collect[Vector, PRegionedGuardExp] { case exp: PRegionedGuardExp => exp }
         val guardExps = collectAllGuardExps(region.interpretation)
 
-        val vprGuardPredicateAccesses: Vector[vpr.PredicateAccessPredicate] = {
+        val vprGuardPredicateAccesses: Vector[(vpr.Exp, vpr.PredicateAccess)] = {
           guardExps foreach (guardExp => {
             assert(
               region.formalInArgs.exists(_.id.name == guardExp.regionId.id.name),
@@ -970,14 +970,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
         val vprPermissionConstraintsForUniqueGuards =
-          vprGuardPredicateAccesses map (vprGuardAccess => {
+          vprGuardPredicateAccesses map {case (_, vprGuardAccessLoc) =>
             vpr.Inhale(
               vpr.PermLeCmp(
-                vpr.CurrentPerm(vprGuardAccess.loc)(),
+                vpr.CurrentPerm(vprGuardAccessLoc)(),
                 vpr.FullPerm()()
               )()
             )()
-          })
+          }
 
 
 
@@ -1468,7 +1468,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         )()
 
       case pointsTo: PPointsTo => translate(pointsTo)
-      case guard: PGuardExp => translate(guard)
+      case guard: PRegionedGuardExp => translate(guard)
 
       case PUnfolding(predicate, body) =>
         /* TODO: Rather brittle, improve! */

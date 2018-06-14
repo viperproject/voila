@@ -43,7 +43,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                    case other if !other.isInstanceOf[ErrorEntity] =>
                      message(receiver, s"Receiver $receiver is not of struct type")
                 }
-              case other if !other.isInstanceOf[PUnknownType] =>
+              case other if !other.isInstanceOf[PUnknownType] => // FIXME: looks wrong
                 message(receiver, s"Receiver $receiver is not of reference type")
             }
 
@@ -74,8 +74,56 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         contractMessages ++ atomicityMessages
 
-      case action: PAction =>
-        reportTypeMismatch(action.to, typ(action.from))
+      case action: PAction => // TODO: add guard type check and it seems that condition type check is missing
+
+        reportTypeMismatch(action.to, typ(action.from)) ++
+        action.guards.flatMap { case PBaseGuardExp(guardId, guardArgument) =>
+          checkUse(entity(guardId)) {
+            case GuardEntity(decl, region) => check(guardArgument) {
+              case PStandartGuardArg(guardArguments) => check(decl.modifier) {
+                case _: PUniqueGuard | _: PDuplicableGuard =>
+                  val lengthMessages = reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
+
+                  val typeMessages =
+                    if (lengthMessages.isEmpty) {
+                      reportTypeMismatch(guardArguments, decl.formalArguments)
+                    } else {
+                      Vector.empty
+                    }
+
+                  lengthMessages ++ typeMessages
+
+                case _: PDivisibleGuard =>
+
+                  // FIXME: Indexed divisible guards are currently not supported, add message
+                  val lengthMessages =
+                    reportArgumentLengthMismatch(guardId, decl.id, 1 /* decl.formalArguments.length */, guardArguments.length)
+
+                  val typeMessages =
+                    if (lengthMessages.isEmpty) {
+                      reportTypeMismatch(guardArguments.head, PFracType(), typ(guardArguments.head)) ++
+                      reportTypeMismatch(guardArguments.tail, decl.formalArguments.tail)
+                    } else {
+                      Vector.empty
+                    }
+
+                  lengthMessages ++ typeMessages
+              }
+
+              case PSetGuardArg(guardSet) => check(decl.modifier) {
+                case _: PUniqueGuard | _: PDuplicableGuard =>
+
+                  reportTypeMismatch(guardSet, expectedGuardSetTyp(decl), typ(guardSet))
+
+                case _: PDivisibleGuard =>
+                  message(guardId, s"Indexed divisible guards are currently not supported, but got ${guardId.name}")
+              }
+            }
+
+            case _ =>
+              message(guardId, s"Expected a guard, but got ${guardId.name}")
+          }
+        }
 
       case PAssign(lhs, rhs) =>
         val lhsEntity = entity(lhs)
@@ -173,21 +221,27 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     message(id, s"Expected a predicate or a region, but got ${id.name}")
                 }
 
-              case PGuardExp(guardId, arguments) =>
+              case PRegionedGuardExp(guardId, regionId, argument) =>
                 checkUse(entity(guardId)) {
                   case GuardEntity(decl, region) =>
-                    val lengthMessages =
-                      reportArgumentLengthMismatch(exp, decl.id, decl.formalArguments.length + 1, arguments.length)
+                    argument match {
+                      case PStandartGuardArg(arguments) =>
+                        val lengthMessages =
+                          reportArgumentLengthMismatch (exp, decl.id, decl.formalArguments.length, arguments.length)
 
-                    val typeMessages =
-                      if (lengthMessages.isEmpty) {
-                        reportTypeMismatch(arguments.tail, decl.formalArguments) ++
-                        reportTypeMismatch(arguments.head, PRegionIdType(), typ(arguments.head))
-                      } else {
-                        Vector.empty
-                      }
+                        val typeMessages =
+                          if (lengthMessages.isEmpty) {
+                            reportTypeMismatch (arguments, decl.formalArguments) ++
+                            reportTypeMismatch (regionId, PRegionIdType (), typ (regionId) )
+                          } else {
+                            Vector.empty
+                          }
 
-                    lengthMessages ++ typeMessages
+                        lengthMessages ++ typeMessages
+
+                      case PSetGuardArg(setArg) =>
+                        reportTypeMismatch(setArg, expectedGuardSetTyp(decl), typ(setArg))
+                    }
 
                   case _ =>
                     message(guardId, s"Expected a guard, but got ${guardId.name}")
@@ -199,6 +253,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     message(exp, s"Out of bounds access in ${exp.pretty}", index >= elementTypes.length)
                 }
           })
+    }
+
+  private def expectedGuardSetTyp(decl: PGuardDecl): PType =
+    if(decl.formalArguments.length == 1) {
+      PSetType(decl.formalArguments.head.typ)
+    } else {
+      PSetType(PTupleType(decl.formalArguments map (_.typ)))
     }
 
   private def reportArgumentLengthMismatch(offendingNode: PAstNode,
@@ -403,8 +464,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     */
   lazy val entity: PIdnNode => Entity =
     attr {
-      case g @ tree.parent(PGuardExp(guardId, _)) if guardId eq g => lookupGuard(guardId)
-      case g @ tree.parent(PAction(_, _, guardId, _, _, _)) if guardId eq g => lookupGuard(guardId)
+      case g @ tree.parent(PRegionedGuardExp(guardId, _, _)) if guardId eq g => lookupGuard(guardId)
+      case g @ tree.parent(PBaseGuardExp(guard, _)) if guard eq g => lookupGuard(g)
       case n => lookup(env(n), n.name, UnknownEntity())
     }
 
@@ -428,6 +489,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val usedWithRegion: PIdnNode => PRegion =
     attr(regionIdUsedWith(_)._1)
+
+  /**
+    * Some region predicate of the region referred to by an identifier definition or use.
+    */
 
   lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp =
     attr(id => regionIdUsedWith(id) match { case (region, regionAssertions) =>
@@ -618,13 +683,23 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   AstUtils.isBoundVariable(action.to, binder)) {
 
                 typ(region.state)
-              } else if (action.guardArguments.exists(arg => AstUtils.isBoundVariable(arg, binder))) {
-                val guard = region.guards.find(_.id.name == action.guardId.name).get
-                val argIdx = action.guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
-
-                guard.formalArguments(argIdx).typ
               } else {
-                PUnknownType()
+                val guardOption = action.guards find { _.argument match {
+                  case PStandartGuardArg(args) =>
+                    args.exists(AstUtils.isBoundVariable(_,binder))
+
+                  case _ => false
+                }}
+
+                guardOption match {
+                  case Some(PBaseGuardExp(guardId, PStandartGuardArg(guardArguments))) =>
+                    val guard = region.guards.find(_.id.name == guardId.name).get
+                    val argIdx = guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
+
+                    guard.formalArguments(argIdx).typ
+
+                  case _ => PUnknownType()
+                }
               }
 
             case comprehension @ PSetComprehension(namedBinder: PNamedBinder, _, _)
@@ -687,6 +762,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         predicateExp
     }
+
+  /**
+    * Index of the argument bound by the binder in the predicate. None is returned if the region state is bound.
+    */
 
   lazy val outArgumentIndexOf: PPredicateExp => PLogicalVariableBinder => Option[Int] =
     paramAttr(exp => binder => {
@@ -787,6 +866,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 PTupleType(explicitTuple.elements map typ)
             }
 
+          case explicitNPair: PExplicitTuple =>
+            explicitNPair.typeAnnotation match {
+              case Some(types) =>
+                PTupleType(types)
+
+              case None =>
+                PTupleType(explicitNPair.elements map typ)
+            }
+
           case explicitMap: PExplicitMap =>
             explicitMap.typeAnnotation match {
               case Some((typ1, typ2)) =>
@@ -849,7 +937,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case _: PMapDisjoint => PBoolType()
           case conditional: PConditional => typ(conditional.thn)
           case unfolding: PUnfolding => typ(unfolding.body)
-          case _: PPointsTo | _: PPredicateExp | _: PGuardExp | _: PTrackingResource => PBoolType()
+          case _: PPointsTo | _: PPredicateExp | _: PRegionedGuardExp | _: PBaseGuardExp | _: PTrackingResource => PBoolType()
           case binder: PLogicalVariableBinder => typeOfLogicalVariable(binder)
           case _ => PUnknownType()
         }
@@ -922,6 +1010,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       // case tree.parent(_: PSetContains) => /* TODO: Return set<T> */
       // case tree.parent(_: PSetUnion) => /* TODO: Return set<T> */
       // case tree.parent (_: PTupleGet) => /* TODO: Return pairN<TS> */
+      // case tree.parent (_: PNPairGFet) => /* TODO: Return pairN<TS> */
       // case tree.parent(_: PMapDisjoint | _: PMapUnion) => /* TODO: Return map<T1, T2> */
       // case tree.parent(_: PMapKeys) => /* TODO: Return set<T> */
       // case tree.parent(_: PMapLookup) => /* TODO: Return map<key-type, T> */
@@ -1041,7 +1130,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PUnfolding(predicate, body) =>
         freeVariables(predicate) ++ freeVariables(body)
 
-      case exp: PGuardExp => ListSet(exp.regionId.id)
+      case exp: PRegionedGuardExp => ListSet(exp.regionId.id)
       case PDiamond(regionId) => ListSet(regionId)
 
       case PRegionUpdateWitness(regionId, from, to) =>
@@ -1051,6 +1140,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     }
 
   lazy val boundVariables: PExpression => ListSet[PIdnDef] =
+    /* TODO: check whether or not the current behaviour is intended. */
     attr {
       case PNamedBinder(id, _) => ListSet(id)
       case _ => ListSet.empty
@@ -1088,3 +1178,4 @@ object AtomicityKind {
   case object Nonatomic extends AtomicityKind
   case object Atomic extends AtomicityKind
 }
+

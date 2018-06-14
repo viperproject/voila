@@ -75,7 +75,7 @@ class DefaultPrettyPrinter
     }
 
   def toDoc(action: PAction): Doc = {
-    val PAction(binders, condition, guardId, guardArguments, from, to) = action
+    val PAction(binders, condition, guards, from, to) = action
 
     val bindersDoc =
       if (binders.isEmpty) emptyDoc
@@ -87,11 +87,9 @@ class DefaultPrettyPrinter
         case _ => toDoc(condition) <+> "|" <> space
       }
 
-    val guardDoc =
-      toDoc(guardId) <>
-      (if (guardArguments.isEmpty) emptyDoc else asArguments(guardArguments))
+    val guardsDoc = parens(ssep(guards map toDoc, comma <> space))
 
-    bindersDoc <> constraintDoc <> guardDoc <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
+    bindersDoc <> constraintDoc <> guardsDoc <> ":" <+> toDoc(from) <+> "~>" <+> toDoc(to)
   }
 
   def toDoc(clause: PSpecificationClause): Doc = {
@@ -126,6 +124,7 @@ class DefaultPrettyPrinter
     modifier match {
       case PUniqueGuard() => "unique"
       case PDuplicableGuard() => "duplicable"
+      case PDivisibleGuard() => "divisible"
     }
   }
 
@@ -277,13 +276,13 @@ class DefaultPrettyPrinter
 
   def toDoc(rule: PRuleStatement): Doc = {
     rule match {
-      case PMakeAtomic(regionPredicate, guard, body) =>
+      case PMakeAtomic(regionPredicate, guards, body) =>
         (   "make_atomic" <> line
-         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> toDoc(guard) <> semi) <> line
+         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> ssep(guards map toDoc, comma <> space) <> semi) <> line
          <> braces(nest(toDoc(body))))
-      case PUseAtomic(regionPredicate, guard, body) =>
+      case PUseAtomic(regionPredicate, guards, body) =>
         (   "use_atomic" <> line
-         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> toDoc(guard) <> semi) <> line
+         <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> ssep(guards map toDoc, comma <> space) <> semi) <> line
          <> braces(nest(toDoc(body))))
       case PUpdateRegion(regionPredicate, body) =>
         (   "update_region" <> line
@@ -325,6 +324,12 @@ class DefaultPrettyPrinter
 
       case PExplicitTuple(elements, typeAnnotation) =>
         s"Tuple${elements.length}" <>
+        typeAnnotation.fold(emptyDoc)(ta =>
+          "[" <> ssep(ta map toDoc, comma <> space) <> "]") <>
+        "(" <> ssep(elements map toDoc, comma <> space) <> ")"
+
+      case PExplicitTuple(elements, typeAnnotation) =>
+        s"Pair${elements.length}" <>
         typeAnnotation.fold(emptyDoc)(ta =>
           "[" <> ssep(ta map toDoc, comma <> space) <> "]") <>
         "(" <> ssep(elements map toDoc, comma <> space) <> ")"
@@ -383,8 +388,11 @@ class DefaultPrettyPrinter
       case PPointsTo(id, value) => toDoc(id) <+> "|->" <+> toDoc(value)
       case PDiamond(regionId) => toDoc(regionId) <+> "|=>" <+> "<D>"
 
-      case PGuardExp(guard, arguments) =>
-        toDoc(guard) <> asArguments(arguments.tail) <> "@" <> toDoc(arguments.head)
+      case PRegionedGuardExp(guard, regionId, argument) =>
+        toDoc(guard) <> toDoc(argument) <> "@" <> toDoc(regionId)
+
+      case PBaseGuardExp(guard, argument) =>
+        toDoc(guard) <> toDoc(argument)
 
       case PRegionUpdateWitness(regionId, from, to) =>
         toDoc(regionId) <+> "|=>" <+> "(" <+> toDoc(from) <> "," <+> toDoc(to) <> ")"
@@ -399,6 +407,8 @@ class DefaultPrettyPrinter
       case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
       case PTupleType(elementTypes) =>
         s"tuple${elementTypes.length}" <> angles(ssep(elementTypes map toDoc, comma <> space))
+      case PTupleType(elementTypes) =>
+        s"pair${elementTypes.length}" <> angles(ssep(elementTypes map toDoc, comma <> space))
       case PMapType(elementType1, elementType2) =>
         "map" <> angles(toDoc(elementType1) <> "," <+> toDoc(elementType2))
       case PRefType(referencedType) => toDoc(referencedType)
@@ -406,4 +416,12 @@ class DefaultPrettyPrinter
       case PUnknownType() => "<unknown>"
       case PNullType() => "<null>"
     }
+
+      def toDoc(arg: PGuardArg): Doc =
+        arg match {
+          case PStandartGuardArg(args) =>
+            asArguments(args)
+          case PSetGuardArg(set) =>
+            "|" <> toDoc(set) <> "|"
+        }
 }
