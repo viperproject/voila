@@ -311,7 +311,7 @@ class DefaultPrettyPrinter
       case PUnfolding(predicate, body) =>
         "unfolding" <+> toDoc(predicate) <+> "in" <+> toDoc(body)
 
-      /* TODO: Unify cases for PExplicitSet, PExplicitSeq and PExplicitPair */
+      /* TODO: Unify cases for PExplicitSet, PExplicitSeq and PExplicitTuple */
 
       case PExplicitSet(args, typeAnnotation) =>
         "Set" <>
@@ -323,11 +323,11 @@ class DefaultPrettyPrinter
         typeAnnotation.fold(emptyDoc)(typ => "[" <> toDoc(typ) <> "]") <>
         "(" <> ssep(args map toDoc, comma <> space) <> ")"
 
-      case PExplicitPair(elem1, elem2, typeAnnotation) =>
-        "Pair" <>
+      case PExplicitTuple(elements, typeAnnotation) =>
+        s"Tuple${elements.length}" <>
         typeAnnotation.fold(emptyDoc)(ta =>
-          "[" <> ssep(Vector(ta._1, ta._2) map toDoc, comma <> space) <> "]") <>
-        "(" <> ssep(Vector(elem1, elem2) map toDoc, comma <> space) <> ")"
+          "[" <> ssep(ta map toDoc, comma <> space) <> "]") <>
+        "(" <> ssep(elements map toDoc, comma <> space) <> ")"
 
       case PExplicitMap(elements, typeAnnotation) =>
         val elementsDoc =
@@ -367,8 +367,7 @@ class DefaultPrettyPrinter
       case PSeqSize(seq) => "size" <> parens(toDoc(seq))
       case PSeqHead(seq) => "head" <> parens(toDoc(seq))
       case PSeqTail(seq) => "tail" <> parens(toDoc(seq))
-      case PPairFirst(pair) => "fst" <> parens(toDoc(pair))
-      case PPairSecond(pair) => "snd" <> parens(toDoc(pair))
+      case PTupleGet(tuple,index) => s"get${index}" <> parens(toDoc(tuple))
       case PMapUnion(left, right) => "uni" <> parens(toDoc(left) <> comma <+> toDoc(right))
       case PMapDisjoint(left, right) => "disj" <> parens(toDoc(left) <> comma <+> toDoc(right))
       case PMapKeys(map) => "keys" <> parens(toDoc(map))
@@ -397,8 +396,8 @@ class DefaultPrettyPrinter
       case PFracType() => "frac"
       case PSetType(elementType) => "set" <> angles(toDoc(elementType))
       case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
-      case PPairType(elementType1, elementType2) =>
-        "pair" <> angles(toDoc(elementType1) <> "," <+> toDoc(elementType2))
+      case PTupleType(elementTypes) =>
+        s"tuple${elementTypes.length}" <> angles(ssep(elementTypes map toDoc, comma <> space))
       case PMapType(elementType1, elementType2) =>
         "map" <> angles(toDoc(elementType1) <> "," <+> toDoc(elementType2))
       case PRefType(referencedType) => toDoc(referencedType)

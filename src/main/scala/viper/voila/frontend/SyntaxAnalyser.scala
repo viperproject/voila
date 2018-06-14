@@ -44,9 +44,17 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "Set", "Int", "Nat", "union",
     "Seq", "size", "head", "tail",
     "Pair", "fst", "snd",
+    "Tuple",
     "Map", "keys", "vals", "lkup", "upd", "disj",
     "unfolding"
   )
+
+  val reservedPatterns = Set(
+    """get\d+""".r.pattern
+  )
+
+  def isReservedWord(word: String): Boolean =
+    (reservedWords contains word) || (reservedPatterns exists (_.matcher(word).matches()))
 
   lazy val program: Parser[PProgram] =
     (struct | region | predicate | procedure | makro).* ^^ (allMembers => {
@@ -436,6 +444,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     setExp0 |
     seqExp0 |
     pairExp0 |
+    tupleExp0 |
     mapExp0 |
     applicationLikeExp |
     (location <~ "|->") ~ (binder | exp70) ^^ PPointsTo |
@@ -491,17 +500,31 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case typeAnnotation ~ elements => PExplicitSeq(elements, typeAnnotation)
     }
 
-  lazy val pairExp0: Parser[PPairExp] =
+  lazy val pairExp0: Parser[PTupleExp] =
     pairLiteral |
-    "fst" ~> "(" ~> expression <~ ")" ^^ PPairFirst |
-    "snd" ~> "(" ~> expression <~ ")" ^^ PPairSecond
+    "fst" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 0)) |
+    "snd" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 1))
 
-  lazy val pairLiteral: Parser[PExplicitPair] =
+  lazy val pairLiteral: Parser[PExplicitTuple] =
     "Pair" ~>
     ("[" ~> (typ <~ ",") ~ typ <~ "]").? ~
     ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ {
       case typeAnnotation ~ (element1 ~ element2) =>
-        PExplicitPair(element1, element2, typeAnnotation map { case t1 ~ t2 => (t1, t2) })
+        PExplicitTuple(Vector(element1, element2), typeAnnotation map { case t1 ~ t2 => Vector(t1, t2) })
+    }
+
+  lazy val tupleExp0: Parser[PTupleExp] =
+    tupleLiteral |
+    ("get" ~> regex("[0-9]+".r)) ~ ("(" ~> expression <~ ")") ^^ {
+      case index ~ expr => PTupleGet(expr, index.toInt)
+    }
+
+  lazy val tupleLiteral: Parser[PExplicitTuple] =
+    "Tuple" ~>
+    ("[" ~> rep1sep(typ, ",") <~ "]").? ~
+    ("(" ~> rep1sep(expression, ",") <~ ")") ^^ {
+      case typeAnnotations ~ elements =>
+        PExplicitTuple(elements, typeAnnotations)
     }
 
   lazy val mapExp0: Parser[PMapExp] =
@@ -542,7 +565,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "frac" ^^^ PFracType() |
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
-    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PPairType |
+    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ {case t1 ~ t2 => PTupleType(Vector(t1,t2))} |
+    "tuple" ~> "<" ~> rep1sep(typ, ",") <~ ">" ^^ PTupleType |
     "map" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PMapType |
     idnuse ^^ PRefType
 
@@ -554,7 +578,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val identifier: Parser[String] =
     "[a-zA-Z_][a-zA-Z0-9_]*".r into (s => {
-      if (reservedWords contains s)
+      if (isReservedWord(s))
         failure(s"""keyword "$s" found where identifier expected""")
       else
         success(s)

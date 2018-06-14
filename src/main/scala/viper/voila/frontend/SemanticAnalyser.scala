@@ -192,6 +192,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   case _ =>
                     message(guardId, s"Expected a guard, but got ${guardId.name}")
                 }
+
+              case PTupleGet(tuple, index) =>
+                check(typ(tuple)) {
+                  case PTupleType(elementTypes) =>
+                    message(exp, s"Out of bounds access in ${exp.pretty}", index >= elementTypes.length)
+                }
           })
     }
 
@@ -772,16 +778,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   PUnknownType()
             }
 
-          case explicitPair: PExplicitPair =>
-            explicitPair.typeAnnotation match {
-              case Some((typ1, typ2)) =>
-                PPairType(typ1, typ2)
+          case explicitTuple: PExplicitTuple =>
+            explicitTuple.typeAnnotation match {
+              case Some(types) =>
+                PTupleType(types)
 
               case None =>
-                val typ1 = typ(explicitPair.element1)
-                val typ2 = typ(explicitPair.element2)
-
-                PPairType(typ1, typ2)
+                PTupleType(explicitTuple.elements map typ)
             }
 
           case explicitMap: PExplicitMap =>
@@ -815,8 +818,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case _: PSeqSize => PIntType()
           case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
           case tailExp: PSeqTail => typ(tailExp.seq)
-          case fstExp: PPairFirst => typ(fstExp.pair).asInstanceOf[PPairType].elementType1
-          case sndExp: PPairSecond => typ(sndExp.pair).asInstanceOf[PPairType].elementType2
+          case getExp: PTupleGet =>
+            val elementTypes = typ(getExp.tuple).asInstanceOf[PTupleType].elementTypes
+            if (elementTypes.isDefinedAt(getExp.index)) {
+              elementTypes(getExp.index)
+            } else {
+              PUnknownType() // FIXME: maybe replace with out of bounds error message
+            }
+
 
           case PMapUnion(left, right) =>
             (typ(left), typ(right)) match {
@@ -910,7 +919,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       /* TODO: Unification is needed for handling the next cases, which require type variables */
       // case tree.parent(_: PSetUnion) => /* TODO: Return set<T> */
-      // case tree.parent(_: PPairFirst | _: PPairSecond) => /* TODO: Return pair<T1, T2> */
+      // case tree.parent (_: PTupleGet) => /* TODO: Return pairN<TS> */
       // case tree.parent(_: PMapDisjoint | _: PMapUnion) => /* TODO: Return map<T1, T2> */
       // case tree.parent(_: PMapKeys) => /* TODO: Return set<T> */
       // case tree.parent(_: PMapLookup) => /* TODO: Return map<key-type, T> */
