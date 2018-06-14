@@ -77,14 +77,9 @@ abstract_atomic procedure unlock(id a, int lvl, memcell x)
   // fold U(a, lvl, x);
 }
 
-region LevelDummy(id r, int lvl)
-  guards { duplicable LevelDummyG; }
-  interpretation { true }
-  state { 0 }
-  actions {  }
 
-procedure non_atomic_unlock(id r, int alvl, id a, int lvl, memcell x, id dummy, int methodLvl)
-  requires Locked(r, alvl, a, lvl, x) && LevelDummy(dummy, methodLvl) && methodLvl > alvl;
+procedure non_atomic_unlock(id r, int alvl, id a, int lvl, memcell x)
+  requires Locked(r, alvl, a, lvl, x);
   requires Inv();
 {
   unfold Locked(r, alvl, a, lvl, x);
@@ -132,8 +127,8 @@ abstract_atomic procedure lock(id a, int lvl, memcell x)
   // fold L(a, lvl, x);
 }
 
-procedure non_atomic_lock(id r, int alvl, id a, int lvl, memcell x, id dummy, int methodLvl)
-  requires isLock(r, alvl, a, lvl, x) && Z@r && LevelDummy(dummy, methodLvl) && methodLvl > alvl;
+procedure non_atomic_lock(id r, int alvl, id a, int lvl, memcell x)
+  requires isLock(r, alvl, a, lvl, x) && Z@r;
   ensures  Locked(r, alvl, a, lvl, x);
   // ensures  isLock(r, a, x);
 {

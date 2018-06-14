@@ -57,26 +57,66 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def assignOldLevel(label: vpr.Label): vpr.Stmt =
     assignLevel(vpr.LabelledOld(levelLocation, label.name)())
 
+  // TODO: extremely hacky maybe improve with kiama rewriting
+  def collectWithPredicateUnfolding[A](exp: PExpression)(func: PartialFunction[PExpression, A]): List[A] = {
+    val buffer: collection.mutable.ListBuffer[A] = collection.mutable.ListBuffer.empty
+
+    var visitedExpressions: Set[PExpression] = Set.empty
+
+    def customTranslationScheme: PartialFunction[PExpression, vpr.Exp] = {
+      case exp: PPredicateExp if extractablePredicateInstance(exp) && !visitedExpressions.contains(exp) =>
+        visitedExpressions += exp
+        val translatedBody = translatePredicateBodyWith(exp)(customTranslationScheme)
+        translatedBody.getOrElse(vpr.TrueLit()().withSource(exp))
+
+      case exp: PExpression if func.isDefinedAt(exp) && !visitedExpressions.contains(exp) =>
+        visitedExpressions += exp
+        buffer += func(exp)
+        translateWith(exp)(customTranslationScheme)
+    }
+
+    translateWith(exp)(customTranslationScheme)
+    buffer.toList
+  }
+
+  def collectLevels(exp: PExpression): List[PExpression] =
+    collectWithPredicateUnfolding(exp){
+      case pred: PPredicateExp if extractableRegionInstance(pred) =>
+
+        val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
+        inArgs(1)
+    }
+
   def levelHigherThanOccuringRegionLevels(exp: PExpression): vpr.Exp =
     levelHigherThanOccuringRegionLevels(exp, e => e)
 
   def levelHigherThanOccuringRegionLevels(exp: PExpression, evaluationState: vpr.Exp => vpr.Exp): vpr.Exp = {
 
-    var collectedExpLevels: List[vpr.Exp] = Nil
+    val levelExps = collectLevels(exp)
 
-    translateWith(exp) {
-      case pred: PPredicateExp if extractableRegionInstance(pred) =>
-
-        val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
-
-        collectedExpLevels ::= evaluationState(translate(inArgs(1)))
-
-        translate(pred)
-    }
+//    var collectedExpLevels: List[vpr.Exp] = Nil
+//
+//    translateWith(exp) {
+//      case pred: PPredicateExp if extractableRegionInstance(pred) =>
+//
+//        val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
+//
+//        collectedExpLevels ::= evaluationState(translate(inArgs(1)))
+//
+//        translate(pred)
+//    }
 
     viper.silicon.utils.ast.BigAnd(
-      collectedExpLevels map (vpr.GtCmp(levelLocation, _)())
+      levelExps map {l => vpr.GtCmp(levelLocation, evaluationState(translate(l)))()}
     )
+  }
+
+  def dependsOnReturnValues(exp: PExpression, method: PProcedure): Boolean = {
+
+    val collectAllUseNames = collect[Set, String]{ case exp: PIdnExp => exp.id.name }
+    val useNames = collectAllUseNames(exp)
+
+    method.formalReturns.exists(f => useNames.contains(f.id.name))
   }
 
   var checkLevelLater: Boolean = true
@@ -85,14 +125,28 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def levelHigherOrEqualToProcedureLevel(procedure: PProcedure): vpr.Exp =
     levelHigherOrEqualToProcedureLevel(procedure, e => e)
 
-  def levelHigherOrEqualToProcedureLevel(procedure: PProcedure, evaluationState: vpr.Exp => vpr.Exp): vpr.Exp =
-    viper.silver.ast.utility.Simplifier.simplify(
-      viper.silicon.utils.ast.BigAnd(
-        levelAccess +:
-          (procedure.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion, evaluationState) }) // ++:
-          //(procedure.posts map { post => levelHigherThanOccuringRegionLevels(post.assertion, evaluationState) })
-      )
+  def levelHigherOrEqualToProcedureLevel(procedure: PProcedure, evaluationState: vpr.Exp => vpr.Exp): vpr.Exp = {
+    val preLevels = procedure.pres
+      .flatMap{ pre => collectLevels(pre.assertion) }
+
+    val postLevels = procedure.posts
+      .flatMap{ pre => collectLevels(pre.assertion) }
+      .filter(e => !dependsOnReturnValues(e,procedure))
+
+    val levels = (preLevels ++ postLevels).distinct
+
+    viper.silicon.utils.ast.BigAnd(
+      levelAccess +:
+        (levels map {l => vpr.GtCmp(levelLocation, translate(l))()})
     )
+  }
+//    viper.silver.ast.utility.Simplifier.simplify(
+//      viper.silicon.utils.ast.BigAnd(
+//        levelAccess +:
+//          (procedure.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion, evaluationState) }) // ++:
+//          //(procedure.posts map { post => levelHigherThanOccuringRegionLevels(post.assertion, evaluationState) })
+//      )
+//    )
 
 
   val diamondField: vpr.Field =
@@ -233,6 +287,41 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       }
 
     collectBindings(assertion)
+  }
+
+  def extractablePredicateInstance(pred: PPredicateExp): Boolean =
+    semanticAnalyser.entity(pred.predicate).isInstanceOf[PredicateEntity]
+
+  def getPredicateDetails(predicateExp: PPredicateExp): (PPredicate, Vector[PExpression]) = {
+    val predicate =
+      semanticAnalyser.entity(predicateExp.predicate)
+        .asInstanceOf[PredicateEntity]
+        .declaration
+
+    (predicate, predicateExp.arguments)
+  }
+
+  def translatePredicateBodyWith(predicateExp: PPredicateExp)
+                                (customTranslationScheme: PartialFunction[PExpression, vpr.Exp])
+  : Option[vpr.Exp] = {
+
+    assert(extractablePredicateInstance(predicateExp))
+
+    val (predicate, args) = getPredicateDetails(predicateExp)
+
+    val mapping: Map[String, PExpression] = predicate.formalArgs.zip(args).map{ case (f,a) =>
+      f.id.name -> a
+    }(breakOut)
+
+    def combinedCustomTranslationScheme: PartialFunction[PExpression, vpr.Exp] = {
+      case exp@ PIdnExp(id) =>
+        val substitutedExp = if (mapping.contains(id.name)) mapping(id.name) else exp
+        translateWith(substitutedExp)(customTranslationScheme)
+      case exp: PExpression if customTranslationScheme.isDefinedAt(exp) =>
+        customTranslationScheme(exp)
+    }
+
+    predicate.body map (translateWith(_)(combinedCustomTranslationScheme))
   }
 
   /*

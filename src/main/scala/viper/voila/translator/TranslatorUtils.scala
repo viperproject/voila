@@ -16,7 +16,7 @@ import viper.voila.translator.TranslatorUtils.BetterQuantifierWrapper
 
 object TranslatorUtils {
 
-  // TODO: credit
+  // TODO: credit (modified version of snippet from stack overflow)
 
   trait Observer[S] {
     def receiveUpdate(subject: S)
@@ -275,11 +275,11 @@ object TranslatorUtils {
 
     override protected def memberName(objName: String): String = s"${objName}_${name}_df"
 
-    private lazy val domainName: String = s"${name}_Domain"
+    private def domainName: String = s"${name}_Domain"
 
-    protected lazy val dfltAxioms: Vector[vpr.DomainAxiom] = Vector.empty
+    protected def dfltAxioms: Vector[vpr.DomainAxiom] = Vector.empty
 
-    lazy val domain: vpr.Domain =
+    def domain: vpr.Domain =
       vpr.Domain(
         name = domainName,
         functions = Vector.empty,
