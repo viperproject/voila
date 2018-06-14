@@ -358,6 +358,27 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         )()
     }
 
+  def guardTriggerFunctionAxiom(guard: PGuardDecl, region: PRegion): Option[vpr.DomainAxiom] =
+    guardTriggerFunction(guard, region) map { function =>
+      val formalArgs = function.formalArgs.toVector
+      val actualArgs = formalArgs.map(_.localVar)
+
+      val application = guardTriggerFunctionApplication(guard, actualArgs, region).get
+
+      val trigger = vpr.Trigger(Vector(application))()
+
+      val body = vpr.Forall(
+        formalArgs,
+        Vector(trigger),
+        application
+      )()
+
+      vpr.DomainAxiom(
+        s"${application.funcname}_bottom",
+        body
+      )(domainName = regionStateTriggerFunctionsDomainName)
+    }
+
   def translate(region: PRegion): Vector[vpr.Declaration] = {
     val regionPredicateName = region.id.name
 
@@ -380,6 +401,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     (   guardPredicates
      ++ region.guards.flatMap(guard => guardTriggerFunction(guard, region))
+     ++ region.guards.flatMap(guard => guardTriggerFunctionAxiom(guard, region))
      ++ Vector(skolemizationFunctionFootprint)
      ++ skolemizationFunctions
      ++ region.formalOutArgs.indices.map(regionOutArgumentFunction(region, _))
@@ -492,20 +514,17 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     /* [true, guardT(args)] */
     def triggerPart(args: Vector[vpr.Exp]): vpr.Exp =
-      vpr.InhaleExhaleExp(
-        guardTriggerFunctionApplication(
-          guardDecl,
-          translatedRegionId +: args,
-          region
-        ).get,
-        vpr.TrueLit()()
-      )()
+      guardTriggerFunctionApplication(
+        guardDecl,
+        translatedRegionId +: args,
+        region
+      ).get
 
     /* [guardT(args), true] && body */
     def triggerWrapper(args: Vector[vpr.Exp], body: vpr.Exp): vpr.Exp =
       vpr.And(
-        body,
-        triggerPart(args)
+        triggerPart(args),
+        body
       )()
 
 
@@ -926,7 +945,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       // FIXME: assumes globally unique guard name
       val actionKinds = action.guards map (_.guard.name)
 
-      actionKinds forall (guardMap contains _)
+      actionKinds forall guardMap.contains
     }
 
     val relevantActions = region.actions filter relevantAction
