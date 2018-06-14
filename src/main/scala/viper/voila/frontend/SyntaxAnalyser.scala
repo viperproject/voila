@@ -389,6 +389,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val exp60: PackratParser[PExpression] =
     exp60 ~ ("in" ~> exp50) ^^ PSetContains | /* Left-associative */
+    exp60 ~ ("subset" ~> exp50) ^^ PSetSubset | /* Left-associative */
     exp50 ~ (ineqOps ~ exp50).* ^^ { /* TODO: Figure out associativity */
       case exp ~ Seq() =>
         exp

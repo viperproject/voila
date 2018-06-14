@@ -348,7 +348,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             regionStateTriggerFunctionDomain)
       ++ collectedDeclarations
       ++ usedVariableHavocs(tree)
-      ++ recordedSetComprehensions.values
+      ++ recordedSetComprehensionFunctions
       ++ tree.root.regions.flatMap(region => {
             val typ = semanticAnalyser.typ(region.state)
 
@@ -1427,6 +1427,23 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
       case PSetContains(element, set) => vpr.AnySetContains(go(element), go(set))().withSource(expression)
+      case PSetSubset(left, right) =>
+        val name = s"$$$$subset_var"
+        val typ = semanticAnalyser.typ(left) match {
+          case PSetType(elementType) => translate(elementType)
+          case other => sys.error(s"expected set type for ${left}, but got ${other}")
+        }
+
+        val decl = vpr.LocalVarDecl(name, typ)()
+        val leftContains = vpr.AnySetContains(decl.localVar, go(left))()
+        val rightContains = vpr.AnySetContains(decl.localVar, go(right))()
+
+        vpr.Forall(
+          Vector(decl),
+          Seq(vpr.Trigger(Vector(leftContains))()),
+          vpr.Implies(leftContains, rightContains)()
+        )()
+
       case PSetUnion(left, right) => vpr.AnySetUnion(go(left), go(right))().withSource(expression)
       case PSeqSize(seq) => vpr.SeqLength(go(seq))().withSource(expression)
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
