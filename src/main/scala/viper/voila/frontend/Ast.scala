@@ -449,7 +449,10 @@ case class PPointsTo(location: PLocation, value: PExpression)
     extends PExpression with PBindingContext
 
 
-sealed trait PGuardExp extends PExpression
+sealed trait PGuardExp extends PExpression {
+  def guard: PIdnUse
+  def argument: PGuardArg
+}
 
 case class PBaseGuardExp(guard: PIdnUse, argument: PGuardArg) extends PGuardExp
 

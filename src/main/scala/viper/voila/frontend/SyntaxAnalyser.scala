@@ -130,7 +130,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     idnuse ^^ (guardId => PBaseGuardExp(guardId, PStandartGuardArg(Vector.empty).at(guardId)))
 
   private lazy val guardPrefix: Parser[Vector[PBaseGuardExp]] =
-    rep1sep(guardBasePrefix, ",")
+    rep1sep(guardBasePrefix, "&&")
 
 
   lazy val action: Parser[PAction] =
@@ -327,7 +327,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, ",") <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
     ("{" ~> statements <~ "}") ^^ PMakeAtomic
 
   lazy val updateRegion: Parser[PUpdateRegion] =
@@ -337,7 +337,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val useAtomic: Parser[PUseAtomic] =
     "use_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, ",") <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
     ("{" ~> statements <~ "}") ^^ PUseAtomic
 
   lazy val openRegion: Parser[POpenRegion] =

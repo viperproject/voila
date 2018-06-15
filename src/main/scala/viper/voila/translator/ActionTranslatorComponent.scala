@@ -6,6 +6,7 @@
 
 package viper.voila.translator
 
+
 import scala.collection.{breakOut, mutable}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
@@ -334,6 +335,96 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
+  sealed trait TranslatedPGuardArg
+  case class TranslatedPStandartGuardArg(arguments: Vector[vpr.Exp]) extends TranslatedPGuardArg
+  case class TranslatedPSetGuardArg(set: vpr.Exp) extends TranslatedPGuardArg
+
+  def groupGuards[G <: PGuardExp](guards: Vector[G]): Map[String, TranslatedPGuardArg] = {
+
+    val (noArgGuards, argGuards) = guards.partition{g =>
+      val guardDecl = semanticAnalyser.entity(g.guard) match {
+        case GuardEntity(guardDecl, _) => guardDecl
+      }
+
+      guardDecl.formalArguments.isEmpty
+    }
+
+    val (unionGuards, addGuards) = argGuards.partition{g =>
+      val guardDecl = semanticAnalyser.entity(g.guard) match {
+        case GuardEntity(guardDecl, _) => guardDecl
+      }
+
+      !guardDecl.modifier.isInstanceOf[PDivisibleGuard]
+    }
+
+    val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.map{g =>
+      g.guard.name -> TranslatedPStandartGuardArg(Vector.empty)
+    }(breakOut)
+
+    val unionMap: Map[String, TranslatedPGuardArg] = {
+
+      val setArg = new mutable.HashMap[String, mutable.Set[vpr.Exp]] with mutable.MultiMap[String, vpr.Exp]
+      val singleArg = new mutable.HashMap[String, mutable.Set[Vector[vpr.Exp]]] with mutable.MultiMap[String, Vector[vpr.Exp]]
+
+      val occurringGuards = unionGuards.map(_.guard.name).distinct
+
+      unionGuards foreach { g =>
+        g.argument match {
+          case arg: PStandartGuardArg =>
+            singleArg.addBinding(g.guard.name, arg.arguments map translate)
+
+          case arg: PSetGuardArg =>
+            setArg.addBinding(g.guard.name, translate(arg.set))
+        }
+      }
+
+      val combinedSetArg: Map[String, vpr.Exp] = setArg.map { case (name, sets) =>
+        name -> sets.tail.fold(sets.head) { case (l, r) => vpr.AnySetUnion(l,r)() }
+      }(breakOut)
+
+      val uniqueSingleArg: mutable.Map[String, Vector[vpr.Exp]] = mutable.Map.empty
+
+      val combinedSingleArg: Map[String, vpr.Exp] = singleArg.map { case (name, argss) =>
+
+        if (argss.size == 1) {
+          uniqueSingleArg += name -> argss.head
+        }
+
+        name -> vpr.ExplicitSet(argss.map(tupleWrap).toVector)()
+      }(breakOut)
+
+      occurringGuards.map { name =>
+        (uniqueSingleArg.isDefinedAt(name), combinedSingleArg.isDefinedAt(name), combinedSetArg.isDefinedAt(name)) match {
+          case (false, false, true) => name -> TranslatedPSetGuardArg(combinedSetArg(name))
+          case (false, true, false) => name -> TranslatedPSetGuardArg(combinedSingleArg(name))
+          case (true, true, false) => name -> TranslatedPStandartGuardArg(uniqueSingleArg(name))
+          case (_, true, true) => name -> TranslatedPSetGuardArg(vpr.AnySetUnion(combinedSetArg(name), combinedSingleArg(name))())
+        }
+      }(breakOut)
+    }
+
+    val addMap: Map[String, TranslatedPGuardArg] = {
+
+      val accMap: mutable.Map[String, vpr.Exp] = mutable.Map.empty
+
+      addGuards foreach { g =>
+
+        val name = g.guard.name
+        val perm = translate(g.argument.asInstanceOf[PStandartGuardArg].arguments.head)
+
+        if (accMap.contains(name)) {
+          accMap.update(name, vpr.PermAdd(perm, accMap(name))())
+        } else {
+          accMap.update(name, perm)
+        }
+      }
+
+      accMap.toVector.map{case(name,perm) => name -> TranslatedPStandartGuardArg(Vector(perm))}(breakOut)
+    }
+
+    noArgMap ++ unionMap ++ addMap
+  }
+
   def regionStateChangeAllowedByGuard(region: PRegion,
                                       vprRegionInArgs: Vector[vpr.Exp],
                                       usedGuards: Vector[PRegionedGuardExp],
@@ -348,14 +439,20 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
     /* from == to */
     val vprUnchanged = vpr.EqCmp(vprFrom, vprTo)()
 
-    // FIXME: Assumes, every guard kind only occurs once (in guards and action). Maybe automatically combine all guards of the same kind
-    val usedGuardsMap = usedGuards.map(g => g.guard.name -> g.argument).toMap
+    val usedGuardsMap = groupGuards(usedGuards)
+
+    val usedGuardDeclMap: Map[String, PGuardDecl] = usedGuards.map{ g =>
+      val guardDecl = semanticAnalyser.entity(g.guard) match {
+        case GuardEntity(guardDecl, `region`) => guardDecl
+      }
+      g.guard.name -> guardDecl
+    }(breakOut)
 
     def isRelevantAction(action: PAction): Boolean = {
-      // FIXME: assumes globally unique guard name
+      // assumes globally unique guard name
       val actionKinds = action.guards map (_.guard.name)
 
-      actionKinds forall usedGuardsMap.contains
+      actionKinds forall usedGuardsMap.isDefinedAt
     }
 
     val relevantActions = region.actions filter isRelevantAction
@@ -369,69 +466,81 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           vprTo,
           vpr.TrueLit()())
 
-        val constraints: Vector[vpr.Exp] = action.guards map { case PBaseGuardExp(actionGuardId, actionGuardArg) =>
+        val actionGuardMap = groupGuards(action.guards).toVector
 
-          val actionGuardKind = semanticAnalyser.entity(actionGuardId) match {
-            case GuardEntity(guardDecl, `region`) => guardDecl
-          }
+        val constraints: Vector[vpr.Exp] = actionGuardMap map { case (actionGuardName, actionGuardArg) =>
 
-          val relevantUsedGuardArg = usedGuardsMap(actionGuardId.name)
+          val guardDecl = usedGuardDeclMap(actionGuardName)
+
+          val relevantUsedGuardArg = usedGuardsMap(actionGuardName)
 
           (relevantUsedGuardArg, actionGuardArg) match {
 
-            case (PStandartGuardArg(heldGuardArgs), PStandartGuardArg(requiredGuardArgs)) =>
-              (actionGuardKind.modifier, heldGuardArgs, requiredGuardArgs) match {
+            case (TranslatedPStandartGuardArg(heldGuardArgs), TranslatedPStandartGuardArg(requiredGuardArgs)) =>
+              (guardDecl.modifier, heldGuardArgs, requiredGuardArgs) match {
 
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs, sollArgs) =>
                   /* used_guard_args == action_guard_args */
                   viper.silicon.utils.ast.BigAnd(
                     haveArgs.zip(sollArgs).map{ case (h,s) =>
-                      vpr.EqCmp(guardArgEval(translate(h)), translate(s))()
+                      vpr.EqCmp(guardArgEval(h), s)()
                     }
                   )
 
                 case (_: PDivisibleGuard, r +: heldPerm +: haveArgs, requiredPerm +: sollArgs) =>
                   /* perm_required <= perm_held && used_guard_args == action_guard_args */
                   viper.silicon.utils.ast.BigAnd(
-                    vpr.PermLeCmp(translate(requiredPerm), translate(heldPerm))() +:
+                    vpr.PermLeCmp(requiredPerm, heldPerm)() +:
                     haveArgs.zip(sollArgs).map{ case (h,s) =>
-                      vpr.EqCmp(guardArgEval(translate(h)), translate(s))()
+                      vpr.EqCmp(guardArgEval(h), s)()
                     }
                   )
               }
 
-            case (PStandartGuardArg(heldGuardArgs), PSetGuardArg(requiredGuardSet)) =>
-              (actionGuardKind.modifier, heldGuardArgs) match {
+            case (TranslatedPStandartGuardArg(heldGuardArgs), TranslatedPSetGuardArg(requiredGuardSet)) =>
+              (guardDecl.modifier, heldGuardArgs) match {
 
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs) =>
-                  /* action_guard_set subset {tuple(used_guard_args)} */
-                  val guardElem = tupleWrap(haveArgs map translate)
+                  /* \/xs :: tuple(xs) in action_guard_set ==>  tuple(xs) = tuple(used_guard_args) */
 
-                  vpr.AnySetSubset(
-                    translate(requiredGuardSet),
-                    guardArgEval(vpr.ExplicitSet(Seq(guardElem))())
+                  val (actionGuardconditional, actionGuardDecls) =
+                    extractGuardSetArgConditionalFromVprSet(requiredGuardSet, guardDecl)
+
+                  val actionGuardElem = tupleWrap(actionGuardDecls map (_.localVar))
+                  val usedGuardElem = tupleWrap(haveArgs)
+
+                  vpr.Forall(
+                    actionGuardDecls,
+                    Vector.empty,
+                    vpr.Implies(
+                      actionGuardconditional,
+                      vpr.EqCmp(
+                        actionGuardElem,
+                        usedGuardElem
+                      )()
+                    )()
                   )()
               }
 
-            case (PSetGuardArg(heldGuardSet), PStandartGuardArg(requiredGuardArgs)) =>
-              (actionGuardKind.modifier, requiredGuardArgs) match {
+            case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPStandartGuardArg(requiredGuardArgs)) =>
+              (guardDecl.modifier, requiredGuardArgs) match {
 
                 case (_: PUniqueGuard | _: PDuplicableGuard, sollArgs) =>
                   /* tuple(action_guard_args) in used_guard_set */
-                  val sollArgsTuple = tupleWrap(sollArgs map translate)
+                  val sollArgsTuple = tupleWrap(sollArgs)
 
                   vpr.AnySetContains(
                     sollArgsTuple,
-                    guardArgEval(translate(heldGuardSet))
+                    guardArgEval(heldGuardSet)
                   )()
               }
 
-            case (PSetGuardArg(heldGuardSet), PSetGuardArg(actionGuardSet)) =>
+            case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPSetGuardArg(actionGuardSet)) =>
 
               val (actionGuardconditional, actionGuardDecls) =
-                extractGuardSetArgConditional(actionGuardSet, actionGuardKind)
+                extractGuardSetArgConditionalFromVprSet(actionGuardSet, guardDecl)
 
-              actionGuardKind.modifier match {
+              guardDecl.modifier match {
 
                 case _: PUniqueGuard | _: PDuplicableGuard =>
                   /* \/xs :: tuple(xs) in action_guard_set ==>  tuple(xs) in used_guard_set */
@@ -444,7 +553,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                       actionGuardconditional,
                       vpr.AnySetContains(
                         actionGuardElem,
-                        translate(heldGuardSet)
+                        heldGuardSet
                       )()
                     )()
                   )()
@@ -461,7 +570,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
             } else {
               val guardOption = action.guards find { _.argument match {
                 case PStandartGuardArg(args) =>
-                  args.exists(AstUtils.isBoundVariable(_, binder))
+                  args.exists(AstUtils.isBoundVariable(_,binder))
 
                 case _ => false
               }}
@@ -476,9 +585,9 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                     guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
 
                   usedGuardsMap(guardId.name) match {
-                    case PStandartGuardArg(args) =>
+                    case TranslatedPStandartGuardArg(args) =>
                       val vprArgument = /* Guard predicate is G(r, ..., k, ...) */
-                        translate(args(argumentIndex))
+                        args(argumentIndex)
 
                       binder.id.name -> vprArgument
 
@@ -519,6 +628,12 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       viper.silver.ast.utility.Simplifier.simplify(vprConstraint)
     )()
   }
+
+  def isBoundVprVariable(exp: vpr.Exp, binder: PLogicalVariableBinder): Boolean =
+    (exp, binder) match {
+      case (vpr.LocalVar(name), namedBinder: PNamedBinder) => name == namedBinder.id.name
+      case _ => false
+    }
 
   def stateConstraintsFromAction(action: PAction,
                                  vprFrom: vpr.Exp,
@@ -661,11 +776,17 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   private def tupleWrap(args: Vector[vpr.Exp]): vpr.Exp =
-    vpr.DomainFuncApp(
-      func = preamble.tuples.tuple(args.length),
-      args = args,
-      typVarMap = preamble.tuples.typeVarMap(args map (_.typ))
-    )()
+    if (args.length == 1) {
+      args.head
+    } else {
+      assert(args.length > 1)
+      vpr.DomainFuncApp(
+        func = preamble.tuples.tuple(args.length),
+        args = args,
+        typVarMap = preamble.tuples.typeVarMap(args map (_.typ))
+      )()
+    }
+
 
   private def extractGuardSetArgConditional(set: PExpression, guardDecl: PGuardDecl): (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
 
@@ -706,6 +827,48 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
       case other =>
         sys.error(s"${set.pretty} should be of type Tuple but is ${other}")
+    }
+  }
+
+  private def extractGuardSetArgConditionalFromVprSet(set: vpr.Exp, guardDecl: PGuardDecl): (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
+
+    val expectedNumOfArguments = guardDecl.formalArguments.length
+
+    set.typ match {
+
+      case vpr.SetType(elementType) if expectedNumOfArguments == 1 =>
+        val vipElemTypes = elementType
+        val decl = vpr.LocalVarDecl(s"$$a", vipElemTypes)()
+
+        /* a in set */
+        val conditional = vpr.AnySetContains(
+          decl.localVar,
+          set
+        )()
+
+        (conditional, Vector(decl))
+
+      case vpr.SetType(d@ vpr.DomainType(_, typeVarToType)) if expectedNumOfArguments > 1 =>
+        val vipElemTypes = d.typeParameters.toVector map typeVarToType
+
+        val decls = vipElemTypes.zipWithIndex map { case (typ, ix) =>
+          vpr.LocalVarDecl(s"$$a_$ix", typ)()
+        }
+
+        /* tuple(a1,..,an) in set */
+        val conditional = vpr.AnySetContains(
+          vpr.DomainFuncApp(
+            func = preamble.tuples.tuple(decls.length),
+            args = decls map (_.localVar),
+            typVarMap = typeVarToType
+          )(),
+          set
+        )()
+
+        (conditional, decls)
+
+      case other =>
+        sys.error(s"${set} should be of type Tuple but is ${other}")
     }
   }
 
