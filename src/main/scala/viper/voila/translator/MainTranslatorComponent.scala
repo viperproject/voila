@@ -1146,7 +1146,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               vprArguments
             )
 
-          System.out.println("At Call: " ++ AtomicityContextLevelManager.currentAtomicityContextLevels.toString)
           val vprAtomicityContextConstraint =
             vpr.utility.Expressions.instantiateVariables(
               AtomicityContextLevelManager.callIsPossible(callee),

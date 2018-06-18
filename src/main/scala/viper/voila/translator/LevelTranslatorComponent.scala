@@ -85,17 +85,11 @@ trait LevelTranslatorComponent { this: PProgramToViperTranslator =>
         .flatMap{ pre => collectLevels(pre.assertion) }.distinct
           .map(translate)
 
-      System.out.println("Inside Gen: " ++ currentAtomicityContextLevels.toString)
-
-      val res = viper.silicon.utils.ast.BigAnd(
+      viper.silicon.utils.ast.BigAnd(
         currentAtomicityContextLevels.flatMap{a =>
           collectedLevels map {l => vpr.GtCmp(a, l)()}
         }
       )
-
-      System.out.println("Result Gen: " ++ res.toString)
-
-      res
     }
 
   }
