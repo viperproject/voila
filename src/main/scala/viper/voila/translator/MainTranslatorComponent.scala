@@ -12,7 +12,7 @@ import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, CalleeLevelTooHighError, MakeAtomicError, PreconditionError, RegionStateError, UnfoldError}
+import viper.voila.reporting.{CalleeAtomicityContextError, CalleeLevelTooHighError, FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, MakeAtomicError, PreconditionError, RegionStateError, UnfoldError}
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -322,6 +322,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translate(procedure: PProcedure): vpr.Method = {
     assert(collectedVariableDeclarations.isEmpty)
+    assert(AtomicityContextLevelManager.noRecordedRegions)
 
     // checkLevelLater = true
 
@@ -1145,6 +1146,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               vprArguments
             )
 
+          System.out.println("At Call: " ++ AtomicityContextLevelManager.currentAtomicityContextLevels.toString)
+          val vprAtomicityContextConstraint =
+            vpr.utility.Expressions.instantiateVariables(
+              AtomicityContextLevelManager.callIsPossible(callee),
+              vprStub.formalArgs,
+              vprArguments
+            )
+
           val vprPre =
             vpr.utility.Expressions.instantiateVariables(
               viper.silicon.utils.ast.BigAnd(vprStub.pres),
@@ -1168,6 +1177,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           errorBacktranslator.addErrorTransformer {
             case e: vprerr.AssertFailed if e causedBy vprAssertLvlConstraint =>
               PreconditionError(call, CalleeLevelTooHighError(call))
+          }
+
+          val vprAssertAtomicityContextConstraint = vpr.Assert(vprAtomicityContextConstraint)()
+
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.AssertFailed if e causedBy vprAssertAtomicityContextConstraint =>
+              PreconditionError(call, CalleeAtomicityContextError(call))
           }
 
           val vprExhalePres = vpr.Exhale(vprPre)()
@@ -1226,6 +1242,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.Seqn(
             vprPreCallLabel +:
             vprAssertLvlConstraint +:
+            vprAssertAtomicityContextConstraint +:
             vprExhalePres +:
             stabilizeFrameRegions +:
             vprHavocTargets :+

@@ -64,6 +64,42 @@ trait LevelTranslatorComponent { this: PProgramToViperTranslator =>
 
   }
 
+  object AtomicityContextLevelManager {
+
+    var currentAtomicityContextLevels: List[vpr.Exp] = Nil
+
+    def noRecordedRegions: Boolean = currentAtomicityContextLevels.isEmpty
+
+    def registerRegionExp(region: PRegion, args: Vector[vpr.Exp]): vpr.Stmt = {
+      val levelVar = declareFreshVariable(vpr.Int, "_levelVar").localVar
+      currentAtomicityContextLevels ::= levelVar
+      vpr.LocalVarAssign(levelVar, args(1))()
+    }
+
+    def removeLastRegionExp(): Unit = {
+      currentAtomicityContextLevels = currentAtomicityContextLevels.tail
+    }
+
+    def callIsPossible(procedure: PProcedure): vpr.Exp = {
+      val collectedLevels = procedure.pres
+        .flatMap{ pre => collectLevels(pre.assertion) }.distinct
+          .map(translate)
+
+      System.out.println("Inside Gen: " ++ currentAtomicityContextLevels.toString)
+
+      val res = viper.silicon.utils.ast.BigAnd(
+        currentAtomicityContextLevels.flatMap{a =>
+          collectedLevels map {l => vpr.GtCmp(a, l)()}
+        }
+      )
+
+      System.out.println("Result Gen: " ++ res.toString)
+
+      res
+    }
+
+  }
+
   // TODO: extremely hacky maybe improve with kiama rewriting
   def collectWithPredicateUnfolding[A](exp: PExpression)(func: PartialFunction[PExpression, A]): List[A] = {
     val buffer: collection.mutable.ListBuffer[A] = collection.mutable.ListBuffer.empty

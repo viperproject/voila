@@ -401,6 +401,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionType = semanticAnalyser.typ(region.state)
     val vprRegionIdArg = regionInArgs.head
 
+    System.out.println("Before: " ++ AtomicityContextLevelManager.currentAtomicityContextLevels.toString)
+    val storeCurrentLvl = AtomicityContextLevelManager.registerRegionExp(region, regionInArgs)
+    System.out.println("After: " ++ AtomicityContextLevelManager.currentAtomicityContextLevels.toString)
+
     val inhaleDiamond =
       vpr.Inhale(diamondAccess(translateUseOf(regionId)))()
 
@@ -566,6 +570,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val deselectContext = deselectAtomicityContext(region, regionInArgs)
 
+    AtomicityContextLevelManager.removeLastRegionExp()
+
     val result =
       vpr.Seqn(
         Vector(
@@ -575,6 +581,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           preFrameExhales,
           inhaleRegionPredicate,
           inhaleDiamond,
+          storeCurrentLvl,
           contextCheck,
           assignContext,
           havoc1,

@@ -274,6 +274,17 @@ case class CalleeLevelTooHighError(offendingNode: PProcedureCall, detail: Option
     copy(offendingNode, detail)
 }
 
+case class CalleeAtomicityContextError(offendingNode: PProcedureCall, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PProcedureCall
+  def localId: String = "callee_atomicity_context_error"
+  val localMessage: String = s"The atomicity context of the called procedure '${offendingNode.formatForUsers}' might contain a currently updated region"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class InspectLevelTooHighError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
   extends AbstractVerificationError {
 
