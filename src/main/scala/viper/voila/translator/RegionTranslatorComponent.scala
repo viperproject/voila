@@ -283,11 +283,18 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def getAndTranslateRegionPredicateDetails(predicateExp: PPredicateExp)
-                                           : (PRegion, Vector[vpr.Exp], Vector[vpr.EqCmp]) = {
+                                           : (PRegion, Vector[vpr.Exp], Vector[vpr.Exp], Vector[vpr.Exp]) = {
 
     val (region, inArgs, outArgsAndState) = getRegionPredicateDetails(predicateExp)
 
     val vprInArgs = inArgs map translate
+
+    val vprInArgConstraints = {
+      Vector(
+        /* levels are always positive */
+        vpr.GeCmp(vprInArgs(1), vpr.IntLit(0)())()
+      )
+    }
 
     val vprOutConstraints =
       outArgsAndState.zipWithIndex.flatMap {
@@ -309,7 +316,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           Some(constraint)
       }
 
-    (region, vprInArgs, vprOutConstraints)
+    (region, vprInArgs, vprInArgConstraints, vprOutConstraints)
   }
 
   def regionState(predicateExp: PPredicateExp): vpr.FuncApp = {

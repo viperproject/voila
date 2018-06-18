@@ -390,11 +390,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = makeAtomic.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, regionInArgs, regionOutArgs) =
+    val (region, regionInArgs, regionIntArgsConstraints, regionOutArgsConstraints) =
       getAndTranslateRegionPredicateDetails(makeAtomic.regionPredicate)
 
     assert(
-      regionOutArgs.isEmpty,
+      regionOutArgsConstraints.isEmpty,
        "Using-clauses expect region assertions without out-arguments, but got " +
       s"${makeAtomic.regionPredicate} at ${makeAtomic.regionPredicate.position}")
 
@@ -598,11 +598,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = updateRegion.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, vprInArgs, vprOutArgs) =
+    val (region, vprInArgs, vprInArgsConstraints, vprOutArgsConstraints) =
       getAndTranslateRegionPredicateDetails(updateRegion.regionPredicate)
 
       assert(
-        vprOutArgs.isEmpty,
+        vprOutArgsConstraints.isEmpty,
          "Using-clauses expect region assertions without out-arguments, but got " +
         s"${updateRegion.regionPredicate} at ${updateRegion.regionPredicate.position}")
 
@@ -629,16 +629,16 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val label = freshLabel("pre_region_update")
 
-    val levelCheck = vpr.Assert(levelHigherThanOccuringRegionLevels(updateRegion.regionPredicate))()
+    val levelCheck = vpr.Assert(LevelManager.levelHigherThanOccurringRegionLevels(updateRegion.regionPredicate))()
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.AssertFailed if e causedBy levelCheck =>
         UpdateRegionError(updateRegion, InspectLevelTooHighError(updateRegion.regionPredicate))
     }
 
-    val newLevelAssignment = assignLevel(vprInArgs(1))
 
-    val oldLevelAssignment = assignOldLevel(label)
+    val levelToken = LevelManager.getCurrentLevelToken
+    val newLevelAssignment = LevelManager.assignLevel(vprInArgs(1))
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))().withSource(updateRegion.regionPredicate)
@@ -714,6 +714,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val inhaleAtomicityTracking = assignOldAtomicityContext(region, vprInArgs, label)
 
+    val oldLevelAssignment = LevelManager.assignOldLevel(levelToken)
+
     val result =
       vpr.Seqn(
         Vector(
@@ -754,16 +756,15 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UseAtomicError(useAtomic, RegionAtomicityContextTrackingError(useAtomic.regionPredicate))
     }
 
-    val levelCheck = vpr.Assert(levelHigherThanOccuringRegionLevels(useAtomic.regionPredicate))()
+    val levelCheck = vpr.Assert(LevelManager.levelHigherThanOccurringRegionLevels(useAtomic.regionPredicate))()
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.AssertFailed if e causedBy levelCheck =>
         UseAtomicError(useAtomic, InspectLevelTooHighError(useAtomic.regionPredicate))
     }
 
-    val newLevelAssignment = assignLevel(vprInArgs(1))
-
-    val oldLevelAssignment = assignOldLevel(preUseAtomicLabel)
+    val levelToken = LevelManager.getCurrentLevelToken
+    val newLevelAssignment = LevelManager.assignLevel(vprInArgs(1))
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
@@ -850,6 +851,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UseAtomicError(useAtomic, IllegalRegionStateChangeError(useAtomic.body))
     }
 
+    val oldLevelAssignment = LevelManager.assignOldLevel(levelToken)
+
     val result =
       vpr.Seqn(
         Vector(
@@ -886,16 +889,15 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
        "Using-clauses expect region assertions without out-arguments, but got " +
       s"${openRegion.regionPredicate} at ${openRegion.regionPredicate.position}")
 
-    val levelCheck = vpr.Assert(levelHigherThanOccuringRegionLevels(openRegion.regionPredicate))()
+    val levelCheck = vpr.Assert(LevelManager.levelHigherThanOccurringRegionLevels(openRegion.regionPredicate))()
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.AssertFailed if e causedBy levelCheck =>
         OpenRegionError(openRegion, InspectLevelTooHighError(openRegion.regionPredicate))
     }
 
-    val newLevelAssignment = assignLevel(vprInArgs(1))
-
-    val oldLevelAssignment = assignOldLevel(preOpenLabel)
+    val levelToken = LevelManager.getCurrentLevelToken
+    val newLevelAssignment = LevelManager.assignLevel(vprInArgs(1))
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
@@ -946,6 +948,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       case e: vprerr.AssertFailed if e causedBy stateUnchanged =>
         OpenRegionError(openRegion, IllegalRegionStateChangeError(openRegion.body))
     }
+
+    val oldLevelAssignment = LevelManager.assignOldLevel(levelToken)
 
     val result =
       vpr.Seqn(

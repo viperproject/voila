@@ -38,115 +38,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
    * Immutable state and utility methods
    */
 
-  val levelVariableDecl: vpr.LocalVarDecl = vpr.LocalVarDecl("$$_current_level", vpr.Ref)()
 
-  val levelVariable: vpr.LocalVar = levelVariableDecl.localVar
-
-  val levelField: vpr.Field =
-    vpr.Field("$$_level", vpr.Int)()
-
-  def levelLocation: vpr.FieldAccess =
-    vpr.FieldAccess(levelVariable, levelField)()
-
-  def levelAccess: vpr.FieldAccessPredicate =
-    vpr.FieldAccessPredicate(levelLocation, vpr.FullPerm()())()
-
-  def assignLevel(rhs: vpr.Exp): vpr.Stmt =
-    vpr.FieldAssign(levelLocation, rhs)()
-
-  def assignOldLevel(label: vpr.Label): vpr.Stmt =
-    assignLevel(vpr.LabelledOld(levelLocation, label.name)())
-
-  // TODO: extremely hacky maybe improve with kiama rewriting
-  def collectWithPredicateUnfolding[A](exp: PExpression)(func: PartialFunction[PExpression, A]): List[A] = {
-    val buffer: collection.mutable.ListBuffer[A] = collection.mutable.ListBuffer.empty
-
-    var visitedExpressions: Set[PExpression] = Set.empty
-
-    def customTranslationScheme: PartialFunction[PExpression, vpr.Exp] = {
-      case exp: PPredicateExp if extractablePredicateInstance(exp) && !visitedExpressions.contains(exp) =>
-        visitedExpressions += exp
-        val translatedBody = translatePredicateBodyWith(exp)(customTranslationScheme)
-        translatedBody.getOrElse(vpr.TrueLit()().withSource(exp))
-
-      case exp: PExpression if func.isDefinedAt(exp) && !visitedExpressions.contains(exp) =>
-        visitedExpressions += exp
-        buffer += func(exp)
-        translateWith(exp)(customTranslationScheme)
-    }
-
-    translateWith(exp)(customTranslationScheme)
-    buffer.toList
-  }
-
-  def collectLevels(exp: PExpression): List[PExpression] =
-    collectWithPredicateUnfolding(exp){
-      case pred: PPredicateExp if extractableRegionInstance(pred) =>
-
-        val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
-        inArgs(1)
-    }
-
-  def levelHigherThanOccuringRegionLevels(exp: PExpression): vpr.Exp =
-    levelHigherThanOccuringRegionLevels(exp, e => e)
-
-  def levelHigherThanOccuringRegionLevels(exp: PExpression, evaluationState: vpr.Exp => vpr.Exp): vpr.Exp = {
-
-    val levelExps = collectLevels(exp)
-
-//    var collectedExpLevels: List[vpr.Exp] = Nil
-//
-//    translateWith(exp) {
-//      case pred: PPredicateExp if extractableRegionInstance(pred) =>
-//
-//        val (innerRegion, inArgs, outArgs) = getRegionPredicateDetails(pred)
-//
-//        collectedExpLevels ::= evaluationState(translate(inArgs(1)))
-//
-//        translate(pred)
-//    }
-
-    viper.silicon.utils.ast.BigAnd(
-      levelExps map {l => vpr.GtCmp(levelLocation, evaluationState(translate(l)))()}
-    )
-  }
-
-  def dependsOnReturnValues(exp: PExpression, method: PProcedure): Boolean = {
-
-    val collectAllUseNames = collect[Set, String]{ case exp: PIdnExp => exp.id.name }
-    val useNames = collectAllUseNames(exp)
-
-    method.formalReturns.exists(f => useNames.contains(f.id.name))
-  }
-
-  var checkLevelLater: Boolean = true
-  var levelChecksForLater: List[vpr.Assert] = Nil
-
-  def levelHigherOrEqualToProcedureLevel(procedure: PProcedure): vpr.Exp =
-    levelHigherOrEqualToProcedureLevel(procedure, e => e)
-
-  def levelHigherOrEqualToProcedureLevel(procedure: PProcedure, evaluationState: vpr.Exp => vpr.Exp): vpr.Exp = {
-    val preLevels = procedure.pres
-      .flatMap{ pre => collectLevels(pre.assertion) }
-
-    val postLevels = procedure.posts
-      .flatMap{ pre => collectLevels(pre.assertion) }
-      .filter(e => !dependsOnReturnValues(e,procedure))
-
-    val levels = (preLevels ++ postLevels).distinct
-
-    viper.silicon.utils.ast.BigAnd(
-      levelAccess +:
-        (levels map {l => vpr.GtCmp(levelLocation, translate(l))()})
-    )
-  }
-//    viper.silver.ast.utility.Simplifier.simplify(
-//      viper.silicon.utils.ast.BigAnd(
-//        levelAccess +:
-//          (procedure.pres map { pre => levelHigherThanOccuringRegionLevels(pre.assertion, evaluationState) }) // ++:
-//          //(procedure.posts map { post => levelHigherThanOccuringRegionLevels(post.assertion, evaluationState) })
-//      )
-//    )
 
 
   val diamondField: vpr.Field =
@@ -191,8 +83,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def declareFreshVariable(typ: PType, basename: String): vpr.LocalVarDecl =
     declareFreshVariable(translate(typ), basename)
 
+  private var freshVariableCounter = 0
+
   def declareFreshVariable(typ: vpr.Type, basename: String): vpr.LocalVarDecl = {
-    val decl = vpr.LocalVarDecl(s"$$$basename${collectedVariableDeclarations.length}", typ)()
+    val decl = vpr.LocalVarDecl(s"$$${basename}_${freshVariableCounter}", typ)()
+
+    freshVariableCounter += 1
 
     collectedVariableDeclarations = collectedVariableDeclarations :+ decl
 
@@ -344,7 +240,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val topLevelDeclarations: Vector[vpr.Declaration] = (
          Vector(
             diamondField,
-            levelField,
             regionStateTriggerFunctionDomain)
       ++ collectedDeclarations
       ++ usedVariableHavocs(tree)
@@ -430,6 +325,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     // checkLevelLater = true
 
+    LevelManager.clear()
+    val initializeLvl =
+      vpr.Inhale(LevelManager.levelHigherOrEqualToProcedureLevel(procedure))()
+
     val vprMethod =
       procedure.atomicity match {
         case PAbstractAtomic() =>
@@ -442,10 +341,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           logger.debug(s"\nTranslating primitive-atomic procedure ${procedure.id.name}")
           translateStandardProcedure(procedure)
     }
-
-    val initializeLvl = //  vpr.Inhale(levelAccess)()
-      vpr.Inhale(levelHigherOrEqualToProcedureLevel(procedure))()
-
 
     val inhaleSkolemizationFunctionFootprints =
       vpr.Inhale(
@@ -483,7 +378,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             initializeFootprints ++:
             actualBody.ss,
           scopedDecls =
-              levelVariableDecl +:
               actualBody.scopedDecls ++:
               procedureWideBoundLogicalVariableDeclarations ++:
               collectedVariableDeclarations
@@ -543,7 +437,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val regionId = inter.region
         val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
 
-        val (reg, regionArguments, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+        val (reg, regionArguments, _, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
 
         val vprInterferenceSet = interferenceSetFunctions.application(reg, regionArguments)
 
@@ -720,16 +614,40 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "skip;", "")))
 
       case PIf(cond, thn, els) =>
+
+        val previousLvlToken = LevelManager.getCurrentLevelToken
+
+        val vprPureIfBody = translate(thn)
+
+        /* this assertion should never fail, because levels are always restored after an action that changes the level */
+        val ifLevelCheck = vpr.Assert(LevelManager.compareToOldLevel(previousLvlToken))()
+
+        val vprThenBodies = els.toSeq map { s =>
+          val assignOldLevelAtBeginning = LevelManager.assignOldLevel(previousLvlToken)
+          val vprBody = translate(s)
+          /* this assertion should never fail, because levels are always restored after an action that changes the level */
+          val elseLevelCheck = vpr.Assert(LevelManager.compareToOldLevel(previousLvlToken))()
+          vpr.Seqn(Vector(assignOldLevelAtBeginning, vprBody, elseLevelCheck), Vector.empty)()
+        }
+
         var vprIf =
           vpr.If(
             translate(cond),
-            vpr.Seqn(Vector(translate(thn)), Vector.empty)(),
-            vpr.Seqn(els.toSeq.map(translate), Vector.empty)()
+            vpr.Seqn(Vector(vprPureIfBody, ifLevelCheck), Vector.empty)(),
+            vpr.Seqn(vprThenBodies, Vector.empty)()
           )()
 
         vprIf = vprIf.withSource(statement)
 
-        surroundWithSectionComments(statement.statementName, vprIf)
+        val assignOldLevel = LevelManager.assignOldLevel(previousLvlToken)
+
+        val vprResult =
+          vpr.Seqn(
+            Vector(vprIf, assignOldLevel),
+            Vector.empty
+          )().withSource(statement)
+
+        surroundWithSectionComments(statement.statementName, vprResult)
 
       case PWhile(cond, invs, body) =>
         val inhaleSkolemizationFunctionFootprints =
@@ -752,29 +670,28 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val inferContext = inferContextAllInstances("infer context inside while")
 
-        val lvlInvariant =
-          vpr.And(
-            levelAccess,
-            vpr.EqCmp(
-              levelLocation,
-              vpr.LabelledOld(levelLocation, preAtomicityLabel.name)()
-            )()
-          )()
+        val previousLvlToken = LevelManager.getCurrentLevelToken
 
+        val vprPureBody = translate(body)
+
+        /* this assertion should never fail, because levels are always restored after an action that changes the level */
+        val levelCheck = vpr.Assert(LevelManager.compareToOldLevel(previousLvlToken))()
 
         val vprBody =
           vpr.Seqn(
             inhaleSkolemizationFunctionFootprints +:
               initializeFootprints ++:
               atomicityConstraints ++:
-              Vector(translate(body)),
+              Vector(vprPureBody, levelCheck),
             Vector.empty
           )()
+
+
 
         var vprWhile =
           vpr.While(
             cond = translate(cond),
-            invs = lvlInvariant +: (invs map (inv => translate(inv.assertion).withSource(inv, overwrite = true))),
+            invs = invs map (inv => translate(inv.assertion).withSource(inv, overwrite = true)),
             body = vprBody
           )()
 
@@ -785,8 +702,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         vprWhile = vprWhile.withSource(statement)
 
+        val assignOldLevel = LevelManager.assignOldLevel(previousLvlToken)
+
         val total = vpr.Seqn(
-          Vector(preAtomicityLabel, vprWhile),
+          Vector(preAtomicityLabel, vprWhile, assignOldLevel),
           Vector.empty
         )()
 
@@ -939,7 +858,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         surroundWithSectionComments(statement.statementName, vprStatement)
 
       case PUseRegionInterpretation(regionPredicate) =>
-        val (region, vprInArgs, Seq()) = getAndTranslateRegionPredicateDetails(regionPredicate)
+        val (region, vprInArgs, _, Seq()) = getAndTranslateRegionPredicateDetails(regionPredicate)
         val vprRegionPredicateAccess = regionPredicateAccess(region, vprInArgs)
 
         val vprUnfoldRegion = vpr.Unfold(vprRegionPredicateAccess)()
@@ -1221,7 +1140,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val vprLvlConstraint =
             vpr.utility.Expressions.instantiateVariables(
-              levelHigherOrEqualToProcedureLevel(callee),
+              LevelManager.levelHigherOrEqualToProcedureLevel(callee),
               vprStub.formalArgs,
               vprArguments
             )
@@ -1660,15 +1579,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translateUseOf(predicateExp: PPredicateExp): (vpr.PredicateAccessPredicate, Option[vpr.Exp]) = {
     val predicateEntity = semanticAnalyser.entity(predicateExp.predicate)
 
-    val (vprInArgs, optVprOutArgConstraints) =
+    val (vprInArgs, optVprInArgConstraints, optVprOutArgConstraints) =
       predicateEntity match {
         case _: PredicateEntity =>
-          (predicateExp.arguments map translate, None)
+          (predicateExp.arguments map translate, None, None)
 
         case _: RegionEntity =>
-          val (_, vprInArgs, vprOutArgConstraints) = getAndTranslateRegionPredicateDetails(predicateExp)
+          val (_, vprInArgs, vprInArgConstraints, vprOutArgConstraints) =
+            getAndTranslateRegionPredicateDetails(predicateExp)
 
-          (vprInArgs, Some(vprOutArgConstraints))
+          (vprInArgs, Some(vprInArgConstraints), Some(vprOutArgConstraints))
       }
 
     val vprPredicate =
@@ -1690,15 +1610,20 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         (vprPredicateAccess, None)
 
       case _: RegionEntity =>
-        val vprStateConstraint =
+        val vprOutStateConstraint =
           viper.silicon.utils.ast.BigAnd(optVprOutArgConstraints.get).withSource(predicateExp)
 
         errorBacktranslator.addReasonTransformer {
           case e: vprrea.InsufficientPermission if e causedBy vprPredicate =>
             InsufficientRegionPermissionError(predicateExp)
-          case e: vprrea.AssertionFalse if e causedBy vprStateConstraint => /* TODO: Fine-grained enough (per conjunct)? */
+          case e: vprrea.AssertionFalse if e causedBy vprOutStateConstraint => /* TODO: Fine-grained enough (per conjunct)? */
             RegionStateError(predicateExp)
         }
+
+        val vprInStateConstraint =
+          viper.silicon.utils.ast.BigAnd(optVprInArgConstraints.get).withSource(predicateExp)
+
+        val vprStateConstraint = vpr.And(vprInStateConstraint, vprOutStateConstraint)()
 
         (vprPredicateAccess, Some(vprStateConstraint))
     }

@@ -67,8 +67,8 @@ macro counting_algebra_constraints(n, m)
 
 // ----- Functionality -----
 
-procedure init() returns (id r, int lvl, arcell c)
-  requires true;
+procedure init(int lvl) returns (id r, arcell c)
+  requires lvl >= 0;
   ensures  ARCounter(r, lvl, c) && ARC(1)@r;
 {
   create();

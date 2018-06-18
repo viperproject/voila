@@ -79,10 +79,10 @@ abstract_atomic procedure unlock(id a, int lvl, memcell x)
 
 
 procedure non_atomic_unlock(id r, int alvl, id a, int lvl, memcell x)
-  requires Locked(r, alvl, a, lvl, x);
+  requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   requires Inv();
 {
-  unfold Locked(r, alvl, a, lvl, x);
+  // unfold Locked(r, alvl, a, lvl, x);
   // unfold CAPLock(r, alvl, a, lvl, x);
   // fold L(a, lvl, x);
 
@@ -128,11 +128,11 @@ abstract_atomic procedure lock(id a, int lvl, memcell x)
 }
 
 procedure non_atomic_lock(id r, int alvl, id a, int lvl, memcell x)
-  requires isLock(r, alvl, a, lvl, x) && Z@r;
-  ensures  Locked(r, alvl, a, lvl, x);
+  requires CAPLock(r, alvl, a, lvl, x, ?v1) && (v1 in Set(0, 1)) && Z@r;
+  ensures  CAPLock(r, alvl, a, lvl, x, ?v2) && v2 == 1 && K@r;
   // ensures  isLock(r, a, x);
 {
-  unfold isLock(r, alvl, a, lvl, x);
+  // unfold isLock(r, alvl, a, lvl, x);
 
   use_atomic
     using CAPLock(r, alvl, a, lvl, x) with Z@r;
@@ -140,5 +140,5 @@ procedure non_atomic_lock(id r, int alvl, id a, int lvl, memcell x)
     lock(a, lvl, x);
   }
 
-  fold Locked(r, alvl, a, lvl, x);
+  // fold Locked(r, alvl, a, lvl, x);
 }

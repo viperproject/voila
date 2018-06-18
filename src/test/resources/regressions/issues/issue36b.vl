@@ -21,7 +21,7 @@ region Qu(id s, int lvl, hd h)
 
 
 procedure makeQueue(id r, int lvl) returns (hd ret)
-  requires true;
+  requires lvl >= 0;
   ensures Qu(r, lvl, ret);
 {
   node y;

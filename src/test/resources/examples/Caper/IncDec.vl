@@ -24,6 +24,7 @@ region IncDec(id r, int lvl, memcell x)
 
 
 procedure makeCounter(id r, int lvl) returns (memcell ret)
+  requires lvl >= 0;
   ensures IncDec(r, lvl, ret, 0) && INC@r && DEC@r;
 {
   memcell v;
