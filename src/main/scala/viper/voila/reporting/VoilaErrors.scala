@@ -318,6 +318,50 @@ case class RegionStateError(offendingNode: PPredicateExp, detail: Option[Verific
     copy(offendingNode, detail)
 }
 
+case class RegionInterpretationNotStableError(offendingNode: PRegion, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PRegion
+  def localId: String = "region_interpretation_not_stable_error"
+  val localMessage: String = s"The interpretation of region ${offendingNode.id.name} might not be stable"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class MethodPreconditionNotStableError(offendingNode: PProcedure, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PProcedure
+  def localId: String = "method_precondition_not_stable_error"
+  val localMessage: String = s"The precondition of method ${offendingNode.id.name} might not be stable"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class MethodPostconditionNotStableError(offendingNode: PProcedure, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PProcedure
+  def localId: String = "method_postcondition_not_stable_error"
+  val localMessage: String = s"The postcondition of method ${offendingNode.id.name} might not be stable"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
+case class ActionNotTransitiveError(offendingNode: PAction, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PAction
+  def localId: String = "action_not_transitive_error"
+  val localMessage: String = s"The action ${offendingNode.formatForUsers} might not be transitive"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class RegionAtomicityContextTrackingError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
   extends AbstractVerificationError {
 

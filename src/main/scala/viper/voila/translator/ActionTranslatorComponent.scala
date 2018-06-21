@@ -336,7 +336,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   sealed trait TranslatedPGuardArg
-  case class TranslatedPStandartGuardArg(arguments: Vector[vpr.Exp]) extends TranslatedPGuardArg
+  case class TranslatedPStandartGuardArg(arguments: Vector[vpr.Exp], preArgs: Option[Vector[PExpression]]) extends TranslatedPGuardArg
   case class TranslatedPSetGuardArg(set: vpr.Exp) extends TranslatedPGuardArg
 
   def groupGuards[G <: PGuardExp](guards: Vector[G]): Map[String, TranslatedPGuardArg] = {
@@ -357,21 +357,21 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       !guardDecl.modifier.isInstanceOf[PDivisibleGuard]
     }
 
-    val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.map{g =>
-      g.guard.name -> TranslatedPStandartGuardArg(Vector.empty)
+    val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.map{ g =>
+      g.guard.name -> TranslatedPStandartGuardArg(Vector.empty, Some(Vector.empty))
     }(breakOut)
 
     val unionMap: Map[String, TranslatedPGuardArg] = {
 
       val setArg = new mutable.HashMap[String, mutable.Set[vpr.Exp]] with mutable.MultiMap[String, vpr.Exp]
-      val singleArg = new mutable.HashMap[String, mutable.Set[Vector[vpr.Exp]]] with mutable.MultiMap[String, Vector[vpr.Exp]]
+      val singleArg = new mutable.HashMap[String, mutable.Set[Vector[PExpression]]] with mutable.MultiMap[String, Vector[PExpression]]
 
       val occurringGuards = unionGuards.map(_.guard.name).distinct
 
       unionGuards foreach { g =>
         g.argument match {
           case arg: PStandartGuardArg =>
-            singleArg.addBinding(g.guard.name, arg.arguments map translate)
+            singleArg.addBinding(g.guard.name, arg.arguments)
 
           case arg: PSetGuardArg =>
             setArg.addBinding(g.guard.name, translate(arg.set))
@@ -382,7 +382,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         name -> sets.tail.fold(sets.head) { case (l, r) => vpr.AnySetUnion(l,r)() }
       }(breakOut)
 
-      val uniqueSingleArg: mutable.Map[String, Vector[vpr.Exp]] = mutable.Map.empty
+      val uniqueSingleArg: mutable.Map[String, Vector[PExpression]] = mutable.Map.empty
 
       val combinedSingleArg: Map[String, vpr.Exp] = singleArg.map { case (name, argss) =>
 
@@ -390,14 +390,14 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           uniqueSingleArg += name -> argss.head
         }
 
-        name -> vpr.ExplicitSet(argss.map(tupleWrap).toVector)()
+        name -> vpr.ExplicitSet(argss.map(args => tupleWrap(args map translate)).toVector)()
       }(breakOut)
 
       occurringGuards.map { name =>
         (uniqueSingleArg.isDefinedAt(name), combinedSingleArg.isDefinedAt(name), combinedSetArg.isDefinedAt(name)) match {
           case (false, false, true) => name -> TranslatedPSetGuardArg(combinedSetArg(name))
           case (false, true, false) => name -> TranslatedPSetGuardArg(combinedSingleArg(name))
-          case (true, true, false) => name -> TranslatedPStandartGuardArg(uniqueSingleArg(name))
+          case (true, true, false) => name -> TranslatedPStandartGuardArg(uniqueSingleArg(name) map translate, Some(uniqueSingleArg(name)))
           case (_, true, true) => name -> TranslatedPSetGuardArg(vpr.AnySetUnion(combinedSetArg(name), combinedSingleArg(name))())
         }
       }(breakOut)
@@ -419,7 +419,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         }
       }
 
-      accMap.toVector.map{case(name,perm) => name -> TranslatedPStandartGuardArg(Vector(perm))}(breakOut)
+      accMap.toVector.map{case(name,perm) => name -> TranslatedPStandartGuardArg(Vector(perm), None)}(breakOut)
     }
 
     noArgMap ++ unionMap ++ addMap
@@ -466,9 +466,9 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           vprTo,
           vpr.TrueLit()())
 
-        val actionGuardMap = groupGuards(action.guards).toVector
+        val actionGuardMap = groupGuards(action.guards)
 
-        val constraints: Vector[vpr.Exp] = actionGuardMap map { case (actionGuardName, actionGuardArg) =>
+        val constraints: Vector[vpr.Exp] = actionGuardMap.toVector map { case (actionGuardName, actionGuardArg) =>
 
           val guardDecl = usedGuardDeclMap(actionGuardName)
 
@@ -476,7 +476,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
           (relevantUsedGuardArg, actionGuardArg) match {
 
-            case (TranslatedPStandartGuardArg(heldGuardArgs), TranslatedPStandartGuardArg(requiredGuardArgs)) =>
+            case (TranslatedPStandartGuardArg(heldGuardArgs, _), TranslatedPStandartGuardArg(requiredGuardArgs, _)) =>
               (guardDecl.modifier, heldGuardArgs, requiredGuardArgs) match {
 
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs, sollArgs) =>
@@ -497,7 +497,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                   )
               }
 
-            case (TranslatedPStandartGuardArg(heldGuardArgs), TranslatedPSetGuardArg(requiredGuardSet)) =>
+            case (TranslatedPStandartGuardArg(heldGuardArgs, _), TranslatedPSetGuardArg(requiredGuardSet)) =>
               (guardDecl.modifier, heldGuardArgs) match {
 
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs) =>
@@ -522,7 +522,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                   )()
               }
 
-            case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPStandartGuardArg(requiredGuardArgs)) =>
+            case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPStandartGuardArg(requiredGuardArgs, _)) =>
               (guardDecl.modifier, requiredGuardArgs) match {
 
                 case (_: PUniqueGuard | _: PDuplicableGuard, sollArgs) =>
@@ -562,48 +562,17 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
         val binderInstantiations: Map[String, vpr.Exp] =
-          action.binders.map(binder =>
-            if (AstUtils.isBoundVariable(action.from, binder)) {
-              binder.id.name -> vprFrom
-            } else if (AstUtils.isBoundVariable(action.to, binder)) {
-              binder.id.name -> vprTo
-            } else {
-              val guardOption = action.guards find { _.argument match {
-                case PStandartGuardArg(args) =>
-                  args.exists(AstUtils.isBoundVariable(_,binder))
+          action.binders.map { binder =>
 
-                case _ => false
-              }}
+            val maybeExtractedExp = extractBoundExpFromAction(binder, action, vprFrom, vprTo, actionGuardMap, usedGuardsMap)
 
-              guardOption match {
-                case Some(PBaseGuardExp(guardId, PStandartGuardArg(guardArguments))) =>
-                  /* The bound variable is a direct argument of the action guard G, i.e. the action
-                   * guard is of the shape G(..., k, ...).
-                   */
-
-                  val argumentIndex = /* Index of k in G(..., k, ...) */
-                    guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
-
-                  usedGuardsMap(guardId.name) match {
-                    case TranslatedPStandartGuardArg(args) =>
-                      val vprArgument = /* Guard predicate is G(r, ..., k, ...) */
-                        args(argumentIndex)
-
-                      binder.id.name -> vprArgument
-
-                    case _ =>
-                      sys.error(
-                        s"The action at ${action.lineColumnPosition} does not belong to the class of "+
+            if (maybeExtractedExp.isEmpty) {
+              sys.error( s"The action at ${action.lineColumnPosition} does not belong to the class of "+
                           "currently supported actions. See issue #51 for further details.")
-                  }
-
-                case _ =>
-                  sys.error(
-                    s"The action at ${action.lineColumnPosition} does not belong to the class of "+
-                      "currently supported actions. See issue #51 for further details.")
-              }
             }
-          )(breakOut)
+
+            binder.id.name -> maybeExtractedExp.get
+          }(breakOut)
 
         val substitutes: Map[vpr.LocalVar, vpr.Exp] =
           vprExistentialConstraint.variables.map(v =>
@@ -885,5 +854,99 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         constructor(args, perm)
     }
   }
+
+  def extractBoundExpFromPoint(binder: PNamedBinder,
+                               formal: PExpression,
+                               actual: vpr.Exp
+                              ): Option[vpr.Exp] = {
+    if (AstUtils.isBoundVariable(formal, binder)) {
+      Some(actual)
+    } else {
+      None
+    }
+  }
+
+  def isBoundExpExtractableFromPoint(binder: PNamedBinder,
+                                     formal: PExpression
+                                    ): Boolean = {
+    AstUtils.isBoundVariable(formal, binder)
+  }
+
+  def extractBoundExpFromGuard(binder: PNamedBinder,
+                               actionGuardArg: Map[String, TranslatedPGuardArg],
+                               usedGuardArg: Map[String, TranslatedPGuardArg]
+                               ): Option[vpr.Exp] = {
+
+    actionGuardArg.toVector foreach { case (guardName, guardArg) => (guardArg, usedGuardArg(guardName)) match {
+      case (actionArg: TranslatedPStandartGuardArg, usedArg: TranslatedPStandartGuardArg) if actionArg.preArgs.isDefined =>
+        actionArg.preArgs.get.zip(usedArg.arguments) foreach { case (formal, actual) =>
+            val maybeExtractedExp = extractBoundExpFromPoint(binder, formal, actual)
+            if (maybeExtractedExp.isDefined) return maybeExtractedExp
+        }
+
+      case _ =>
+    }}
+
+    None
+  }
+
+  def extractBoundExpFromAction(binder: PNamedBinder,
+                                action: PAction,
+                                from: vpr.Exp,
+                                to: vpr.Exp,
+                                actionGuardArg: Map[String, TranslatedPGuardArg],
+                                usedGuardArg: Map[String, TranslatedPGuardArg]
+                               ): Option[vpr.Exp] = {
+
+    def ifNotAvailable(option: Option[vpr.Exp])(oth: => Option[vpr.Exp]) = option.fold(oth)(Some(_))
+
+    ifNotAvailable(extractBoundExpFromPoint(binder, action.from, from)){
+      ifNotAvailable(extractBoundExpFromPoint(binder, action.to, to)){
+        extractBoundExpFromGuard(binder, actionGuardArg, usedGuardArg)
+      }
+    }
+  }
+
+//    if (AstUtils.isBoundVariable(action.from, binder)) {
+//      from
+//    } else if (AstUtils.isBoundVariable(action.to, binder)) {
+//      to
+//    } else {
+//      val guardOption = action.guards find { _.argument match {
+//        case PStandartGuardArg(args) =>
+//          args.exists(AstUtils.isBoundVariable(_,binder))
+//
+//        case _ => false
+//      }}
+//
+//      guardOption match {
+//        case Some(PBaseGuardExp(guardId, PStandartGuardArg(guardArguments))) =>
+//          /* The bound variable is a direct argument of the action guard G, i.e. the action
+//           * guard is of the shape G(..., k, ...).
+//           */
+//
+//          val argumentIndex = /* Index of k in G(..., k, ...) */
+//            guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
+//
+//          guardArg(guardId) match {
+//            case SemiTranslatedPStandartGuardArg(args) =>
+//              val vprArgument = /* Guard predicate is G(r, ..., k, ...) */
+//                args(argumentIndex)
+//
+//              vprArgument
+//
+//            case _ =>
+//              sys.error(
+//                s"The action at ${action.lineColumnPosition} does not belong to the class of "+
+//                  "currently supported actions. See issue #51 for further details.")
+//          }
+//
+//        case _ =>
+//          sys.error(
+//            s"The action at ${action.lineColumnPosition} does not belong to the class of "+
+//              "currently supported actions. See issue #51 for further details.")
+//      }
+//    }
+//  }
 
 }

@@ -12,7 +12,7 @@ import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{CalleeAtomicityContextError, CalleeLevelTooHighError, FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, MakeAtomicError, PreconditionError, RegionStateError, UnfoldError}
+import viper.voila.reporting.{AbstractVerificationError, CalleeAtomicityContextError, CalleeLevelTooHighError, FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, MakeAtomicError, MethodPostconditionNotStableError, MethodPreconditionNotStableError, PreconditionError, RegionStateError, UnfoldError}
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -253,6 +253,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       ++ (tree.root.regions flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
+      ++ (tree.root.regions flatMap additionalRegionChecks) /* checks need to be done after region and procedure translation */
+      ++ (tree.root.procedures flatMap additionalMethodChecks)
     )
 
     val fields = topLevelDeclarations collect { case f: vpr.Field => f }
@@ -395,6 +397,161 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vprMethod.copy(
       body = bodyToVerify
     )(vprMethod.pos, vprMethod.info, vprMethod.errT)
+  }
+
+  def additionalMethodChecks(procedure: PProcedure): Vector[vpr.Method] =
+    maybeMethodConditionStabilityCheck(procedure)
+
+  def maybeMethodConditionStabilityCheck(procedure: PProcedure): Vector[vpr.Method] = {
+    if (!procedure.atomicity.isInstanceOf[PPrimitiveAtomic] && config.stableConditionsCheck()) {
+
+      val preconditionCheck = methodConditionStabilityCheck(
+        procedure,
+        procedure.pres map (_.assertion),
+        "precondition",
+        MethodPreconditionNotStableError(procedure)
+      )
+
+//      val postconditionCheck = methodConditionStabilityCheck(
+//        procedure,
+//        procedure.posts map (_.assertion),
+//        "postcondition",
+//        MethodPostconditionNotStableError(procedure)
+//      )
+
+      Vector(preconditionCheck)
+    } else {
+      Vector.empty
+    }
+  }
+
+  def methodConditionStabilityCheck(procedure: PProcedure,
+                                         conditions: Vector[PExpression],
+                                         name: String,
+                                         error: AbstractVerificationError
+                                        ): vpr.Method = {
+    assert(collectedVariableDeclarations.isEmpty)
+    assert(AtomicityContextLevelManager.noRecordedRegions)
+    assert(!procedure.atomicity.isInstanceOf[PPrimitiveAtomic])
+
+    case class Entry(clause: PInterferenceClause,
+                     regionPredicate: PPredicateExp,
+                     interferenceSet: vpr.FuncApp,
+                     referencePoint: vpr.FuncApp,
+                     regionState: vpr.FuncApp)
+
+    val methodName = s"$$_${procedure.id.name}_condition_stability_${name}_check"
+
+    val formalArgs = (procedure.formalArgs ++ procedure.formalReturns) map translate
+
+    val vprLocals = procedure.locals.map(translate)
+
+    LevelManager.clear()
+    val initializeLvl =
+      vpr.Inhale(LevelManager.levelHigherOrEqualToProcedureLevel(procedure))()
+
+    val vprMethodKindSpecificInitialization: vpr.Stmt =
+      procedure.atomicity match {
+        case PAbstractAtomic() =>
+
+          val regionInterferenceVariables: Map[PIdnUse, Entry] =
+            procedure.inters.map(inter => {
+              val regionId = inter.region
+              val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
+
+              val (reg, regionArguments, _, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+
+              val vprInterferenceSet = interferenceSetFunctions.application(reg, regionArguments)
+
+              val referencePoint = interferenceReferenceFunctions.application(reg, regionArguments)
+
+              val regionState = vpr.FuncApp(regionStateFunction(reg), regionArguments)()
+
+              regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprInterferenceSet, referencePoint, regionState)
+            }).toMap
+
+          val vprSaveInferenceSets: Vector[vpr.Stmt] =
+            regionInterferenceVariables.map { case (_, entry) => {
+
+
+              val translatedClauseSet = translate(entry.clause.set)
+
+              vpr.Seqn(
+                Vector(
+                  vpr.Inhale(
+                    vpr.EqCmp(
+                      entry.interferenceSet,
+                      translatedClauseSet
+                    )()
+                  )(),
+                  vpr.Inhale(
+                    vpr.EqCmp(
+                      entry.referencePoint,
+                      vpr.Old(entry.regionState)()
+                    )()
+                  )()
+                ),
+                Vector.empty
+              )()}
+            }(breakOut)
+
+          vpr.Seqn(vprSaveInferenceSets, Vector.empty)()
+
+        case PNonAtomic() =>
+
+          inferContextAllInstances("beginning of non atomic procedure")
+
+        case PPrimitiveAtomic() => ??? /* not required */
+      }
+
+    val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
+
+    val vprConditions = conditions map translate
+
+    // val inhaleCondition: vpr.Stmt = vpr.Inhale(condition)()
+
+    // TODO: could be optimized to only havocing regions that occur inside region interpretation
+    val stabilizationCode: vpr.Stmt = stabilizeAllInstances("check stability of method condition")
+
+    val assertCondition: vpr.Stmt = vpr.Assert(viper.silicon.utils.ast.BigAnd(vprConditions))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy assertCondition =>
+        error
+    }
+
+    val inhaleSkolemizationFunctionFootprints =
+      vpr.Inhale(
+        viper.silicon.utils.ast.BigAnd(
+          /* TODO: Would benefit from an optimisation similar to issue #47 */
+          tree.root.regions map (region =>
+            actionSkolemizationFunctionFootprintAccess(region.id.name)))
+      )()
+
+
+    val bodyWithPreamble =
+      vpr.Seqn(
+        initializeLvl +:
+        inhaleSkolemizationFunctionFootprints +:
+        initializeFootprints ++:
+        vprMethodKindSpecificInitialization +:
+        Vector(
+            stabilizationCode,
+            assertCondition
+          ),
+        collectedVariableDeclarations ++ vprLocals
+      )()
+
+    collectedVariableDeclarations = Vector.empty
+
+    vpr.Method(
+      name = methodName,
+      formalArgs = formalArgs,
+      formalReturns = Vector.empty,
+      pres = vprConditions,
+      posts = Vector.empty,
+      body = Some(bodyWithPreamble)
+    )()
   }
 
   def translateAsStub(procedure: PProcedure): vpr.Method = {

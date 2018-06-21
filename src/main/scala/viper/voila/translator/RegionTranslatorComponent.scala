@@ -11,10 +11,11 @@ import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.InsufficientGuardPermissionError
+import viper.voila.reporting.{ActionNotTransitiveError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, MakeAtomicError, RegionInterpretationNotStableError}
 import viper.silver.ast.utility.Rewriter.Traverse
 import viper.silver.ast.utility.Simplifier
 import viper.silver.{ast => vpr}
+import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.silver.verifier.{reasons => vprrea}
 import viper.voila.translator.TranslatorUtils.{BaseSelector, BasicManagerWithSimpleApplication}
 
@@ -231,6 +232,151 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           regionPredicate,
           regionStateFunction(region),
           regionStateTriggerFunction(region)))
+  }
+
+  def additionalRegionChecks(region: PRegion): Vector[vpr.Declaration] = {
+    maybeRegionInterpretationStabilityCheck(region).toVector ++
+    maybeRegionActionIndividualTransitivityCheck(region)
+  }
+
+  def maybeRegionInterpretationStabilityCheck(region: PRegion): Option[vpr.Method] = {
+    if (config.stableConditionsCheck()) {
+      Some(regionInterpretationStabilityCheck(region))
+    } else {
+      None
+    }
+  }
+
+  def regionInterpretationStabilityCheck(region: PRegion): vpr.Method = {
+
+    val methodName = s"$$_${region.id.name}_interpretation_stability_check"
+
+    val formalArgs = region.formalInArgs map translate
+
+    val body = {
+
+      val inhaleSkolemizationFunctionFootprints =
+        vpr.Inhale(
+          viper.silicon.utils.ast.BigAnd(
+            /* TODO: Would benefit from an optimisation similar to issue #47 */
+            tree.root.regions map (region =>
+              actionSkolemizationFunctionFootprintAccess(region.id.name)))
+        )()
+
+      val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
+
+      val interpretation = translate(region.interpretation)
+
+      val inhaleInterpretation = vpr.Inhale(interpretation)().withSource(region.interpretation)
+
+      // TODO: could be optimized to only havocing regions that occur inside region interpretation
+      val stabilizationCode = stabilizeAllInstances("check stability of region interpretation")
+
+      val assertInterpretation = vpr.Assert(interpretation)().withSource(region.interpretation)
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy assertInterpretation =>
+          RegionInterpretationNotStableError(region)
+      }
+
+      vpr.Seqn(
+        inhaleSkolemizationFunctionFootprints +:
+        initializeFootprints ++:
+        Vector(
+          inhaleInterpretation,
+          stabilizationCode,
+          assertInterpretation
+        ),
+        Vector.empty
+      )()
+    }
+
+    vpr.Method(
+      name = methodName,
+      formalArgs = formalArgs,
+      formalReturns = Vector.empty,
+      pres = Vector.empty,
+      posts = Vector.empty,
+      body = Some(body)
+    )()
+  }
+
+  def maybeRegionActionIndividualTransitivityCheck(region: PRegion): Vector[vpr.Method] = {
+    if(config.transitiveActionsCheck()) {
+      region.actions.zipWithIndex.map{case (a,i) => regionActionIndividualTransitivityCheck(region,a,i.toString)}
+    } else {
+      Vector.empty
+    }
+  }
+
+  def regionActionIndividualTransitivityCheck(region: PRegion, action: PAction, actionName: String): vpr.Method = {
+
+    val methodName = s"$$_${region.id.name}_${actionName}_action_transitivity_check"
+
+    val (guardBinder, stateBinder) = action.binders partition { binder =>
+      action.guards.exists{ _.argument match {
+        case PStandartGuardArg(args) =>
+          args.exists(isBoundExpExtractableFromPoint(binder, _))
+
+        case _ => false
+      }}
+    }
+
+    val guardDecls = guardBinder map localVariableDeclaration
+
+    val initialStateDecls = stateBinder map localVariableDeclaration
+    val initialStateVars = initialStateDecls map (_.localVar)
+
+    def actionApplication(postfix: String): (Vector[vpr.LocalVarDecl], vpr.Exp, vpr.Exp, vpr.Exp) = {
+      val formalArgs = initialStateDecls map {v => vpr.LocalVarDecl(s"${v.name}_$postfix", v.typ)()}
+      val vars = formalArgs map (_.localVar)
+
+      val renaming = initialStateVars.zip(vars).toMap
+
+      val condition = translate(action.condition).replace(renaming)
+      val from = translate(action.from).replace(renaming)
+      val to = translate(action.to).replace(renaming)
+
+      val guardArgs = action.guards
+
+      (formalArgs, condition, from, to)
+    }
+
+    val (aDecls, aCond, aFrom, aTo) = actionApplication("a")
+    val (bDecls, bCond, bFrom, bTo) = actionApplication("b")
+    val (cDecls, cCond, cFrom, cTo) = actionApplication("c")
+
+    val body = {
+
+      val assumptions =
+        viper.silicon.utils.ast.BigAnd(Vector(
+          aCond, bCond, vpr.EqCmp(aTo, bFrom)(), vpr.EqCmp(aFrom, cFrom)(), vpr.EqCmp(bTo, cTo)()
+        ))
+
+      val transitivityAssertion = vpr.Assert(cCond)()
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy transitivityAssertion =>
+          ActionNotTransitiveError(action)
+      }
+
+      vpr.Seqn(
+        Vector(
+          vpr.Inhale(assumptions)(),
+          transitivityAssertion
+        ),
+        guardDecls ++ aDecls ++ bDecls ++ cDecls
+      )()
+    }
+
+    vpr.Method(
+      name = methodName,
+      formalArgs = Vector.empty,
+      formalReturns = Vector.empty,
+      pres = Vector.empty,
+      posts = Vector.empty,
+      body = Some(body)
+    )()
   }
 
   def extractBoundRegionInstance(id: PIdnUse): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {

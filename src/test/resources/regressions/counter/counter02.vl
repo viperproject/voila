@@ -161,7 +161,6 @@ procedure read02_seqclient01(id k, int alvl,  id c, int lvl, memcell x) returns 
   use_atomic
     using SeqCounter(k, alvl,  c, lvl, x) with S@k;
   {
-    //:: UnexpectedOutput(precondition_error:interference_error, /voila/issue/29/)
     ret := read02(c, lvl, x); // CALL OK
   }
 }

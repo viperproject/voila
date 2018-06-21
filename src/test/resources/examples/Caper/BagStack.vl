@@ -54,7 +54,7 @@ region BagList(id r, int lvl, node y; int v, node z)
             BagList(z_r, z_lvl, z, _, _, 0) && OWN@z_r && Inv(v))
      : a == 1 ?
 //        (y.value |-> ?v && y.next |-> ?z && y._nextid |-> ?z_r &&
-         (BagList(z_r, z_lvl, z, _, _, 0) && OWN@r)
+         (BagList(z_r, z_lvl, z, _, _) && OWN@r)
      : false)
   }
   state { a }
