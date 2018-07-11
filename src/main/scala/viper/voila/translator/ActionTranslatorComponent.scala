@@ -744,7 +744,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           s"${guardId} (${guardId.position})")
   }
 
-  private def tupleWrap(args: Vector[vpr.Exp]): vpr.Exp =
+  def tupleWrap(args: Vector[vpr.Exp]): vpr.Exp =
     if (args.length == 1) {
       args.head
     } else {

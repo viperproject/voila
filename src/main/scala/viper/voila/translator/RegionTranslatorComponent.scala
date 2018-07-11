@@ -11,7 +11,7 @@ import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{ActionNotTransitiveError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, MakeAtomicError, RegionInterpretationNotStableError}
+import viper.voila.reporting.{ActionNotTransitiveError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, MakeAtomicError, RegionActionsNotTransitiveError, RegionInterpretationNotStableError}
 import viper.silver.ast.utility.Rewriter.Traverse
 import viper.silver.ast.utility.Simplifier
 import viper.silver.{ast => vpr}
@@ -236,7 +236,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def additionalRegionChecks(region: PRegion): Vector[vpr.Declaration] = {
     maybeRegionInterpretationStabilityCheck(region).toVector ++
-    maybeRegionActionIndividualTransitivityCheck(region)
+    maybeRegionActionsTransitivityCheck(region)
+    // maybeRegionActionIndividualTransitivityCheck(region)
   }
 
   def maybeRegionInterpretationStabilityCheck(region: PRegion): Option[vpr.Method] = {
@@ -307,6 +308,216 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     } else {
       Vector.empty
     }
+  }
+
+  def maybeRegionActionsTransitivityCheck(region: PRegion): Vector[vpr.Method] = {
+    if(config.transitiveActionsCheck()) {
+      Vector(regionActionTransitivityCheck(region))
+    } else {
+      Vector.empty
+    }
+  }
+
+  def regionActionTransitivityCheck(region: PRegion): vpr.Method = {
+
+    val methodName = s"$$_${region.id.name}_action_transitivity_check"
+
+    val guards = region.guards
+
+    val guardIds = guards.map{_.id.name}
+
+    val guardDecls = guards.map{g => g.modifier match {
+      case _: PUniqueGuard | _: PDuplicableGuard =>
+        g.formalArguments.length match {
+          case 0 =>
+            vpr.LocalVarDecl(g.id.name, vpr.Bool)()
+
+          case 1 =>
+            val elementType = translate(g.formalArguments.head.typ)
+            vpr.LocalVarDecl(g.id.name, vpr.SetType(elementType))()
+
+          case n =>
+            val elementType =
+              vpr.DomainType(
+                preamble.tuples.domain(n),
+                preamble.tuples.typeVarMap(g.formalArguments map (d => translate(d.typ)))
+              )
+            vpr.LocalVarDecl(g.id.name, vpr.SetType(elementType))()
+        }
+
+      case _: PDivisibleGuard =>
+        vpr.LocalVarDecl(g.id.name, vpr.Perm)()
+    }}
+
+    val guardVarMap = guardIds.zip(guardDecls map (_.localVar)).toMap
+    val guardModifierMap = guardIds.zip(guards map (_.modifier)).toMap
+
+    val actionMaps: Map[Int, Map[String, TranslatedPGuardArg]] =
+      region.actions.zipWithIndex.map{ case (a,i) =>
+        i -> groupGuards(a.guards)
+      }(breakOut)
+
+    def actionApplication(action: PAction,
+                          index: Int,
+                          postfix: String)
+    : (Vector[vpr.LocalVarDecl], vpr.Exp, vpr.Exp, vpr.Exp, vpr.Exp) = {
+
+      val initialDecls = action.binders map localVariableDeclaration
+      val initialVars = initialDecls map (_.localVar)
+
+      val formalDecls = initialDecls.map{v => vpr.LocalVarDecl(s"${v.name}_${index}_$postfix", v.typ)()}
+      val vars = formalDecls map (_.localVar)
+
+      val renaming = initialVars.zip(vars).toMap
+
+      val condition = translate(action.condition).replace(renaming)
+      val from = translate(action.from).replace(renaming)
+      val to = translate(action.to).replace(renaming)
+
+      val guards = actionMaps(index).toVector
+
+      val guardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
+
+        case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
+          args.length match {
+            case 0 => guardVarMap(name)
+            case n => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
+          }
+
+        case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
+          vpr.AnySetSubset(set, guardVarMap(name))()
+
+        case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
+          vpr.GeCmp(args.head, guardVarMap(name))()
+
+      }}
+
+      (formalDecls, condition, from, to, viper.silicon.utils.ast.BigAnd(guardConstraints).replace(renaming))
+    }
+
+    def allActionApplication(from: vpr.Exp, to: vpr.Exp, postfix: String): (Vector[vpr.LocalVarDecl], vpr.Exp) = {
+
+      val (declss, constraints) = region.actions.zipWithIndex.map{ case (a,i) =>
+        val (decls, aCondition, aFrom, aTo, aGuardConstraint) = actionApplication(a, i, postfix)
+        val constraint = viper.silicon.utils.ast.BigAnd(Vector(
+          vpr.EqCmp(aFrom, from)(),
+          vpr.EqCmp(aTo, to)(),
+          aCondition,
+          aGuardConstraint
+        ))
+
+        (decls, constraint)
+      }.unzip
+
+      (declss.flatten, viper.silicon.utils.ast.BigOr(constraints))
+    }
+
+    def allActionApplication2(from: vpr.Exp, to: vpr.Exp, postfix: String): vpr.Exp = {
+
+      val constraints = region.actions.zipWithIndex.map{ case (a,i) =>
+
+        val (fromBound, notFromBound) = a.binders.partition(isBoundExpExtractableFromPoint(_, a.from))
+        val (toBound, restBinders) = notFromBound.partition(isBoundExpExtractableFromPoint(_, a.to))
+
+        val fromBoundRenaming = fromBound.map(
+          b => localVariableDeclaration(b).localVar -> extractBoundExpFromPoint(b, a.from, from).get
+        )(breakOut)
+
+        val toBoundRenaming = toBound.map(
+          b => localVariableDeclaration(b).localVar -> extractBoundExpFromPoint(b, a.to, to).get
+        )(breakOut)
+
+        val initialDecls = restBinders map localVariableDeclaration
+        val initialVars = initialDecls map (_.localVar)
+
+        val formalDecls = initialDecls.map{v => vpr.LocalVarDecl(s"${v.name}_${i}_$postfix", v.typ)()}
+        val vars = formalDecls map (_.localVar)
+
+        val renaming = initialVars.zip(vars).toMap ++ fromBoundRenaming ++ toBoundRenaming
+
+        val aCondition = translate(a.condition).replace(renaming)
+        val aFrom = translate(a.from).replace(renaming)
+        val aTo = translate(a.to).replace(renaming)
+
+        val guards = actionMaps(i).toVector
+
+        val aGuardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
+
+          case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
+            args.length match {
+              case 0 => guardVarMap(name)
+              case n => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
+            }
+
+          case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
+            vpr.AnySetSubset(set, guardVarMap(name))()
+
+          case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
+            vpr.GeCmp(args.head, guardVarMap(name))()
+
+        }}
+
+        val aGuardConstraint = viper.silicon.utils.ast.BigAnd(aGuardConstraints).replace(renaming)
+
+        val constraint = viper.silicon.utils.ast.BigAnd(Vector(
+          vpr.EqCmp(aFrom, from)(),
+          vpr.EqCmp(aTo, to)(),
+          aCondition,
+          aGuardConstraint
+        ))
+
+        if (formalDecls.isEmpty) {
+          constraint
+        } else {
+          vpr.Exists(
+            formalDecls,
+            constraint
+          )()
+        }
+      }
+
+      viper.silicon.utils.ast.BigOr(constraints)
+    }
+
+    val stateType = translate(semanticAnalyser.typ(region.state))
+    val aStateDecl = vpr.LocalVarDecl("aState", stateType)()
+    val bStateDecl = vpr.LocalVarDecl("bState", stateType)()
+    val cStateDecl = vpr.LocalVarDecl("cState", stateType)()
+
+    val (xDecls, xConstraint) = allActionApplication(aStateDecl.localVar, bStateDecl.localVar, "x")
+    val (yDecls, yConstraint) = allActionApplication(bStateDecl.localVar, cStateDecl.localVar, "y")
+    val zConstraint = allActionApplication2(aStateDecl.localVar, cStateDecl.localVar, "z")
+
+    val body = {
+
+      val xInhale = vpr.Inhale(xConstraint)()
+      val yInhale = vpr.Inhale(yConstraint)()
+
+      val zAssert = vpr.Assert(zConstraint)()
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy zAssert =>
+          RegionActionsNotTransitiveError(region)
+      }
+
+      vpr.Seqn(
+        Vector(
+          xInhale,
+          yInhale,
+          zAssert
+        ),
+        guardDecls ++ xDecls ++ yDecls ++ Vector(aStateDecl, bStateDecl, cStateDecl)
+      )()
+    }
+
+    vpr.Method(
+      name = methodName,
+      formalArgs = Vector.empty,
+      formalReturns = Vector.empty,
+      pres = Vector.empty,
+      posts = Vector.empty,
+      body = Some(body)
+    )()
   }
 
   def regionActionIndividualTransitivityCheck(region: PRegion, action: PAction, actionName: String): vpr.Method = {

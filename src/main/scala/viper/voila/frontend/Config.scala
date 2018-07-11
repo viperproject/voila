@@ -65,7 +65,7 @@ class Config(arguments: Seq[String])
     name = "stabilityCheck",
     descrYes = "Enables stability checks of pre-/postconditions, region interpretations, and invariants",
     descrNo = "Disables stability checks of pre-/postconditions, region interpretations, and invariants",
-    default = Some(true),
+    default = Some(false),
     noshort = true
   )
 

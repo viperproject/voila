@@ -362,6 +362,17 @@ case class ActionNotTransitiveError(offendingNode: PAction, detail: Option[Verif
     copy(offendingNode, detail)
 }
 
+case class RegionActionsNotTransitiveError(offendingNode: PRegion, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PRegion
+  def localId: String = "region_actions_not_transitive_error"
+  val localMessage: String = s"The actions of region ${offendingNode.id.name} might not be transitive"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class RegionAtomicityContextTrackingError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
   extends AbstractVerificationError {
 
