@@ -13,7 +13,7 @@ export PS1="\[\e[38;5;63m\][\u@demo|\A]\[\e[m\]\n$ \[\e[1;97m\]"
 # Set up a convenient alias for verifying a Voila file
 
 __voila() {
-  $VOILA_CMD -i $(realpath $1)
+  $VOILA_CMD -i "$(realpath $1)"
 }
 
 alias voila='__voila'

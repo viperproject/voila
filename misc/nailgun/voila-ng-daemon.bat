@@ -40,8 +40,8 @@ if not exist %VOILA_JAR% (
 
 REM ======== Path-dependent configuration ========
 
-set JAVA_EXE=java
-set CP=%BASE_DIR%\nailgun-server-0.9.1.jar
+set JAVA_EXE=%JAVA_HOME%\bin\java
+set CP=%BASE_DIR%\nailgun-server-0.9.3-SNAPSHOT.jar
 set CP=%CP%;%VOILA_JAR%
 
 REM ======== Java ========

@@ -17,7 +17,8 @@ Basic Visual Studio Code support for Voila.
 
 ### Fine-tune highlighting
 
-- Switch to VSCode theme `Dark (Visual Studio)`
+- Switch to VSCode theme `Visual Studio Dark` (potentially called
+  `Dark (Visual Studio)`)
 - Open your user settings (File -> Preferences -> Settings)
 - Copy the following configuration block into your user settings:
  
@@ -56,7 +57,7 @@ Basic Visual Studio Code support for Voila.
             {
               "scope": "keyword.control.toplevel.voila",
               "settings": {
-                "foreground": "#F2D116"
+                "foreground": "#ffe23e"
               }
             },
           ]
@@ -234,36 +235,76 @@ that runs Voila.
 
 ### 3. Windows: Using AutoHotkey and MSYS2
 
-- Install [MSYS2](http://www.msys2.org/)
+- Install [MSYS2](http://www.msys2.org/), e.g. to `C:\msys64`
+
 - Install [AutoHotkey](https://autohotkey.com/) (v1 should work, not sure about
   v2)
-- Open VSCode and an MSYS2 terminal (e.g. `MSYS2 MinGW 64-bit`) and place the 
+
+- Open VSCode and an MSYS2 terminal (e.g. `MSYS2 MinGW 64-bit`) and place the
   windows side-by-side (e.g. using `Win+Left`/`Win+Right`)
-- Focus the terminal:
-    - Create an environment variable pointing to Voila's executable. E.g.
 
-          VOILA_CMD='/d/Develop/Viper/voila/misc/nailgun/voila.bat ng=true'
+- Focus the terminal and change directory to where your demo files are. E.g.
 
-      It is expected that a Voila file can be verified by running
+      cd /c/demo/
+
+- Skip the *next* step if you're not using Nailgun. In any case, ensure that
+  Voila colours its output (errors) by passing the Logback configuration
+  `./conf/logback-color.xml` to the JVM at start-up
+    
+- Assuming that Voila has been checked out into `/c/voila/`, make sure that the
+  environment variable `JAVA_HOME` is set, and start Nailgun as follows (this 
+  will open a new terminal):
+
+      /c/msys64/msys2_shell.cmd -mingw64 -c "/c/voila/misc/nailgun/voila-ng-daemon.bat logback=/c/voila/conf/logback-color.xml"
+
+  A new MSYS2 terminal should have opened and Nailgun should print that it's
+  listening on port 2113.
+
+  Note: if Nailgun doesn't start and instead complaints about an address already
+  being in use, then there's most likely already a Nailgun instance running (and
+  listening on the same port). As a brute force measure, simply kill all
+  `java.exe` processes. Better: terminate the running Nailgun instance by executing
+  `/c/voila/misc/nailgun/ng.exe --nailgun-port 2113 ng-stop`.
+
+- Create a (terminal-local) environment variable pointing to Voila's executable.
+  E.g. to use Nailgun, execute the following in the terminal:
+
+      VOILA_CMD="/c/voila/misc/nailgun/voila.bat ng=true"
+
+  It is expected that a Voila file can now be verified by running
+  
+      $VOILA_CMD -i /absolute/path/to/some/file.vl
+
+- Execute the following in the terminal:
+    
+      source /c/voila/misc/vscode/demo-env-win/setup.bash
+
+  The terminal prompt should have changed, and it should now be possible to
+  verify a Voila file by executing
       
-          $VOILA_CMD -i /absolute/path/to/some/file.vl
+      voila path/to/some/file.vl 
+          
+  Both absolute and relative paths should work.
 
-    - Execute `source path/to/demo-env-win/setup.bash` (`demo-env-win` should be a
-      subdirectory) of the directory where this README was found)
-    - It should now be possible to verify a Voila file by executing 
-      `voila path/to/some/file.vl`
-- Load the script `demo-env-win/setup.ahk` into AutoHotkey
-- The following keyboard shortcuts should now work:
+- Load the script `/c/voila/misc/vscode/demo-env-win/setup.ahk` into AutoHotkey,
+  which should enable the following keyboard shortcuts:
+
     - In VSCode, pressing `F5` should verify the currently open Voila file in
-      the open MSYS2 terminal
+      the open terminal
+
     - Pressing `Win+Alt+Left` should horizontally enlarge VSCode and shrink the
       terminal, and `Win+Alt+Right` should have the opposite effect
-    - Pressing `Win+Ctrl+f` should make VSCode and MSYS2 fullscreen by removing
-      decorational border/frame elements (press again to undo)
+      
+    - Pressing `Win+Ctrl+f` should make VSCode and the termainl fullscreen by
+      removing decorative border/frame elements (press again to undo)
+      
     - Pressing `Win+Alt+Up` should maximise VSCode and thus hide the terminal
-      (press again to undo)
+      (press again to undo). This might only properly cover the screen if VSCode
+      is in fullscreen mode (`Win+Ctrl+f`).
+
 - For the perfect demo mode:
-    - Hide several VSCode GUI elements via the following settings:
+
+    - Hide several VSCode `GUI` elements via the following settings:
 
           "window.menuBarVisibility": "toggle",
           "workbench.activityBar.visible": false,
@@ -273,10 +314,13 @@ that runs Voila.
     - Hide VSCode's tab bar by opening the developer tools
       (`Help` -> `Toggle Developer Tools`) and running the following
       in the Javascript console:
-      `$$(".editor .content .container .title")[0].style.display = "none"`
-    - Hide the scrollbar of the MSYS2 terminal via 
-      `Options` -> `Window` -> `Scrollbar` -> `None`
-    - Use `Win+Ctrl+f` to make VSCode and the MSYS2 terminal fullscreen
+
+          $$(".editor .content .container .title")[0].style.display = "none"
+
+    - Hide the scrollbar of the terminal via `Options` -> `Window` ->
+      `Scrollbar` -> `None`
+    
+    - Use `Win+Ctrl+f` to make VSCode and the terminal fullscreen
 
 ## Nailgun
 
@@ -290,8 +334,8 @@ that runs Voila.
 - Execute `voila-ng-daemon.bat` to start the Voila daemon. 
   Have a look at the batch file to see possible options: in particular, the
   options `jar` and `logback`.
-- Configure the Code runner as follows to verify Voila files via the Voila 
-  daemon:
+- Configure, for example, the Code runner as follows to verify Voila files via
+  the Voila Nailgun daemon:
 
       "code-runner.executorMapByFileExtension": {
         ".vl": "voila/misc/nailgun/voila.bat ng=true -i $fullFileName"
