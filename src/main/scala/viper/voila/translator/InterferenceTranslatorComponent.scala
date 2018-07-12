@@ -235,7 +235,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
           )()
 
         } else {
-          ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no additional linking requried", "")))
+          ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no additional linking required", "")))
         }
 
       val referencePointSelections = allRegions map { case (innerRegion, innerArgs) =>

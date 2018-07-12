@@ -337,7 +337,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     (
       vpr.Seqn(
-        preFrame +: preExhales :+ stabilizeAllInstances("stabelizing the frame"),
+        preFrame +: stabilizeAllInstances("stabelizing the frame") +: preExhales,
         Vector.empty
       )(),
       vpr.Seqn(

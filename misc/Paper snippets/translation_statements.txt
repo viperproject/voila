@@ -31,10 +31,48 @@ NOTE: Voila does not support non-ghost, non-atomic statements in a context
 ⟪skip⟫ ≡ assert true
 
 ⟪if (b) { s1; } else { s2; }⟫ ≡
-  if (⟦b⟧) { ⟦s1⟧ } else { ⟦s2⟧ }
+
+  Let level_store be a fresh variable
+
+  return
+    level_store := level;
+    if (⟦b⟧) {
+      ⟦s1⟧;
+      assert level == level_store;
+    } else {
+      ⟦s2⟧
+      assert level == level_store;
+    }
+    level := level_store;
 
 ⟪while (b) invariant I; { s; }⟫ ≡
-  while (⟦b⟧) invariant ⟦I⟧ { ⟦s⟧ }
+
+  Let level_store be a fresh variable
+
+  inhaleSkolemizationFunctionFootprints ≡ ... // Can probably be omitted
+
+  preLabel ≡ label pre_atomicityl
+
+  Let R1, R2, ... be all existing regions with the following formal arguments respectively
+    (id r_1, T1_1 x1_1, ...), (id r_2, T1_2 x1_2, ...), ...
+
+  preserveAtomicityContext ≡
+    inhale forall id r_1, T1_1 x1_1, ... :: acc(R1_A_fp(r_1, x1_1, ...), write);
+    inhale forall id r_1, T1_1 x1_1, ... :: R1_A(r_1, x1_1, ...) == old[preLabel](R1_A(r_1, x1_1, ...));
+    inhale forall id r_2, T1_2 x1_2, ... :: acc(R2_A_fp(r_2, x1_2, ...), write);
+    inhale forall id r_2, T1_2 x1_2, ... :: R2_A(r_2, x1_2, ...) == old[preLabel](R2_A(r_2, x1_2, ...));
+    ...
+
+  return
+    level_store := level;
+    preLabel;
+    while (⟦b⟧) invariant ⟦I⟧ {
+      inhaleSkolemizationFunctionFootprints;
+      preserveAtomicityContext;
+      ⟦s⟧
+      assert level == level_store;
+    }
+    level := level_store;
 
 ⟪x := e⟫ ≡ ⟦x⟧ := ⟦e⟧
 
@@ -67,6 +105,33 @@ NOTE: Voila does not support non-ghost, non-atomic statements in a context
 
 ⟪use lemma(e1, ...)⟫ ≡ // TODO
 
-⟪y1, ... := proc(e1, ...)⟫ ≡ // TODO
+⟪y1, ... := proc(e1, ...)⟫ ≡
+
+  preLabel ≡ label pre_calll
+
+  Let f1, ... be the formal parameters of method proc
+
+  Let P be the precondition of method proc
+  Let Q be the postcondition of method proc
+
+  Let l1, l2, ... be the level expressions that occur in region assertions in P
+
+  vprInterferenceCheck ≡ //TODO
+
+  vprAssertLvlConstraint ≡
+    assert level > ⟦l1⟧[f1, .... ↦ ⟦e1⟧, ...] &&
+           level > ⟦l2⟧[f1, .... ↦ ⟦e1⟧, ...] &&
+           ...
+
+  return
+    vprInterferenceCheck;
+    preLabel;
+    vprAssertLvlConstraint;
+    exhale ⟦P⟧[f1, .... ↦ ⟦e1⟧, ...]
+    label pre_havoc;
+    stabilise-region-instances(pre_havoc)
+    havoc y1, ...
+    inhale ⟦Q⟧[f1, .... ↦ ⟦e1⟧, ...]
+
 
 The translation of rule blocks such as make_atomic is defined in translation_rules.txt

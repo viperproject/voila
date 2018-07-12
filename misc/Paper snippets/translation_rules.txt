@@ -41,6 +41,61 @@ region R(id r, T1 x1, T2 x2, ...)
     exhale acc(r.from) && acc(r.to);
 
 
+============================== New Make Atomic ==============================
+
+⟪
+  make_atomic
+    using R(e0, e1, ...) // No out-arguments allowed
+    with  G(e'1, ...)@e'0  // G is one of R's guards
+  {
+    s;
+  }
+⟫ ≡
+
+  (r, lvl, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+  guard ≡ ⟦G(e'1, ...)@e'0⟧
+
+  (preFrame, postFrame) ≡ explicit-frame
+
+  Let atomicity_level_store be a fresh variable
+
+  return
+    label guard_evaluationl;
+    exhale guard;
+    exhale acc(R_interp(r, lvl, v1, ...), write);
+    preFrame;
+    inhale acc(R_interp(r, lvl, v1, ...), write);
+
+    inhale acc(r.diamond);
+
+    atomicity_level_store := atomicity_level;
+    // in the current real implementation we collect the level expressions and check "< level" at the call
+    atomicity_level := min(atomicity_level, lvl);
+
+    assert perm(R_A_fp(r, lvl, v1, ...)) == none;
+    inhale acc(R_A_fp(r, lvl, v1, ...));
+
+    label pre_havoc1;
+    stabilise-region-and-infer-context-instance(R, r, v1, ..., pre_havoc1)
+
+    ⟦s⟧ // Define ⟦...⟧
+
+    assert r.from in R_X(r, x1, ...);
+    region-state-change-allowed-by-guard(R, r, v1, ..., G, guard, r.from, r.to, guard_evaluationl)
+
+    label pre_havoc2;
+    stabilise-region-instance(R, r, v1, ..., pre_havoc2)
+
+    inhale r.to == R_state(r, v1, ...);
+    inhale r.from == old(R_state(r, v1, ...));
+    inhale guard;
+    exhale acc(r.from) && acc(r.to);
+
+    exhale acc(R_A_fp(r, lvl, v1, ...));
+    atomicity_level := atomicity_level_store;
+    postFrame;
+
+
 ============================== Open Region ==============================
 
 ⟪
@@ -59,6 +114,33 @@ region R(id r, T1 x1, T2 x2, ...)
     ⟦s⟧
     fold R_interp(r, v1, ...);
     assert R_state(r, v1, ...) == old[pre_open_region](R_state(r, v1, ...));
+
+
+============================== New Open Region =========================
+
+⟪
+  open_region
+    using R(e0, e1, ...) // No out-arguments allowed
+  {
+    s;
+  }
+⟫ ≡
+
+  (r, lvl, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+
+  Let level_store be a fresh variable
+
+  return
+    label pre_open_region;
+    assert level > lvl;
+    level_store := level; // in the current real implementation we change the representing level variable instead
+    level := lvl;
+    unfold R_interp(r, lvl, v1, ...);
+    link-interference-context(R, r, lvl, v1, ...)
+    ⟦s⟧
+    fold R_interp(r, lvl, v1, ...);
+    assert R_state(r, lvl, v1, ...) == old[pre_open_region](R_state(r, lvl, v1, ...));
+    level := level_store;
 
 
 ============================== Use Atomic ==============================
@@ -93,6 +175,46 @@ region R(id r, T1 x1, T2 x2, ...)
       R_state(r, v1, ...))
 
 
+============================== New Use Atomic ==============================
+
+⟪
+  use_atomic
+    using R(e0, e1, ...) // No out-arguments allowed
+    with  G(e'1, ...)@e'0  // G is one of R's guards
+  {
+    s;
+  }
+⟫ ≡
+
+  (r, lvl, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+  guard ≡ ⟦G(e'1, ...)@e'0⟧
+
+  Let level_store be a fresh variable
+
+  return
+    label pre_use_atomic;
+    assert perm(R_A_fp(r, lvl, v1, ...)) == none;
+    assert level > lvl
+    level_store := level;
+    level := lvl;
+    exhale guard;
+    stabilise-regions(all regions other than R)
+    unfold R_interp(r, lvl, v1, ...);
+    link-interference-context(R, r, lvl, v1, ...)
+    stabilise-regions(R)
+    inhale guard;
+    ⟦s⟧
+    fold R_interp(r, lvl, v1, ...);
+    region-state-change-allowed-by-guard(
+      R,
+      r, lvl, v1, ...,
+      G,
+      guard,
+      old[pre_use_atomic](R_state(r, lvl, v1, ...)),
+      R_state(r, lvl, v1, ...));
+    level := level_store;
+
+
 ============================== Update Region ==============================
 
 ⟪
@@ -119,3 +241,39 @@ region R(id r, T1 x1, T2 x2, ...)
     } else {
       inhale acc(r.diamond);
     }
+
+
+============================== New Update Region ==============================
+
+⟪
+  update_region
+    using R(e0, e1, ...) // No out-arguments allowed
+  {
+    s;
+  }
+⟫ ≡
+
+  (r, lvl, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
+
+  Let level_store be a fresh variable
+
+  return
+    exhale acc(r.diamond);
+    label pre_region_update;
+    assert level > lvl;
+    level_store := level;
+    level := lvl;
+    exhale acc(R_A_fp(r, lvl, v1, ...), write);
+    unfold R_interp(r, lvl, v1, ...);
+    stabilise-regions(all regions)
+    ⟦s⟧
+    fold R_interp(r, lvl, v1, ...);
+    if (R_state(r, lvl, v1, ...) != old[pre_region_update](R_state(r, lvl, v1, ...))) {
+      inhale acc(r.from) && acc(r.to);
+      r.from := old[pre_region_update](R_state(r, lvl, v1, ...));
+      r.to := R_state(r, lvl, v1, ...);
+    } else {
+      inhale acc(r.diamond);
+    }
+    inhale acc(R_A_fp(r, lvl, v1, ...), write);
+    level := level_store;

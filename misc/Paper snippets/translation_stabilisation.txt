@@ -105,24 +105,78 @@ stabilise-all-region-instances( // generateCodeForStabilizingAllRegionInstances
 
 stabilise-all-instances(R, args, preLabel) ≡
 
-  Let
-    id r, T1 x1, T2 x2, ...
-  be the formal arguments of region R
+  preRegionState ≡ args => old[preLabel](R_state(args))
+  stateConstraint ≡ possible-next-state-constraint(R, preRegionState)
+
+  vprResult ≡ constrain-all(R, stateConstraint, preLabel)
+
+  return vprResult
+
+
+infer-context-all-instances(R, args, preLabel) ≡
 
   preRegionState ≡ args => old[preLabel](R_state(args))
+  interferenceContextConstraint ≡ contains-all-possible-next-states-constraint(R, preRegionState)
 
-  preHavocRegionPermissions ≡
-    old[preLabel](perm(R_interp(r, x1, ...)))
+  vprResult ≡ constrain-all(R_X, interferenceContextConstraint, preLabel)
+
+  return vprResult
+
+
+stabilise-and-infer-context-all-instances(R, args, preLabel) ≡
+
+  preRegionState ≡ args => old[preLabel](R_state(args))
+  interferenceContextConstraint ≡ contains-all-possible-next-states-constraint(R, preRegionState)
+  stateConstraint ≡ contained-in-interference(R)
 
   vprResult ≡
-    havoc(R, args, preLabel);
-    inhale forall id r, T1 x1, ... ::
-      none < preHavocRegionPermissions ==>
-        possible-next-state-constraint(R, preRegionState)(r, x1, ..., R_state(r, x1, ...))
+    constrain-all(R_X, interferenceContextConstraint, preLabel);
+    constrain-all(R, stateConstraint, preLabel);
+
+  return vprResult
 
 
-select-constraint(
-    Q,             // PRegion,
+constrain-all(
+    Q,             // R, R_X, ...
+    constraint,    // Vector[vpr.Exp] => vpr.Exp => vpr.Exp
+    preLabel)      // Label
+
+  Let
+    id r, T1 x1, T2 x2, ...
+  be the formal arguments of Q
+
+  vprSelect ≡
+    havoc-all(Q, preLabel);
+    inhale forall id r, T1 x1, ... :: available(Q, preLabel)(r, x1, ..., ) ==> constraint(r, x1, ...)(Q(r, x1, ...));
+
+  return vprSelect
+
+
+link-interference-context(R, args) ≡
+
+  Let ϕ be the state of region R and T the type of ϕ
+  Let I be the interpretation of region R
+
+  Let
+    id r, T1 x1, T2 x2, ...
+  be the formal arguments of R
+
+  Let IR1(args1), IR2(args2), ... be the region assertions that occur in I
+  Let T1', T2', ... be the types of the states of the regions IR1, IR2, ....
+
+  vprState ≡ ⟦ϕ⟧[r, x1, ... ↦ args][IR1, IR2, ... ↦ m1, m2, ...]
+
+  vprResult ≡
+    label preLabel
+    havoc_single(IR1_X, ⟦args1⟧[r, x1, ... ↦ args], preLabel);
+    havoc_single(IR2_X, ⟦args1⟧[r, x1, ... ↦ args], preLabel);
+    ...
+    inhale forall m1: T1', m2: T2', ... ::
+      vprState in R_X(args) <==> m1 in IR1_X(⟦args1⟧[r, x1, ... ↦ args]) &&
+                                 m2 in IR2_X(⟦args2⟧[r, x1, ... ↦ args]) &&
+                                 ...
+
+  return vprResult
 
 
 possible-next-state-constraint( // possibleNextStateConstraint
@@ -131,32 +185,24 @@ possible-next-state-constraint( // possibleNextStateConstraint
     args,                       // Vector[vpr.Exp]
     β) ≡                        // vpr.Exp
 
-  Let
-    id r, T1 x1, T2 x2, ...
-  be the formal arguments of region R
-
   Let action1 (and analogously, action2, ...) denote an action of the shape
     T''1 y1, ... | c(y1, ...) | G'1(g1(y1, ...), ...): from(y1, ...) ~> to(y1, ...)
   and let G'1 denote a guard of region R of the shape
     modifier1 G(T'1, T'2, ... )
 
   vprStateConstraintsFromActions ≡
-       state-constraints-from-action(action1, preRegionState(r, x1, ...), β)
-    || state-constraints-from-action(action2, preRegionState(r, x1, ...), β)
+       state-constraints-from-action(action1, preRegionState(args), β)
+    || state-constraints-from-action(action2, preRegionState(args), β)
     || ...
 
   vprConstraint ≡
-       (none < perm(r.diamond) ==> β in R_A(r, x1, ...))
-    && (β == preRegionState(r, x1, ...) || vprStateConstraintsFromActions)
+       (none < perm(r.diamond) ==> β in R_A(args))
+    && (β == preRegionState(args) || vprStateConstraintsFromActions)
 
   return vprConstraint
 
 
 contains-all-possible-next-states-constraint(R, preRegionState)(args, β) ≡
-
-  Let
-    id r, T1 x1, T2 x2, ...
-  be the formal arguments of region R
 
   vprConstraint ≡
     forall T m :: m in β <==> possible-next-state-constraint(R, preRegionState)(args, m)
@@ -166,14 +212,13 @@ contains-all-possible-next-states-constraint(R, preRegionState)(args, β) ≡
 
 contained-in-interference(R)(args, β) ≡
 
-  Let
-    id r, T1 x1, T2 x2, ...
-  be the formal arguments of region R
-
   vprConstraint ≡
-    β in R_X(r, x1, ...)
+    β in R_X(args)
 
   return vprConstraint
+
+
+available(R, preLabel)(args) ≡ none < old[preLabel](perm(R_interp(args)))
 
 
 havoc-all(R, preLabel) ≡
@@ -188,6 +233,18 @@ havoc-all(R, preLabel) ≡
   vprHavoc ≡
     exhale forall id r, T1 x1, ... :: acc(R_interp(r, x1, ...), preHavocRegionPermissions);
     inhale forall id r, T1 x1, ... :: acc(R_interp(r, x1, ...), preHavocRegionPermissions);
+
+  return vprHavoc
+
+
+available(R_X, preLabel)(args) ≡ none < old[preLabel](perm(R_interp(args)))
+
+
+havoc-single(R_X, args, preLabel) ≡
+
+  vprHavoc ≡
+    exhale acc(R_X_fp(args), write);
+    inhale acc(R_X_fp(args), write);
 
   return vprHavoc
 
