@@ -108,7 +108,7 @@ stabilise-all-instances(R, args, preLabel) ≡
   preRegionState ≡ args => old[preLabel](R_state(args))
   stateConstraint ≡ possible-next-state-constraint(R, preRegionState)
 
-  vprResult ≡ constrain-all(R, stateConstraint, preLabel)
+  vprResult ≡ constrain-all(R_state, stateConstraint, preLabel)
 
   return vprResult
 
@@ -131,13 +131,13 @@ stabilise-and-infer-context-all-instances(R, args, preLabel) ≡
 
   vprResult ≡
     constrain-all(R_X, interferenceContextConstraint, preLabel);
-    constrain-all(R, stateConstraint, preLabel);
+    constrain-all(R_state, stateConstraint, preLabel);
 
   return vprResult
 
 
 constrain-all(
-    Q,             // R, R_X, ...
+    Q,             // R_state, R_X, R_A, ...
     constraint,    // Vector[vpr.Exp] => vpr.Exp => vpr.Exp
     preLabel)      // Label
 
@@ -164,7 +164,7 @@ link-interference-context(R, args) ≡
   Let IR1(args1), IR2(args2), ... be the region assertions that occur in I
   Let T1', T2', ... be the types of the states of the regions IR1, IR2, ....
 
-  vprState ≡ ⟦ϕ⟧[r, x1, ... ↦ args][IR1, IR2, ... ↦ m1, m2, ...]
+  vprState ≡ ⟦ϕ⟧[r, x1, ... ↦ args][IR1_state(⟦args1⟧), IR2_state(⟦args2⟧), ... ↦ m1, m2, ...]
 
   vprResult ≡
     label preLabel
@@ -218,10 +218,10 @@ contained-in-interference(R)(args, β) ≡
   return vprConstraint
 
 
-available(R, preLabel)(args) ≡ none < old[preLabel](perm(R_interp(args)))
+available(R_state, preLabel)(args) ≡ none < old[preLabel](perm(R_interp(args)))
 
 
-havoc-all(R, preLabel) ≡
+havoc-all(R_state, preLabel) ≡
 
   Let
     id r, T1 x1, T2 x2, ...

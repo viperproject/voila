@@ -111,22 +111,50 @@ NOTE: Voila does not support non-ghost, non-atomic statements in a context
 
   Let f1, ... be the formal parameters of method proc
 
+  Let m be the modifier of method proc
+
   Let P be the precondition of method proc
   Let Q be the postcondition of method proc
 
-  Let l1, l2, ... be the level expressions that occur in region assertions in P
+  Let context1 (and analogously, context2, ...) denote an interference context clause of the shape
+    n1 in U1 on r1
+  where a region assertion of the form
+    R1(args1, n1) with the state type T1
+  is contained in P
 
-  vprInterferenceCheck ≡ //TODO
+  vprInterferenceCheck ≡
+    switch (m):
+      case NoneAtomic:      assert true
+      case PrimitiveAtomic: assert true
+      case AbstractAtomic:
+        assert forall s: ST1 ::
+                 s in R1_X(args1[f1, .... ↦ ⟦e1⟧, ...])
+                 ==> s in ⟦U1⟧[n1, .... ↦ R1_state(⟦args1⟧[f1, .... ↦ ⟦e1⟧, ...]), ...][f1, .... ↦ ⟦e1⟧, ...]
+
+        assert forall s: ST2 ::
+                 s in R2_X(args1[f1, .... ↦ ⟦e1⟧, ...])
+                 ==> s in ⟦U2⟧[n1, .... ↦ R1_state(⟦args1⟧[f1, .... ↦ ⟦e1⟧, ...]), ...][f1, .... ↦ ⟦e1⟧, ...]
+
+        ...
+
+
+  Let l1, l2, ... be the level expressions that occur in region assertions in P
 
   vprAssertLvlConstraint ≡
     assert level > ⟦l1⟧[f1, .... ↦ ⟦e1⟧, ...] &&
            level > ⟦l2⟧[f1, .... ↦ ⟦e1⟧, ...] &&
            ...
 
+  vprAssertAtomicityContextConstraint ≡
+    assert atomicity_level > ⟦l1⟧[f1, .... ↦ ⟦e1⟧, ...] &&
+           atomicity_level > ⟦l2⟧[f1, .... ↦ ⟦e1⟧, ...] &&
+           ...
+
   return
     vprInterferenceCheck;
     preLabel;
     vprAssertLvlConstraint;
+    vprAssertAtomicityContextConstraint;
     exhale ⟦P⟧[f1, .... ↦ ⟦e1⟧, ...]
     label pre_havoc;
     stabilise-region-instances(pre_havoc)
