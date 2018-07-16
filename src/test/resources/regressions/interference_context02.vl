@@ -1,0 +1,112 @@
+
+struct cell {
+  int f;
+}
+
+region AA(id a, int alvl, cell x)
+  guards { unique GA; }
+  interpretation { x.f |-> ?n }
+  state { n + 1 }
+  actions { GA: ?n ~> ?m; }
+
+region BB(id b, int blvl, id a, int alvl, cell x)
+  guards { unique GB; }
+  interpretation { AA(a,alvl,x,?n) && GA@a && blvl > alvl }
+  state { n - 1 }
+  actions { GB: ?n ~> ?m; }
+
+region CC1(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
+  guards { unique GC1; }
+  interpretation { BB(b,blvl,a,alvl,x,?n) && GB@b && clvl > blvl }
+  state { n < 5 ? 0 : 1 }
+  actions { GC1: ?n ~> ?m; }
+
+region CC2(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
+  guards { unique GC2; }
+  interpretation { BB(b,blvl,a,alvl,x,?n) && GB@b && clvl > blvl }
+  state { n + 9 }
+  actions { GC2: ?n ~> ?m; }
+
+region CC3(id c, int clvl, id b, int blvl, id a, int alvl, cell x, cell y)
+  guards { unique GC3; }
+  interpretation { BB(b,blvl,a,alvl,x,42) && GB@b && clvl > blvl && y.f |-> ?n}
+  state { n }
+  actions { GC3: ?n ~> ?m; }
+
+abstract_atomic procedure foo1(id a, int alvl, cell x)
+  interference ?n in Set(?k | k < 6 ) on a;
+  requires AA(a, alvl, x, n);
+  ensures AA(a, alvl, x);
+
+abstract_atomic procedure foo2(id a, int alvl, cell x)
+  interference ?n in Set(?k | k < 5 ) on a;
+  requires AA(a, alvl, x, n);
+  ensures AA(a, alvl, x);
+
+abstract_atomic procedure foo3(id a, int alvl, cell x)
+  interference ?n in Set[int](n) on a;
+  requires AA(a, alvl, x, n);
+  ensures AA(a, alvl, x);
+
+
+abstract_atomic procedure test1(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
+  interference ?n in Set[int](0) on c;
+  requires CC1(c,clvl,b,blvl,a,alvl,x,n) && GC1@c;
+{
+  assert CC1(c,clvl,b,blvl,a,alvl,x,?cz) && cz in Set[int](0);
+  use_atomic using CC1(c,clvl,b,blvl,a,alvl,x) with GC1@c;
+  {
+    assert BB(b,blvl,a,alvl,x,?bz) && bz in Set(?bk | bk < 5 );
+    use_atomic using BB(b,blvl,a,alvl,x) with GB@b;
+    {
+      assert AA(a,alvl,x,?az) && az in Set(?ak | ak < 6 );
+      foo1(a,alvl,x);
+    }
+  }
+}
+
+abstract_atomic procedure test2(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
+  interference ?n in Set[int](0) on c;
+  requires CC1(c,clvl,b,blvl,a,alvl,x,n) && GC1@c;
+{
+  assert CC1(c,clvl,b,blvl,a,alvl,x,?cz) && cz in Set[int](0);
+  use_atomic using CC1(c,clvl,b,blvl,a,alvl,x) with GC1@c;
+  {
+    assert BB(b,blvl,a,alvl,x,?bz) && bz in Set(?bk | bk < 5 );
+    use_atomic using BB(b,blvl,a,alvl,x) with GB@b;
+    {
+      assert AA(a,alvl,x,?az) && az in Set(?ak | ak < 6 );
+      //:: ExpectedOutput(precondition_error:interference_error)
+      foo2(a,alvl,x);
+    }
+  }
+}
+
+abstract_atomic procedure test3(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
+  interference ?n in Set[int](n) on c;
+  requires CC2(c,clvl,b,blvl,a,alvl,x,n) && GC2@c;
+{
+  use_atomic using CC2(c,clvl,b,blvl,a,alvl,x) with GC2@c;
+  {
+    use_atomic using BB(b,blvl,a,alvl,x) with GB@b;
+    {
+      foo3(a,alvl,x);
+    }
+  }
+}
+
+abstract_atomic procedure test4(id c, int clvl, id b, int blvl, id a, int alvl, cell x, cell y)
+  interference ?n in Int on c;
+  requires CC3(c,clvl,b,blvl,a,alvl,x,y,n) && GC3@c;
+{
+  use_atomic using CC3(c,clvl,b,blvl,a,alvl,x,y) with GC3@c;
+  {
+    use_atomic using BB(b,blvl,a,alvl,x) with GB@b;
+    {
+      // currently not supported
+      //:: ExpectedOutput(precondition_error:interference_error)
+      foo3(a,alvl,x);
+    }
+  }
+}
+

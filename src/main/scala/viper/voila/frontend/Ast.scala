@@ -289,6 +289,10 @@ case class PUseRegionInterpretation(regionPredicate: PPredicateExp) extends PGho
   val statementName = "use-region-interpretation"
 }
 
+case class PUseGuardUniqueness(guard: PRegionedGuardExp) extends PGhostStatement {
+  val statementName = "use-guard-uniqueness"
+}
+
 sealed trait PRuleStatement extends PStatement {
   def body: PStatement
 }

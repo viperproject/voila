@@ -37,7 +37,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", "non_atomic",
     "if", "else", "while", "do", "skip",
-    "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation", "use",
+    "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation", "use_guard_uniqueness", "use",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "true", "false", "null",
     "div", "mod",
@@ -270,6 +270,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "havoc" ~> idnuse <~ ";" ^^ PHavocVariable |
     "havoc" ~> location <~ ";" ^^ PHavocLocation |
     "use_region_interpretation" ~> predicateExp <~ ";" ^^ PUseRegionInterpretation |
+    "use_guard_uniqueness" ~> guardExp <~ ";" ^^ PUseGuardUniqueness |
     "use" ~> procedureCall ^^ PLemmaApplication |
     makeAtomic |
     updateRegion |

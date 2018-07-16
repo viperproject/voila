@@ -1,9 +1,22 @@
-⟪G(e1, ...)@e0⟫ ≡ 
-  // translate: PGuardExp -> vpr.PredicateAccessPredicate
-  
+⟪G(e1, e2, ...)@e0⟫ ≡
+  // translate: PGuardExp -> vpr.Exp
+
   Let R be the region that declares G
-  
-  return R_G(⟦e0⟧, ⟦e1⟧, ...)
+  Let M be the guard modifier of G
+
+  return switch (M):
+    case unique: acc(R_G(⟦e0⟧, ⟦e1⟧, ...), write)
+    case duplicable: acc(R_G(⟦e0⟧, ⟦e1⟧, ...), write)
+    case divisible: acc(R_G(⟦e0⟧, ⟦e2⟧, ...), ⟦e1⟧)
+
+
+⟪G|s|@r⟫ ≡
+
+  Let R be the region that declares G
+  Let T be the element type of s
+  // TODO: maybe also mention tuples
+
+  return forall S x :: x in ⟦s⟧ ==> acc(R_G(⟦r⟧, x, write)
 
 =========================================================================
 

@@ -13,8 +13,8 @@ import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
 import viper.voila.reporting.{FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, RegionStateError, UnfoldError}
-import viper.voila.translator.TranslatorUtils.BetterQuantifierWrapper.WrapperExt
-import viper.voila.translator.TranslatorUtils.{BetterQuantifierWrapper, Constraint}
+import viper.voila.translator.TranslatorUtils.QuantifierWrapper.WrapperExt
+import viper.voila.translator.TranslatorUtils.{QuantifierWrapper, Constraint}
 
 trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -332,6 +332,80 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
           (total, body.loc)
         }
+    }
+  }
+
+  def translate(pUseGuardUniqueness: PUseGuardUniqueness): vpr.Stmt = {
+
+    val guardExp = pUseGuardUniqueness.guard
+
+    val (guardDecl, region) = extractGuardDeclAndRegion(guardExp)
+
+    val vprGuardPredicate = guardPredicate(guardDecl, region)
+
+    val translatedRegionId = translate(guardExp.regionId)
+
+    /* perm(guard(r,args)) */
+    def permPredicate(args: Vector[vpr.Exp]): vpr.PermExp =
+      vpr.CurrentPerm(
+        vpr.PredicateAccess(
+          translatedRegionId +: args,
+          vprGuardPredicate.name
+        )().withSource(guardExp)
+      )().withSource(guardExp)
+
+    (guardDecl.modifier, guardExp.argument) match {
+      case (_: PUniqueGuard, PStandartGuardArg(args)) =>
+        vpr.Inhale(
+          vpr.PermLeCmp(
+            permPredicate(args map translate),
+            vpr.FullPerm()()
+          )()
+        )()
+
+      case (_: PUniqueGuard, PSetGuardArg(set)) =>
+        val (conditional, decls) = extractGuardSetArgConditional(set, guardDecl)
+
+        val args = decls map (_.localVar)
+
+        val body = vpr.PermLeCmp(
+          permPredicate(args),
+          vpr.FullPerm()()
+        )()
+
+        /* {G_T(as)}{as in G_set} */
+        val triggers = Vector(
+          vpr.Trigger(
+            Vector(
+              guardTriggerFunctionApplication(
+                guardDecl,
+                translatedRegionId +: args,
+                region
+              ).get
+            )
+          )(),
+          vpr.Trigger(
+            Vector(
+              conditional
+            )
+          )()
+        )
+
+        /* \/as :: {G_T(as)}{as in G_set} as in G_set ==> perm(G(r,as)) <= write */
+        val total =
+          vpr.Forall(
+            decls,
+            triggers,
+            vpr.Implies(
+              conditional,
+              body
+            )()
+          )()
+
+        vpr.Inhale(total)()
+
+      case _ =>
+        ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "skip;", "")))
     }
   }
 

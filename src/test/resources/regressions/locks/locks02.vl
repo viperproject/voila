@@ -15,7 +15,7 @@ region Lock(id a, int lvl, memcell x)
 
 predicate Inv()
 
-//:: ExpectedOutput(region_interpretation_not_stable_error)
+////:: ExpectedOutput(region_interpretation_not_stable_error)
 region CAPLock(id r, int alvl, id a, int lvl, memcell x)
   guards {
     duplicable Z;

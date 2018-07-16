@@ -46,14 +46,14 @@ region R(id r, T1 x1, T2 x2, ...)
 ⟪
   make_atomic
     using R(e0, e1, ...) // No out-arguments allowed
-    with  G(e'1, ...)@e'0  // G is one of R's guards
+    with  guards  // only has guard assertions of kind G of R
   {
     s;
   }
 ⟫ ≡
 
   (r, lvl, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
-  guard ≡ ⟦G(e'1, ...)@e'0⟧
+  vprGuards ≡ ⟦guards⟧
 
   (preFrame, postFrame) ≡ explicit-frame
 
@@ -81,7 +81,7 @@ region R(id r, T1 x1, T2 x2, ...)
     ⟦s⟧ // Define ⟦...⟧
 
     assert r.from in R_X(r, x1, ...);
-    region-state-change-allowed-by-guard(R, r, v1, ..., G, guard, r.from, r.to, guard_evaluationl)
+    region-state-change-allowed-by-guard(R, r, v1, ..., vprGuards, r.from, r.to, guard_evaluationl)
 
     label pre_havoc2;
     stabilise-region-instance(R, r, v1, ..., pre_havoc2)
@@ -180,14 +180,14 @@ region R(id r, T1 x1, T2 x2, ...)
 ⟪
   use_atomic
     using R(e0, e1, ...) // No out-arguments allowed
-    with  G(e'1, ...)@e'0  // G is one of R's guards
+    with  guards  // G is one of R's guards
   {
     s;
   }
 ⟫ ≡
 
   (r, lvl, v1, ...; —) ≡ ⟦R(e0, e1, ...)⟧
-  guard ≡ ⟦G(e'1, ...)@e'0⟧
+  vprGuards ≡ ⟦guards⟧
 
   Let level_store be a fresh variable
 
@@ -208,8 +208,7 @@ region R(id r, T1 x1, T2 x2, ...)
     region-state-change-allowed-by-guard(
       R,
       r, lvl, v1, ...,
-      G,
-      guard,
+      vprGuards,
       old[pre_use_atomic](R_state(r, lvl, v1, ...)),
       R_state(r, lvl, v1, ...));
     level := level_store;

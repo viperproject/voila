@@ -64,7 +64,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
       override val name: String = _name
 
-      override def havoc(id: PRegion, label: vpr.Label)(wrapper: BetterQuantifierWrapper.Wrapper): Stmt =
+      override def havoc(id: PRegion, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): Stmt =
         ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "havoc performed by other front resource", "")))
 
     }
@@ -224,7 +224,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
           val body = vpr.EqCmp(lhsContainTerm, viper.silicon.utils.ast.BigAnd(rhsContainTerms))()
 
-          // TODO maybe add contains assertions for better trigger usage
+          // TODO maybe add contains-assertions for better trigger usage
 
           vpr.Inhale(
             vpr.Forall(
@@ -263,7 +263,8 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
 
   def referencePointConstraint(region: PRegion, prePermissions: vpr.Exp => vpr.Exp): Constraint = Constraint( args => target =>
-    TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
+    /* target == prePermissions(R_state(args)) */
+    TranslatorUtils.QuantifierWrapper.UnitWrapperExt(
       vpr.EqCmp(
         target,
         prePermissions(
@@ -277,7 +278,8 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
   )
 
   def nextStateContainedInInference(region: PRegion): Constraint = Constraint( args => target =>
-    TranslatorUtils.BetterQuantifierWrapper.UnitWrapperExt(
+    /* target in R_X(args) */
+    TranslatorUtils.QuantifierWrapper.UnitWrapperExt(
       vpr.AnySetContains(
         target,
         interferenceSetFunctions.application(region, args)
@@ -286,7 +288,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
   )
 
   def containsAllPossibleNextStatesConstraint(region: PRegion, possibleNextStateConstraint: Constraint): Constraint = {
-    def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.BetterQuantifierWrapper.WrapperExt = {
+    def constrain(args: Vector[Exp])(target: Exp): TranslatorUtils.QuantifierWrapper.WrapperExt = {
 
       val varName = "$_m" // TODO: naming convention
       val varType = regionStateFunction(region).typ
@@ -302,12 +304,12 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
           target
         )()
 
-      val varIsPossibleNextState: TranslatorUtils.BetterQuantifierWrapper.WrapperExt =
+      val varIsPossibleNextState: TranslatorUtils.QuantifierWrapper.WrapperExt =
         possibleNextStateConstraint.constrain(args)(variable)
 
       /* m in X(xs) <==> preState(xs) ~> m */
       varIsPossibleNextState.combine(e =>
-        TranslatorUtils.BetterQuantifierWrapper.QuantWrapperExt(
+        TranslatorUtils.QuantifierWrapper.QuantWrapperExt(
           Vector(varDecl),
           vpr.EqCmp(varInInterference, e)()
         )
@@ -315,6 +317,121 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     Constraint(constrain, possibleNextStateConstraint.skolemization)
+  }
+
+
+
+
+
+  val atomicityContextFunctions: HeapFunctionManager[PRegion] with RegionManager[vpr.Function, vpr.FuncApp] = {
+
+    val _name = "atomicity_context"
+    def _functionType(obj: PRegion): Type = vpr.SetType(regionStateFunction(obj).typ)
+
+    val _footprintManager = new FrugalFootprintManager[PRegion]
+      with RegionManager[vpr.Predicate, vpr.PredicateAccessPredicate]
+      with SubFullSelector[PRegion] {
+      override val name: String = _name
+    }
+
+    val _triggerManager =
+      new DomainFunctionManager[PRegion]
+        with RegionManager[vpr.DomainFunc, vpr.DomainFuncApp]
+        with SubFullSelector[PRegion] {
+        override val name: String = _name
+        override def functionTyp(obj: PRegion): Type = vpr.Bool
+      }
+
+    collectedDeclarations ++= _triggerManager.collectGlobalDeclarations // TODO: this could be put into another trait
+
+    new HeapFunctionManager[PRegion]
+      with RegionManager[vpr.Function, vpr.FuncApp]
+      with FrontFullSelector[PRegion] {
+
+      override val footprintManager: FootprintManager[PRegion] with SubSelector[PRegion] = _footprintManager
+      override val triggerManager: DomainFunctionManager[PRegion] with SubSelector[PRegion] = _triggerManager
+
+      override def functionTyp(obj: PRegion): Type = _functionType(obj)
+      override val name: String = _name
+    }
+  }
+
+  def atomicityContextAllWrapper(region: PRegion, label: vpr.Label): TranslatorUtils.QuantifierWrapper.Wrapper = {
+
+    /* Arguments as for region R */
+    val vprRegionArgumentDecls: Vector[vpr.LocalVarDecl] = region.formalInArgs.map(translate)
+
+    /* Arguments as for region R */
+    val vprRegionArguments: Vector[vpr.LocalVar] = vprRegionArgumentDecls map (_.localVar)
+
+    /* π */
+    val vprPreHavocAtomicityPermissions =
+      atomicityContextFunctions.footprintOldPerm(region, vprRegionArguments, label)
+
+    /* none < π */
+    val vprIsAtomicityAccessible =
+      vpr.PermLtCmp(
+        vpr.NoPerm()(),
+        vprPreHavocAtomicityPermissions
+      )()
+
+    TranslatorUtils.QuantifierWrapper.QuantWrapper(vprRegionArgumentDecls, vprRegionArguments, vprIsAtomicityAccessible)
+  }
+
+  protected def atomicityContextAssignConstraint(region: PRegion): Constraint = Constraint( args => target =>
+    TranslatorUtils.QuantifierWrapper.UnitWrapperExt(
+      vpr.EqCmp(
+        target,
+        interferenceSetFunctions.application(region, args)
+      )()
+    )
+  )
+
+  protected def atomicityContextEqualsOldConstraint(region: PRegion, label: vpr.Label): Constraint = Constraint( args => target =>
+    TranslatorUtils.QuantifierWrapper.UnitWrapperExt(
+      vpr.EqCmp(
+        target,
+        vpr.LabelledOld(atomicityContextFunctions.application(region, args), label.name)()
+      )()
+    )
+  )
+
+  def atomicityContextWhileConstraint(region: PRegion, label: vpr.Label): Constraint = Constraint( args => target => {
+
+    val varName = "$_m" // TODO: naming convention
+    val varType = regionStateFunction(region).typ
+    val varDecl = vpr.LocalVarDecl(varName, varType)()
+    val variable = varDecl.localVar
+
+    TranslatorUtils.QuantifierWrapper.QuantWrapperExt(
+      Vector(varDecl),
+      vpr.EqCmp(
+        target,
+        vpr.LabelledOld(atomicityContextFunctions.application(region, args), label.name)()
+      )()
+    )
+  })
+
+  protected def checkAtomicityNotYetCaptured(region: PRegion, args: Vector[vpr.Exp]): vpr.Assert = {
+    val wrapper = singleWrapper(args)
+    atomicityContextFunctions.assertNoFootprint(region)(wrapper)
+  }
+
+  protected def assignAtomicityContext(region: PRegion, args: Vector[vpr.Exp]): vpr.Stmt = {
+    val wrapper = singleWrapper(args)
+    val constraint = atomicityContextAssignConstraint(region)
+    atomicityContextFunctions.freshSelect(region, constraint)(wrapper)
+  }
+
+  protected def assignOldAtomicityContext(region: PRegion, args: Vector[vpr.Exp], label: vpr.Label): vpr.Stmt = {
+    val wrapper = singleWrapper(args)
+    val constraint = atomicityContextEqualsOldConstraint(region, label)
+    atomicityContextFunctions.freshSelect(region, constraint)(wrapper)
+  }
+
+  protected def deselectAtomicityContext(region: PRegion, args: Vector[vpr.Exp]): vpr.Exhale = {
+    val wrapper = singleWrapper(args)
+    atomicityContextFunctions.exhaleFootprint(region)(wrapper)
   }
 
 }

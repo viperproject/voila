@@ -1,0 +1,105 @@
+
+
+struct memcell {
+  int next;
+  int owner;
+}
+
+region TLock(id r, int lvl, memcell x; int m)
+  guards { unique TICKET(int n); }
+  interpretation {
+  	x.owner |-> ?n && x.next |-> ?m && TICKET|Set( ?k | k >= m )|@r && m >= n
+  }
+  state { n }
+  actions {
+  	?n, ?m | n < m | TICKET|Set( ?k | n <= k && k < m )|: n ~> m;
+  }
+
+procedure acquire(id r, int lvl, memcell x)
+  requires TLock(r,lvl,x,_,_);
+  ensures TLock(r,lvl,x,_,?nf) && TICKET(nf)@r;
+{
+  bool b;
+  int t;
+  int v;
+
+  do
+    invariant TLock(r,lvl,x,_,?ni);
+    invariant b ==> TICKET(t)@r && t >= ni;
+  {
+    open_region using TLock(r,lvl,x);
+    {
+      t := x.next;
+    }
+
+    open_region using TLock(r,lvl,x);
+    {
+      b := CAS(x, t, t+1);
+    }
+  }
+  while(!b);
+
+  do
+    invariant TLock(r,lvl,x,?mii,?nii) && TICKET(t)@r;
+    invariant t >= nii && nii >= v;
+  {
+    open_region using TLock(r,lvl,x);
+    {
+      v := x.owner;
+    }
+  }
+  while(v < t);
+}
+
+
+procedure release(id r, int lvl, memcell x)
+  requires TLock(r,lvl,x,_,?n) && TICKET(n)@r;
+  ensures TLock(r,lvl,x,_,_);
+  // ensures false;
+{
+  int v;
+
+  open_region using TLock(r,lvl,x);
+  {
+    v := x.owner;
+  }
+
+  use_atomic using TLock(r,lvl,x) with TICKET(n)@r;
+  {
+    x.owner := v+1;
+    use_guard_uniqueness TICKET(n)@r;
+  }
+}
+
+/* // does not work
+
+abstract_atomic procedure release2(id r, int lvl, memcell x)
+  interference ?n in Set[int](n) on r;
+  requires TLock(r,lvl,x,_,n) && TICKET(n)@r;
+  ensures TLock(r,lvl,x,_,n+1);
+  // ensures false;
+{
+  int v;
+
+  make_atomic using TLock(r,lvl,x) with TICKET(n)@r;
+  {
+    open_region using TLock(r,lvl,x);
+    {
+      v := x.owner;
+    }
+
+    update_region using TLock(r,lvl,x);
+    {
+      x.owner := v+1;
+    }
+  }
+}
+
+*/
+
+
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
+  requires x.next |-> ?v1;
+  ensures  v1 == now
+              ? ret && x.next |-> thn
+              : !ret && x.next |-> v1;

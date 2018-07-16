@@ -840,7 +840,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             inhaleSkolemizationFunctionFootprints +:
               initializeFootprints ++:
               atomicityConstraints ++:
-              Vector(vprPureBody, levelCheck),
+              Vector(inferContext, vprPureBody, levelCheck),
             Vector.empty
           )()
 
@@ -852,11 +852,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             invs = invs map (inv => translate(inv.assertion).withSource(inv, overwrite = true)),
             body = vprBody
           )()
-
-//        errorBacktranslator.addErrorTransformer {
-//          case e: vprerr.LoopInvariantNotPreserved if e causedBy lvlInvariant =>
-//            ???
-//        }
 
         vprWhile = vprWhile.withSource(statement)
 
@@ -1074,6 +1069,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, result)
 
+      case stmt: PUseGuardUniqueness => translate(stmt)
+
       case PLemmaApplication(call) =>
         val vprMethodStub = translatedProcedureStubs(call.procedure.name)
         val vprArguments = call.arguments map translate
@@ -1163,53 +1160,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                    *       instantiating formals with actual during translations
                    */
 
-                  val subst: Map[String, vpr.Exp] =
-                    callee.formalArgs
-                      .zip(vprArguments)
-                      .map{case (formal, actual) => formal.id.name -> actual}(breakOut)
+                  val vprFormalsToActuals =
+                    callee.formalArgs.map(translate(_).localVar).zip(vprArguments).toMap
 
                   val vprRegionArguments =
-                    regionArguments map (argument => {
-                      translateWith(argument) {
-                        case idn: PIdnExp if subst.contains(idn.id.name) => subst(idn.id.name)
-                        case idn: PIdnUse if subst.contains(idn.name) => subst(idn.name)
-                      }
-                    })
-
-                  /* See issue #29 */
-                  // val vprRegionPredicateAccess =
-                  //   regionPredicateAccess(region, vprRegionArguments)
-                  //
-                  // val havocCalleeRegion =
-                  //   havocSingleRegionInstance(region, regionArguments, vprPreHavocLabel, None)
-                  //
-                  // val (vprHavocParentRegionCondition, vprHavocParentRegion) =
-                  //   generateParentRegionHavockingCode(vprRegionPredicateAccess.loc)
-                  //
-                  // val vprHavocRegion =
-                  //   vpr.If(
-                  //     vprHavocParentRegionCondition,
-                  //     vprHavocParentRegion,
-                  //     vpr.Seqn(
-                  //       Vector(havocCalleeRegion.exhale, havocCalleeRegion.inhale),
-                  //       Vector.empty
-                  //     )()
-                  //   )()
-//                  val vprHavocRegion = stabilizeSingleInstances("call interference check", (region, vprRegionArguments))
-////                    prependComment(
-////                      s"Stabilising region $regionPredicate",
-////                      stabilizeRegionInstance(region, vprRegionArguments, vprPreHavocLabel))
-//
-//                  val vprCurrentState =
-//                    vpr.FuncApp(
-//                      regionStateFunction(region),
-//                      vprRegionArguments
-//                    )()
+                    regionArguments map (translate(_).replace(vprFormalsToActuals))
 
                   val vprInterferenceSet = {
-                    val vprFormalsToActuals =
-                      callee.formalArgs.map(translate(_).localVar).zip(vprArguments).toMap
-
                     translateWith(inter.set){
                       case exp@ PIdnExp(id) => {
 
@@ -1233,7 +1190,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     vprInterferenceSet
                   )()
 
-                  val vprCheckStateUnchanged =
+                  val vprCheckInterferenceContext =
                     vpr.Assert(
                       vpr.Forall(
                         variables = Vector(decl),
@@ -1249,44 +1206,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 //                      PreconditionError(call, InsufficientRegionPermissionError(regionPredicate))
 
                     case e @ vprerr.AssertFailed(node, reason, _)
-                         if (e causedBy vprCheckStateUnchanged) &&
-                            (reason causedBy vprCheckStateUnchanged.exp) =>
+                         if (e causedBy vprCheckInterferenceContext) &&
+                            (reason causedBy vprCheckInterferenceContext.exp) =>
 
                       PreconditionError(call, InterferenceError(inter))
                   }
 
-//                  vpr.Seqn(
-//                    Vector(
-//                      vprHavocRegion,
-//                      /* See issue #29 */
-//                      // havocCalleeRegion.constrainStateViaGuards,
-//                      // havocCalleeRegion.constrainStateViaAtomicityContext,
-//                      vprCheckStateUnchanged),
-//                    Vector.empty
-//                  )()
-                  vprCheckStateUnchanged
+                  vprCheckInterferenceContext
                 })
-
-//              val vprNonDetChoiceVariable = declareFreshVariable(PBoolType(), "nondet").localVar
-//
-//              val vprHavocNonDetChoiceVariable = havoc(vprNonDetChoiceVariable)
-//
-//              val vprNonDetCheckBranch =
-//                vpr.If(
-//                  vprNonDetChoiceVariable,
-//                  vpr.Seqn(
-//                    vprPreHavocLabel +:
-//                    vprCheckInterferences :+
-//                    vpr.Inhale(vpr.FalseLit()())(),
-//                    Vector.empty
-//                  )(),
-//                  vpr.Seqn(Vector.empty, Vector.empty)()
-//                )()
-//
-//              vpr.Seqn(
-//                Vector(vprHavocNonDetChoiceVariable, vprNonDetCheckBranch),
-//                Vector.empty
-//              )()
 
               vpr.Seqn(vprCheckInterferences, Vector.empty)()
           }
@@ -1357,43 +1284,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val vprInhalePosts = vpr.Inhale(vprPost)()
 
-//          val vprLevelCheck = {
-//
-//            val levelCheckLabel = freshLabel("levelCheck")
-//
-//            val evaluationState: vpr.Exp => vpr.Exp =
-//              if (checkLevelLater) {
-//                identity
-//              } else {
-//                vpr.LabelledOld(_, levelCheckLabel.name)()
-//              }
-//
-//            val vprLvlConstraint =
-//              vpr.utility.Expressions.instantiateVariables(
-//                levelHigherOrEqualToProcedureLevel(callee, evaluationState),
-//                vprStub.formalArgs ++ vprStub.formalReturns,
-//                vprArguments ++ vprReturns
-//              ).transform(
-//                {
-//                  case old: vpr.Old =>
-//                    vpr.LabelledOld(old.exp, vprPreCallLabel.name)(old.pos, old.info, old.errT)
-//                },
-//                vpr.utility.Rewriter.Traverse.TopDown)
-//
-//            val vprAssertLvlConstraint = vpr.Assert(vprLvlConstraint)()
-//
-//            errorBacktranslator.addErrorTransformer {
-//              case e: vprerr.AssertFailed if e causedBy vprAssertLvlConstraint =>
-//                PreconditionError(call, CalleeLevelTooHighError(call))
-//            }
-//
-//            if (checkLevelLater) {
-//              levelChecksForLater ::= vprAssertLvlConstraint
-//              levelCheckLabel
-//            } else {
-//              vprAssertLvlConstraint
-//            }
-//          }
 
           vpr.Seqn(
             vprPreCallLabel +:
@@ -1827,5 +1717,260 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     case PRegionIdType() => vpr.Ref
 
     case unsupported@(_: PUnknownType) => sys.error(s"Cannot translate type '$unsupported'")
+  }
+
+  def frameRegions(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
+
+    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+
+    tree.root.regions foreach { region =>
+
+      val decls = region.formalInArgs map translate
+      val vars = decls map (_.localVar)
+
+      /* R(as) */
+      val vprRegionPredicateInstance =
+        vpr.PredicateAccess(
+          args = vars,
+          predicateName = region.id.name
+        )()
+
+      /* π */
+      val vprPreHavocRegionPermissions =
+        vpr.LabelledOld(vpr.CurrentPerm(vprRegionPredicateInstance)(), preLabel.name)()
+
+      /* acc(R(as), π) */
+      val vprRegionAssertion =
+        vpr.PredicateAccessPredicate(
+          loc = vprRegionPredicateInstance,
+          perm = vprPreHavocRegionPermissions
+        )()
+
+      /* \/as. acc(R(as), π) */
+      val vprAllRegionAssertions =
+        vpr.Forall(
+          decls,
+          Vector.empty,
+          vprRegionAssertion
+        )()
+
+      val vprSanitizedAllRegionAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionAssertions)
+
+      preExhales += vpr.Exhale(vprSanitizedAllRegionAssertions)()
+      postInhales += vpr.Inhale(vprSanitizedAllRegionAssertions)()
+
+      /* none < π */
+      val vprIsRegionAccessible =
+        vpr.PermLtCmp(
+          vpr.NoPerm()(),
+          vprPreHavocRegionPermissions
+        )()
+
+      /* R_state(as) */
+      val regionState =
+        vpr.FuncApp(
+          regionStateFunction(region),
+          vars
+        )()
+
+      /* R_state(as) == old[preFrame](R_state(as)] */
+      val vprRegionStateStaysEqual =
+        vpr.EqCmp(
+          regionState,
+          vpr.LabelledOld(regionState, preLabel.name)()
+        )()
+
+      val triggers =
+        Vector(
+          vpr.Trigger(
+            Vector(
+              vpr.DomainFuncApp(
+                func = regionStateTriggerFunction(region.id.name),
+                args = vars,
+                typVarMap = Map.empty
+              )()
+            ))())
+
+      /* \/as. none < π ==> R_state(as) == old[preFrame](R_state(as)] */
+      val vprAllRegionStateStaysEqual =
+        vpr.Forall(
+          decls,
+          triggers,
+          vpr.Implies(vprIsRegionAccessible, vprRegionStateStaysEqual)()
+        )()
+
+      val vprSanitizedAllRegionStateStaysEqual = ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionStateStaysEqual)
+
+      postInhales += vpr.Inhale(vprSanitizedAllRegionStateStaysEqual)()
+    }
+
+    (
+      preExhales.toList,
+      postInhales.toList
+    )
+
+  }
+
+  def frameGuards(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
+
+    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+
+    tree.root.regions foreach { region =>
+      region.guards foreach { guard =>
+
+        /* G(xs) */
+        val vprGuardPredicate = guardPredicate(guard, region)
+
+        val guardDecls = vprGuardPredicate.formalArgs
+        val guardVars = guardDecls map (_.localVar)
+
+        val vprGuardPredicateLoc =
+          vpr.PredicateAccess(
+            guardVars,
+            vprGuardPredicate.name
+          )()
+
+        /* π */
+        val vprPreHavocGuardPermissions =
+          vpr.LabelledOld(vpr.CurrentPerm(vprGuardPredicateLoc)(), preLabel.name)()
+
+        /* acc(G(xs), π) */
+        val vprGuardAssertion =
+          vpr.PredicateAccessPredicate(
+            vprGuardPredicateLoc,
+            vprPreHavocGuardPermissions
+          )()
+
+        /* \/as. acc(G(as), π) */
+        val vprAllGuardAssertions =
+          vpr.Forall(
+            guardDecls,
+            Vector.empty,
+            vprGuardAssertion
+          )()
+
+        val vprSanitizedAllGuardAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllGuardAssertions)
+
+        preExhales += vpr.Exhale(vprSanitizedAllGuardAssertions)()
+        postInhales += vpr.Inhale(vprSanitizedAllGuardAssertions)()
+      }
+    }
+
+    (
+      preExhales.toList,
+      postInhales.toList
+    )
+  }
+
+  def frameFields(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
+
+    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+
+    tree.root.structs foreach { struct =>
+
+      val decl = vpr.LocalVarDecl("$$_r", vpr.Ref)()
+      val variable = decl.localVar
+
+      struct.fields foreach { field =>
+
+        /* r.field */
+        val fieldAccess =
+          vpr.FieldAccess(
+            variable,
+            toField(struct, field.id)
+          )()
+
+        /* π */
+        val vprPreHavocFieldPermissions =
+          vpr.LabelledOld(vpr.CurrentPerm(fieldAccess)(), preLabel.name)()
+
+        /* acc(r.field, π) */
+        val vprFieldAssertion =
+          vpr.FieldAccessPredicate(
+            fieldAccess,
+            vprPreHavocFieldPermissions
+          )()
+
+        /* \/as. acc(r.field, π) */
+        val vprAllFieldAssertions =
+          vpr.Forall(
+            Vector(decl),
+            Vector.empty,
+            vprFieldAssertion
+          )()
+
+        preExhales += vpr.Exhale(vprAllFieldAssertions)()
+        postInhales += vpr.Inhale(vprAllFieldAssertions)()
+
+        /* none < π */
+        val vprIsFieldAccessible =
+          vpr.PermLtCmp(
+            vpr.NoPerm()(),
+            vprPreHavocFieldPermissions
+          )()
+
+
+
+        /* r.field == old[preFrame](r.field) */
+        val vprFieldValueStaysEqual =
+          vpr.EqCmp(
+            fieldAccess,
+            vpr.LabelledOld(fieldAccess, preLabel.name)()
+          )()
+
+        val triggers =
+          Vector(
+            vpr.Trigger(
+              Vector(
+                fieldAccess
+              ))())
+
+        /* \/as. none < π ==> R_state(as) == old[preFrame](R_state(as)] */
+        val vprAllRegionStateStaysEqual =
+          vpr.Forall(
+            Vector(decl),
+            triggers,
+            vpr.Implies(vprIsFieldAccessible, vprFieldValueStaysEqual)()
+          )()
+
+        postInhales += vpr.Inhale(vprAllRegionStateStaysEqual)()
+      }
+    }
+
+    (
+      preExhales.toList,
+      postInhales.toList
+    )
+  }
+
+  def completeFrame: (vpr.Stmt, vpr.Stmt) = {
+
+    val framingFunctions: List[vpr.Label => (List[vpr.Stmt], List[vpr.Stmt])]
+    = List(frameFields, frameGuards, frameRegions)
+
+    val preFrame = freshLabel("preFrame")
+
+    var preExhales: List[vpr.Stmt] = Nil
+    var postInhales: List[vpr.Stmt] = Nil
+
+    framingFunctions foreach { f =>
+      val (pres, posts) = f(preFrame)
+      preExhales :::= pres
+      postInhales :::= posts
+    }
+
+    (
+      vpr.Seqn(
+        preFrame +: stabilizeAllInstances("stabelizing the frame") +: preExhales,
+        Vector.empty
+      )(),
+      vpr.Seqn(
+        postInhales,
+        Vector.empty
+      )()
+    )
   }
 }

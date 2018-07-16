@@ -1,0 +1,30 @@
+struct memcell {
+  int val;
+}
+
+region R(id r, int lvl, memcell x)
+  guards { unique G; unique Q; }
+  interpretation { x.val |-> ?n }
+  state { n }
+  actions {
+    ?n, ?m | n < m | G: n ~> m;
+    ?n, ?m | m < n | Q: n ~> m;
+  }
+
+abstract_atomic procedure test1(id r, int lvl, memcell x)
+  interference ?n in Set(?k | k < 42) on r;
+  requires R(r,lvl,x,n) && G@r && Q@r;
+{
+  make_atomic using R(r,lvl,x) with G@r;
+  {
+    assert R(r,lvl,x,?nz);
+
+    skip; // first skip is swallowed for some reason
+    skip;
+
+    //:: ExpectedOutput(assert_error:assertion_error)
+    assert R(r,lvl,x,?nf) && nz <= nf;
+
+    inhale r |=> (n,n);
+  }
+}

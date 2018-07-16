@@ -69,6 +69,7 @@ NOTE: Voila does not support non-ghost, non-atomic statements in a context
     while (⟦b⟧) invariant ⟦I⟧ {
       inhaleSkolemizationFunctionFootprints;
       preserveAtomicityContext;
+      stabilise-and-infer-context-regions; // in reality we only infer
       ⟦s⟧
       assert level == level_store;
     }
