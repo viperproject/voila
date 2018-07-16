@@ -6,7 +6,7 @@ struct memcell {
   int val;
 }
 
-region IncDec(id r, memcell x)
+region IncDec(id r, int lvl, memcell x)
   guards {
     unique INC;
     unique DEC;
@@ -23,8 +23,9 @@ region IncDec(id r, memcell x)
   }
 
 
-procedure makeCounter(id r) returns (memcell ret)
-  ensures IncDec(r, ret, 0) && INC@r && DEC@r;
+procedure makeCounter(id r, int lvl) returns (memcell ret)
+  requires lvl >= 0;
+  ensures IncDec(r, lvl, ret, 0) && INC@r && DEC@r;
 {
   memcell v;
   // v := alloc(1);
@@ -37,29 +38,29 @@ procedure makeCounter(id r) returns (memcell ret)
   ret := v;
 
   inhale INC@r && DEC@r;
-  fold IncDec(r, ret, 0);
+  fold IncDec(r, lvl, ret, 0);
 }
 
-procedure increment(id r, memcell x, int k) returns (int ret)
-  requires IncDec(r, x, ?v0) && INC@r && k > 0;
-  ensures  IncDec(r, x, ?v1) && INC@r && v1 <= v0 + k;
+procedure increment(id r, int lvl, memcell x, int k) returns (int ret)
+  requires IncDec(r, lvl, x, ?v0) && INC@r && k > 0;
+  ensures  IncDec(r, lvl, x, ?v1) && INC@r && v1 <= v0 + k;
 {
   bool b;
   int v;
 
   do
-    invariant IncDec(r, x, ?vi) && INC@r && k > 0 &&
+    invariant IncDec(r, lvl, x, ?vi) && INC@r && k > 0 &&
               (!b ? vi <= v0 : vi <= v0 + k);
   {
     open_region
-      using IncDec(r, x);
+      using IncDec(r, lvl, x);
     {
       // v := [x];
       v := x.val;
     }
 
     use_atomic
-      using IncDec(r, x) with INC@r;
+      using IncDec(r, lvl, x) with INC@r;
     {
       b := CAS(x, v, v + k);
     }
@@ -69,26 +70,26 @@ procedure increment(id r, memcell x, int k) returns (int ret)
   ret := v;
 }
 
-procedure decrement(id r, memcell x, int k) returns (int ret)
-  requires IncDec(r, x, ?v0) && DEC@r && k > 0;
-  ensures  IncDec(r, x, ?v1) && DEC@r && v1 >= v0 - k;
+procedure decrement(id r, int lvl, memcell x, int k) returns (int ret)
+  requires IncDec(r, lvl, x, ?v0) && DEC@r && k > 0;
+  ensures  IncDec(r, lvl, x, ?v1) && DEC@r && v1 >= v0 - k;
 {
   bool b;
   int v;
 
   do
-    invariant IncDec(r, x, ?vi) && DEC@r && k > 0 &&
+    invariant IncDec(r, lvl, x, ?vi) && DEC@r && k > 0 &&
               (!b ? vi >= v0 : vi >= v0 - k);
   {
     open_region
-      using IncDec(r, x);
+      using IncDec(r, lvl, x);
     {
       // v := [x];
       v := x.val;
     }
 
     use_atomic
-      using IncDec(r, x) with DEC@r;
+      using IncDec(r, lvl, x) with DEC@r;
     {
       b := CAS(x, v, v - k);
     }
@@ -98,12 +99,12 @@ procedure decrement(id r, memcell x, int k) returns (int ret)
   ret := v;
 }
 
-procedure read(id r, memcell x) returns (int ret)
-  requires IncDec(r, x, ?v0);
-  ensures  IncDec(r, x);
+procedure read(id r, int lvl, memcell x) returns (int ret)
+  requires IncDec(r, lvl, x, ?v0);
+  ensures  IncDec(r, lvl, x);
 {
   open_region
-    using IncDec(r, x);
+    using IncDec(r, lvl, x);
   {
     // v := [x];
     ret := x.val;

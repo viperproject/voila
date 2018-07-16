@@ -32,21 +32,29 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   val reservedWords = Set(
     "true", "false",
     "int", "bool", "id", "set", "frac", "seq", "pair", "map",
-    "region", "guards", "unique", "duplicable", "interpretation", "abstraction", "actions",
+    "region", "guards", "unique", "duplicable", "divisible", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", "non_atomic",
     "if", "else", "while", "do", "skip",
-    "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation", "use",
+    "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation", "use_guard_uniqueness", "use",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "true", "false", "null",
     "div", "mod",
     "Set", "Int", "Nat", "union",
     "Seq", "size", "head", "tail",
     "Pair", "fst", "snd",
+    "Tuple",
     "Map", "keys", "vals", "lkup", "upd", "disj",
     "unfolding"
   )
+
+  val reservedPatterns = Set(
+    """get\d+""".r.pattern
+  )
+
+  def isReservedWord(word: String): Boolean =
+    (reservedWords contains word) || (reservedPatterns exists (_.matcher(word).matches()))
 
   lazy val program: Parser[PProgram] =
     (struct | region | predicate | procedure | makro).* ^^ (allMembers => {
@@ -92,21 +100,38 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
      * declares a guard G(id r, int n). Not sure if we want that in the long run.
      */
     guardModifier ~ idndef ~ ("(" ~> formalArgs <~ ")") <~ ";" ^^ {
-      case mod ~ id ~ args => PGuardDecl(id, args, mod)
+      case mod ~ id ~ args => mod match {
+        case _: PUniqueGuard | _: PDuplicableGuard => PGuardDecl(id, args, mod)
+        // TODO: divisible guards with formal arguments are currently not supported
+        // case _: PDivisibleGuard => PGuardDecl(id, PFormalArgumentDecl(PIdnDef("perm").at(id),PFracType().at(id)).at(id) +: args, mod)
+      }
     } |
     guardModifier ~ idndef <~ ";" ^^ {
-      case mod ~ id => PGuardDecl(id, Vector.empty, mod)
+      case mod ~ id => mod match {
+        case _: PUniqueGuard | _: PDuplicableGuard => PGuardDecl(id, Vector.empty, mod)
+        case _: PDivisibleGuard => PGuardDecl(id, Vector(PFormalArgumentDecl(PIdnDef("perm").at(id),PFracType().at(id)).at(id)), mod)
+      }
     }
 
   lazy val guardModifier: Parser[PGuardModifier] =
     "unique" ^^^ PUniqueGuard() |
     "duplicable" ^^^ PDuplicableGuard() |
+    "divisible" ^^^ PDivisibleGuard() |
     success(PUniqueGuard())
 
-  private lazy val guardPrefix: Parser[~[PIdnUse, Vector[PExpression]]] =
-    idnuse ~ ("(" ~> listOfExpressions <~ ")").? ^^ {
-      case guardId ~ optArgs => new ~(guardId, optArgs.getOrElse(Vector.empty))
-    }
+  private lazy val guardArg: Parser[PGuardArg] =
+    "(" ~> listOfExpressions <~ ")" ^^ PStandartGuardArg |
+    "|" ~> expression <~ "|" ^^ PSetGuardArg
+
+  private lazy val guardBasePrefix: Parser[PBaseGuardExp] =
+    idnuse ~ guardArg ^^ {
+      case guardId ~ args => PBaseGuardExp(guardId, args)
+    } |
+    idnuse ^^ (guardId => PBaseGuardExp(guardId, PStandartGuardArg(Vector.empty).at(guardId)))
+
+  private lazy val guardPrefix: Parser[Vector[PBaseGuardExp]] =
+    rep1sep(guardBasePrefix, "&&")
+
 
   lazy val action: Parser[PAction] =
     /* Matches
@@ -118,8 +143,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
      */
     (guardPrefix <~ ":") ~
     (binderOrExpression <~ "~>") ~ (binderOrExpression <~ ";") ^^ {
-      case (guardId ~ guardArgs) ~ _from ~ _to =>
-        val condition = PTrueLit().at(guardId)
+      case guards ~ _from ~ _to =>
+        val condition = PTrueLit().at(guards.head)
 
         var binders = Vector.empty[PNamedBinder]
 
@@ -136,7 +161,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         val from = desugareBinders(_from)
         val to = desugareBinders(_to)
 
-        PAction(binders, condition, guardId, guardArgs, from, to)
+        sanitizeAction(PAction(binders, condition, guards, from, to))
     } |
     /* Matches
      *   ?xs | c(xs) | G(g(xs)): e(xs) ~> e'(xs)
@@ -146,11 +171,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     (expression <~ "|").? ~
     (guardPrefix <~ ":") ~
     (expression <~ "~>") ~ (expression <~ ";") ^^ {
-      case optBinders ~ optCondition ~ (guardId ~ guardArgs) ~ from ~ to =>
+      case optBinders ~ optCondition ~ guards ~ from ~ to =>
         val binders = optBinders.getOrElse(Vector.empty)
-        val condition = optCondition.getOrElse(PTrueLit().at(guardId))
+        val condition = optCondition.getOrElse(PTrueLit().at(guards.head))
 
-        PAction(binders, condition, guardId, guardArgs, from, to)
+        sanitizeAction(PAction(binders, condition, guards, from, to))
     }
 
   lazy val predicate: Parser[PPredicate] =
@@ -245,6 +270,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "havoc" ~> idnuse <~ ";" ^^ PHavocVariable |
     "havoc" ~> location <~ ";" ^^ PHavocLocation |
     "use_region_interpretation" ~> predicateExp <~ ";" ^^ PUseRegionInterpretation |
+    "use_guard_uniqueness" ~> guardExp <~ ";" ^^ PUseGuardUniqueness |
     "use" ~> procedureCall ^^ PLemmaApplication |
     makeAtomic |
     updateRegion |
@@ -302,7 +328,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> guardExp <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
     ("{" ~> statements <~ "}") ^^ PMakeAtomic
 
   lazy val updateRegion: Parser[PUpdateRegion] =
@@ -312,7 +338,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val useAtomic: Parser[PUseAtomic] =
     "use_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> guardExp <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
     ("{" ~> statements <~ "}") ^^ PUseAtomic
 
   lazy val openRegion: Parser[POpenRegion] =
@@ -381,6 +407,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val exp60: PackratParser[PExpression] =
     exp60 ~ ("in" ~> exp50) ^^ PSetContains | /* Left-associative */
+    exp60 ~ ("subset" ~> exp50) ^^ PSetSubset | /* Left-associative */
     exp50 ~ (ineqOps ~ exp50).* ^^ { /* TODO: Figure out associativity */
       case exp ~ Seq() =>
         exp
@@ -436,6 +463,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     setExp0 |
     seqExp0 |
     pairExp0 |
+    tupleExp0 |
     mapExp0 |
     applicationLikeExp |
     (location <~ "|->") ~ (binder | exp70) ^^ PPointsTo |
@@ -457,12 +485,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
 
-  lazy val guardExp: Parser[PGuardExp] =
-    idnuse ~ ("(" ~> listOfExpressions <~ ")") ~ ("@" ~> idnexp) ^^ {
-      case guardId ~ args ~ regionId => PGuardExp(guardId, regionId +: args)
+  lazy val guardExp: Parser[PRegionedGuardExp] =
+    idnuse ~ guardArg ~ ("@" ~> idnexp) ^^ {
+      case guardId ~ args ~ regionId => PRegionedGuardExp(guardId, regionId, args)
     } |
     (idnuse <~ "@") ~ idnexp ^^ {
-      case guardId ~ regionId => PGuardExp(guardId, Vector(regionId))
+      case guardId ~ regionId => PRegionedGuardExp(guardId, regionId, PStandartGuardArg(Vector.empty).at(guardId))
     }
 
   lazy val setExp0: Parser[PSetExp] =
@@ -491,17 +519,31 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case typeAnnotation ~ elements => PExplicitSeq(elements, typeAnnotation)
     }
 
-  lazy val pairExp0: Parser[PPairExp] =
+  lazy val pairExp0: Parser[PTupleExp] =
     pairLiteral |
-    "fst" ~> "(" ~> expression <~ ")" ^^ PPairFirst |
-    "snd" ~> "(" ~> expression <~ ")" ^^ PPairSecond
+    "fst" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 0)) |
+    "snd" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 1))
 
-  lazy val pairLiteral: Parser[PExplicitPair] =
+  lazy val pairLiteral: Parser[PExplicitTuple] =
     "Pair" ~>
     ("[" ~> (typ <~ ",") ~ typ <~ "]").? ~
     ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ {
       case typeAnnotation ~ (element1 ~ element2) =>
-        PExplicitPair(element1, element2, typeAnnotation map { case t1 ~ t2 => (t1, t2) })
+        PExplicitTuple(Vector(element1, element2), typeAnnotation map { case t1 ~ t2 => Vector(t1, t2) })
+    }
+
+  lazy val tupleExp0: Parser[PTupleExp] =
+    tupleLiteral |
+    ("get" ~> regex("[0-9]+".r)) ~ ("(" ~> expression <~ ")") ^^ {
+      case index ~ expr => PTupleGet(expr, index.toInt)
+    }
+
+  lazy val tupleLiteral: Parser[PExplicitTuple] =
+    "Tuple" ~>
+    ("[" ~> rep1sep(typ, ",") <~ "]").? ~
+    ("(" ~> rep1sep(expression, ",") <~ ")") ^^ {
+      case typeAnnotations ~ elements =>
+        PExplicitTuple(elements, typeAnnotations)
     }
 
   lazy val mapExp0: Parser[PMapExp] =
@@ -542,7 +584,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "frac" ^^^ PFracType() |
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
-    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PPairType |
+    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ {case t1 ~ t2 => PTupleType(Vector(t1,t2))} |
+    "tuple" ~> "<" ~> rep1sep(typ, ",") <~ ">" ^^ PTupleType |
     "map" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PMapType |
     idnuse ^^ PRefType
 
@@ -554,7 +597,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val identifier: Parser[String] =
     "[a-zA-Z_][a-zA-Z0-9_]*".r into (s => {
-      if (reservedWords contains s)
+      if (isReservedWord(s))
         failure(s"""keyword "$s" found where identifier expected""")
       else
         success(s)
@@ -568,6 +611,15 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     def range(from: PAstNode, to: PAstNode): N = {
       positions.dupRangePos(from, to, node)
     }
+  }
+
+  private def sanitizeAction(action: PAction): PAction = {
+
+    val renamings = (action.binders map { case PNamedBinder(id, typeAnnotation) =>
+      id.name -> s"$$_action_${id.name}" // TODO naming convention
+    }).toMap
+
+    positionedRewriter.deepcloneAndRename(action, renamings)
   }
 
   implicit def parseResultToTuple2[A, B](result: A~B): (A, B) =

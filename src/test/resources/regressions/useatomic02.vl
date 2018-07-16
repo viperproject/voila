@@ -4,18 +4,18 @@ struct memcell {
 
 
 
-region R1(id r, memcell x)
+region R1(id r, int lvl, memcell x)
   guards { unique G1; }
   interpretation { x.f |-> ?v && v == 0 }
   state { v }
   actions { G1: 0 ~> 1; }
 
-procedure test01(id r, memcell x)
-  requires R1(r, x, 0) && G1@r;
+procedure test01(id r, int lvl, memcell x)
+  requires R1(r, lvl, x, 0) && G1@r;
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
   use_atomic
-    using R1(r, x) with G1@r;
+    using R1(r, lvl, x) with G1@r;
   {
     x.f := 1;
   }
@@ -23,7 +23,7 @@ procedure test01(id r, memcell x)
 
 
 
-region R2(id r, memcell x)
+region R2(id r, int lvl, memcell x)
   guards {
     unique G2;
     unique K2;
@@ -32,12 +32,12 @@ region R2(id r, memcell x)
   state { v }
   actions { G2: 0 ~> 1; }
 
-procedure test02(id r, memcell x)
-  requires R2(r, x, 0) && K2@r;
+procedure test02(id r, int lvl, memcell x)
+  requires R2(r, lvl, x, 0) && K2@r;
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
   use_atomic
-    using R2(r, x) with K2@r;
+    using R2(r, lvl, x) with K2@r;
   {
     x.f := 1;
   }
@@ -45,18 +45,18 @@ procedure test02(id r, memcell x)
 
 
 
-region R3(id r, memcell x)
+region R3(id r, int lvl, memcell x)
   guards { unique G3; }
   interpretation { x.f |-> ?v && (v == 0 || v == 1) }
   state { v }
   actions { G3: 0 ~> 0; }
 
-procedure test03(id r, memcell x)
-  requires R3(r, x, 0) && G3@r;
+procedure test03(id r, int lvl, memcell x)
+  requires R3(r, lvl, x, 0) && G3@r;
 {
   //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
   use_atomic
-    using R3(r, x) with G3@r;
+    using R3(r, lvl, x) with G3@r;
   {
     x.f := 1;
   }

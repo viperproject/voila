@@ -1,28 +1,29 @@
-region Tuple2(id r, tuple2 x; int v, int w)
+region Tuple2(id r, int lvl, tuple2 x; int v, int w)
   guards { unique G; }
   interpretation { x._1 |-> ?v && x._2 |-> ?w }
   state { v + w }
   actions {}
 
-procedure makeTuple2() returns (id r, tuple2 x)
-  ensures Tuple2(r, x);
+procedure makeTuple2() returns (id r, int lvl, tuple2 x)
+  ensures Tuple2(r, lvl, x);
 
 procedure test01() {
   id r;
+  int lvl;
   tuple2 x;
 
-  r, x := makeTuple2();
+  r, lvl, x := makeTuple2();
 
-  assert Tuple2(r, x, ?v1, ?w1, ?abs1);
+  assert Tuple2(r, lvl, x, ?v1, ?w1, ?abs1);
   havoc x;
   assert abs1 == v1 + w1;
 }
 
-procedure test02(id r, tuple2 x) {
-  inhale Tuple2(r, x, ?v1, ?w1, ?abs1) && v1 < w1;
+procedure test02(id r, int lvl, tuple2 x) {
+  inhale Tuple2(r, lvl, x, ?v1, ?w1, ?abs1) && v1 < w1;
   assert abs1 < 2*w1;
 
-  exhale Tuple2(r, x, ?v2, ?w2, ?abs2) && v2 < w2;
+  exhale Tuple2(r, lvl, x, ?v2, ?w2, ?abs2) && v2 < w2;
   assert v1 == v2 && w1 == w2 && abs1 == abs2;
 }
 

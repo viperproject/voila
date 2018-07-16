@@ -6,10 +6,13 @@
 
 package viper.voila.translator
 
+import viper.silver.ast.{DomainFuncApp, Exp, Type}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
+import viper.voila.backends.ViperAstUtils
+import viper.voila.translator.TranslatorUtils._
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   protected var currentlyOpenRegions: List[(PRegion, Vector[PExpression], vpr.Label)] = List.empty
@@ -19,53 +22,70 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = makeAtomic.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, regionInArgs, regionOutArgs) =
+    val (region, regionInArgs, regionIntArgsConstraints, regionOutArgsConstraints) =
       getAndTranslateRegionPredicateDetails(makeAtomic.regionPredicate)
 
     assert(
-      regionOutArgs.isEmpty,
+      regionOutArgsConstraints.isEmpty,
        "Using-clauses expect region assertions without out-arguments, but got " +
       s"${makeAtomic.regionPredicate} at ${makeAtomic.regionPredicate.position}")
 
     val regionType = semanticAnalyser.typ(region.state)
     val vprRegionIdArg = regionInArgs.head
 
-    val inhaleDiamond =
-      vpr.Inhale(diamondAccess(translateUseOf(makeAtomic.guard.regionId.id)))()
+    val storeCurrentLvl = AtomicityContextLevelManager.registerRegionExp(region, regionInArgs)
 
-    val guard = translate(makeAtomic.guard)
+    val inhaleDiamond =
+      vpr.Inhale(diamondAccess(translateUseOf(regionId)))()
+
+    val guard = viper.silicon.utils.ast.BigAnd(makeAtomic.guards map translate)
 
     val exhaleGuard =
-      vpr.Exhale(guard)().withSource(makeAtomic.guard)
+      vpr.Exhale(guard)().withSource(makeAtomic.guards.head)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
-        MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guard))
+        MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guards.head))
     }
 
-    val preHavocLabel1 = freshLabel("pre_havoc")
+    val regionPredicate =
+      vpr.PredicateAccessPredicate(
+        vpr.PredicateAccess(
+          args = regionInArgs,
+          predicateName = region.id.name
+        )(),
+        vpr.FullPerm()()
+      )()
 
-    val havoc1 =
-      prependComment(
-        s"Stabilising region ${makeAtomic.regionPredicate}",
-        stabilizeRegionInstance(region, regionInArgs, preHavocLabel1))
+    val exhaleRegionPredicate = vpr.Exhale(regionPredicate)().withSource(makeAtomic)
 
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.ExhaleFailed if e causedBy exhaleRegionPredicate =>
+        MakeAtomicError(makeAtomic, InsufficientRegionPermissionError(makeAtomic.regionPredicate))
+    }
 
-    val preHavocLabel2 = freshLabel("pre_havoc")
+    val (preFrameExhales, postFrameInhales) = completeFrame
 
-    val havoc2 =
-      prependComment(
-        s"Stabilising region ${makeAtomic.regionPredicate}",
-        stabilizeRegionInstance(region, regionInArgs, preHavocLabel2))
+    val inhaleRegionPredicate = vpr.Inhale(regionPredicate)()
+
+    val contextCheck = checkAtomicityNotYetCaptured(region, regionInArgs)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy contextCheck =>
+        MakeAtomicError(makeAtomic, RegionAtomicityContextTrackingError(makeAtomic.regionPredicate))
+    }
+
+    val assignContext = assignAtomicityContext(region, regionInArgs)
+
+    val guardArgEvaluationLabel = freshLabel("pre_havoc")
+
+    val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
+
+    val havoc2 = stabilizeSingleInstances("after atomic", (region, regionInArgs))
 
     val ruleBody = translate(makeAtomic.body)
 
-    val vprAtomicityContextX =
-      vpr.DomainFuncApp(
-        atomicityContextFunction(regionId),
-        regionInArgs,
-        Map.empty[vpr.TypeVar, vpr.Type]
-      )()
+    val vprAtomicityContextX = atomicityContextFunctions.application(region, regionInArgs)
 
     val vprStepFrom =
       stepFromLocation(vprRegionIdArg, regionType).withSource(regionId)
@@ -108,16 +128,16 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         regionStateChangeAllowedByGuard(
           region,
           regionInArgs,
-          makeAtomic.guard.guard.name,
-          guard,
+          makeAtomic.guards, /* FIXME: only temporal placeholder, guard is going to be a vector itself */
           vprStepFrom,
-          vprStepTo
+          vprStepTo,
+          guardArgEvaluationLabel
         ).withSource(makeAtomic)
 
       errorBacktranslator.addErrorTransformer {
         case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
           MakeAtomicError(makeAtomic)
-            .dueTo(IllegalRegionStateChangeError(makeAtomic.guard))
+            .dueTo(IllegalRegionStateChangeError(makeAtomic.guards.head))
             .dueTo(hintAtEnclosingLoopInvariants(regionId))
       }
 
@@ -178,22 +198,33 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       exhale
     }
 
+    val deselectContext = deselectAtomicityContext(region, regionInArgs)
+
+    AtomicityContextLevelManager.removeLastRegionExp()
+
     val result =
       vpr.Seqn(
         Vector(
-          inhaleDiamond,
+          guardArgEvaluationLabel,
           exhaleGuard,
-          preHavocLabel1,
+          exhaleRegionPredicate,
+          preFrameExhales,
+          inhaleRegionPredicate,
+          inhaleDiamond,
+          storeCurrentLvl,
+          contextCheck,
+          assignContext,
           havoc1,
           ruleBody,
           checkUpdatePermitted,
-          preHavocLabel2,
           havoc2,
           BLANK_LINE,
           assumeCurrentStateIsStepTo,
           assumeOldStateWasStepFrom,
           inhaleGuard,
-          exhaleTrackingResource),
+          exhaleTrackingResource,
+          deselectContext,
+          postFrameInhales),
         Vector.empty
       )()
 
@@ -204,11 +235,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = updateRegion.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, vprInArgs, vprOutArgs) =
+    val (region, vprInArgs, vprInArgsConstraints, vprOutArgsConstraints) =
       getAndTranslateRegionPredicateDetails(updateRegion.regionPredicate)
 
       assert(
-        vprOutArgs.isEmpty,
+        vprOutArgsConstraints.isEmpty,
          "Using-clauses expect region assertions without out-arguments, but got " +
         s"${updateRegion.regionPredicate} at ${updateRegion.regionPredicate.position}")
 
@@ -225,10 +256,32 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           .dueTo(hintAtEnclosingLoopInvariants(regionId))
     }
 
+    val exhaleAtomicityTracking = deselectAtomicityContext(region, vprInArgs)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.ExhaleFailed if e causedBy exhaleAtomicityTracking =>
+        UpdateRegionError(updateRegion)
+          .dueTo(InsufficientRegionAtomicityContextTrackingError(updateRegion.regionPredicate))
+    }
+
     val label = freshLabel("pre_region_update")
+
+    val levelCheck = vpr.Assert(LevelManager.levelHigherThanOccurringRegionLevels(updateRegion.regionPredicate))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy levelCheck =>
+        UpdateRegionError(updateRegion, InspectLevelTooHighError(updateRegion.regionPredicate))
+    }
+
+
+    val levelToken = LevelManager.getCurrentLevelToken
+    val newLevelAssignment = LevelManager.assignLevel(vprInArgs(1))
 
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))().withSource(updateRegion.regionPredicate)
+
+    val tranitionInterferenceContext
+    = linkInterferenceContext(region, vprInArgs)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
@@ -236,7 +289,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val stabilizeFrameRegions =
-      stabilizeRegions(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}")
+      stabilizeAllInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}")
 
     val ruleBody = translate(updateRegion.body)
 
@@ -296,16 +349,26 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.Seqn(Vector(inhaleDiamond), Vector.empty)()
       )()
 
+    val inhaleAtomicityTracking = assignOldAtomicityContext(region, vprInArgs, label)
+
+    val oldLevelAssignment = LevelManager.assignOldLevel(levelToken)
+
     val result =
       vpr.Seqn(
         Vector(
           exhaleDiamond,
           label,
+          levelCheck,
+          newLevelAssignment,
+          exhaleAtomicityTracking,
           unfoldRegionPredicate,
+          tranitionInterferenceContext,
           stabilizeFrameRegions,
           ruleBody,
           foldRegionPredicate,
-          postRegionUpdate),
+          postRegionUpdate,
+          inhaleAtomicityTracking,
+          oldLevelAssignment),
         Vector.empty
       )()
 
@@ -323,8 +386,28 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val preUseAtomicLabel = freshLabel("pre_use_atomic")
 
+    val contextCheck = checkAtomicityNotYetCaptured(region, vprInArgs)
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy contextCheck =>
+        UseAtomicError(useAtomic, RegionAtomicityContextTrackingError(useAtomic.regionPredicate))
+    }
+
+    val levelCheck = vpr.Assert(LevelManager.levelHigherThanOccurringRegionLevels(useAtomic.regionPredicate))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy levelCheck =>
+        UseAtomicError(useAtomic, InspectLevelTooHighError(useAtomic.regionPredicate))
+    }
+
+    val levelToken = LevelManager.getCurrentLevelToken
+    val newLevelAssignment = LevelManager.assignLevel(vprInArgs(1))
+
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
+
+    val transitionInterferenceContext
+    = linkInterferenceContext(region, vprInArgs)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
@@ -352,7 +435,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           .dueTo(ebt.translate(e.reason))
     }
 
-    val guard = translate(useAtomic.guard)
+    val guard = viper.silicon.utils.ast.BigAnd(useAtomic.guards map translate)
 
     /* Temporarily exhale the guard used in the use-atomic rule so that it is no longer held
      * when stabilising the frame.
@@ -360,11 +443,12 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
      * Note: The guard must be checked in any case! I.e. the check is independent of the
      * technical treatment of frame stabilisation.
      */
-    val exhaleGuard = vpr.Exhale(guard)().withSource(useAtomic.guard)
+    // FIXME: currently head is taken as source
+    val exhaleGuard = vpr.Exhale(guard)().withSource(useAtomic.guards.head)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
-        UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guard))
+        UseAtomicError(useAtomic, InsufficientGuardPermissionError(useAtomic.guards.head))
     }
 
     val inhaleGuard = vpr.Inhale(guard)()
@@ -372,10 +456,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val stabilizationReason = s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}"
 
     val stabilizeOtherRegionTypes =
-      stabilizeRegions(tree.root.regions.filterNot(_ == region), stabilizationReason)
+      stabilizeAllInstances(stabilizationReason, tree.root.regions.filterNot(_ == region): _*)
 
     val stabilizeCurrentRegionTypes =
-      stabilizeRegions(Vector(region), stabilizationReason)
+      stabilizeAllInstances(stabilizationReason, region)
 
     val currentState =
       vpr.FuncApp(
@@ -393,32 +477,42 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
       regionStateChangeAllowedByGuard(
         region,
         vprInArgs,
-        useAtomic.guard.guard.name,
-        guard,
+        useAtomic.guards,
         oldState,
-        currentState
+        currentState,
+        preUseAtomicLabel
       ).withSource(useAtomic)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.AssertFailed if e causedBy stateChangeAllowed =>
         UseAtomicError(useAtomic, IllegalRegionStateChangeError(useAtomic.body))
+
+      case e: vprerr.AssertFailed if e causedBy stateChangeAllowed.exp =>
+        UseAtomicError(useAtomic, IllegalRegionStateChangeError(useAtomic.body))
     }
+
+    val oldLevelAssignment = LevelManager.assignOldLevel(levelToken)
 
     val result =
       vpr.Seqn(
         Vector(
           preUseAtomicLabel,
+          contextCheck,
+          levelCheck,
+          newLevelAssignment,
           /* Note: Guard must be checked!
            * I.e. the check is independent of the technical treatment of frame stabilisation.
            */
           exhaleGuard,
           stabilizeOtherRegionTypes,
           unfoldRegionPredicate,
+          transitionInterferenceContext,
           stabilizeCurrentRegionTypes,
           inhaleGuard,
           ruleBody,
           foldRegionPredicate,
-          stateChangeAllowed),
+          stateChangeAllowed,
+          oldLevelAssignment),
         Vector.empty
       )()
 
@@ -435,8 +529,21 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
        "Using-clauses expect region assertions without out-arguments, but got " +
       s"${openRegion.regionPredicate} at ${openRegion.regionPredicate.position}")
 
+    val levelCheck = vpr.Assert(LevelManager.levelHigherThanOccurringRegionLevels(openRegion.regionPredicate))()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy levelCheck =>
+        OpenRegionError(openRegion, InspectLevelTooHighError(openRegion.regionPredicate))
+    }
+
+    val levelToken = LevelManager.getCurrentLevelToken
+    val newLevelAssignment = LevelManager.assignLevel(vprInArgs(1))
+
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
+
+    val tranitionInterferenceContext
+      = linkInterferenceContext(region, vprInArgs)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>
@@ -482,14 +589,20 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         OpenRegionError(openRegion, IllegalRegionStateChangeError(openRegion.body))
     }
 
+    val oldLevelAssignment = LevelManager.assignOldLevel(levelToken)
+
     val result =
       vpr.Seqn(
         Vector(
           preOpenLabel,
+          levelCheck,
+          newLevelAssignment,
           unfoldRegionPredicate,
+          tranitionInterferenceContext,
           ruleBody,
           foldRegionPredicate,
-          stateUnchanged),
+          stateUnchanged,
+          oldLevelAssignment),
         Vector.empty
       )()
 

@@ -45,43 +45,57 @@ region-state-function(R) ≡
 
 =========================================================================
 
-state-constraints-from-action(action, vprFrom, vprTo)
+state-constraints-from-action(action, vprFrom, vprTo, vprGuardCheck)
   // stateConstraintsFromAction: PAction, Exp, Exp, Exp -> Exp
     action,                    // PAction
     vprFrom,                   // vpr.Exp
     vprTo,                     // vpr.Exp
 
   Let action denote an action of the shape
-    T''1 y1, ... | c(y1, ...) | G'1(g1(y1, ...), ...): from(y1, ...) ~> to(y1, ...)
+    T''1 y1, ... | c(y1, ...) | G'1(g1(y1, ...), ...) && ... : from(y1, ...) ~> to(y1, ...)
   of a region R and let G'1 denote a guard of that region of the shape
     modifier1 G(T'1, T'2, ... )
-
-  may-env-hold-action-guard ≡
-    if modifier1 is 'duplicable':
-      true
-    else: // modifier1 is 'unique'
-      perm(R_G'1(r, ⟦g1(y1, ...)⟧, ...)) == none
 
   return
     exists y1: T''1, ... ::
       ⟦from(y1, ...)⟧ == vprFrom &&
       ⟦to(y1, ...)⟧ == vprTo &&
       ⟦c(y1, ...)⟧ &&
-      may-env-hold-action-guard
+      vprGuardCheck
 
 
-region-state-change-allowed-by-guard(R, r, v1, ..., G, guard, vFrom, vTo) ≡
+assemble-check-if-environment-may-hold-action-guard(R, G(e1, e2, ...)@e0) ≡
+
+  Let M be the guard modifier of G
+
+  return switch (M):
+    case duplicable: true
+    case unique: perm(R_G(⟦e0⟧, ⟦e1⟧, ...)) == none
+    case divisible: perm(R_G(⟦e0⟧, ⟦e2⟧, ...)) <= 1 - ⟦e1⟧
+
+
+assemble-check-if-environment-may-hold-action-guard(R, G|s|@e) ≡
+
+  Let M be the guard modifier of G
+  Let T be the element type of s
+
+  return switch (M):
+      case duplicable: true
+      case unique: forall T x ::  x in ⟦s⟧ ==> perm(R_G(⟦e⟧, x)) == none
+
+
+region-state-change-allowed-by-guard(R, r, v1, ..., guards, vFrom, vTo, label) ≡
   // regionStateChangeAllowedByGuard:
-  //    PRegion, Vector[vpr.Exp], String, PredicateAccessPredicate, Exp, Exp --> Assert
+  //    PRegion, Vector[vpr.Exp], Vector[PRegionedGuardExp], Exp, Exp, Label --> Assert
 
-  Let guard denote a Viper predicate instance R_G(w0, w1, ...)
+  Let guards denote Viper predicate instances R_G1(w01, w11, ...), R_G2(w02, w12, ...), ...
 
-  relevantActions ≡ all actions of R whose guard is G
+  relevantActions ≡ all actions of R who only use the guards G1, G2, ...
 
   vprActionConstraints ≡ {
     relevantActions map (action =>
       // Let action denote an action of the shape
-      //   T''1 y1, ... | c(y1, ...) | G(g1(y1, ...), ...): from(y1, ...) ~> to(y1, ...)
+      //   T''1 y1, ... | c(y1, ...) | G1(g1(y1, ...), ...) && ... : from(y1, ...) ~> to(y1, ...)
 
       vprExistentialConstraint ≡
         // state-constraints-from-action(action, vFrom, vTo)
@@ -102,16 +116,35 @@ region-state-change-allowed-by-guard(R, r, v1, ..., G, guard, vFrom, vTo) ≡
       //      in which case y_i can be instantiated with vFrom
       //   2) the to-expression, i.e. to(y1, ...) ≡ y_i,
       //      in which case y_i can be instantiated with vTo
-      //   3) a "direct" argument of the guard, i.e. the action's guard has 
+      //   3) a "direct" argument of the guard, i.e. the action's guard has
       //      the shape G(..., y_i, ...), in which case y_i can be instantiated
       //      with the corresponding w_i from R_G(w0, w1, ...)
       //
-      // A more general solution would be to require that there exists inverse 
+      // A more general solution would be to require that there exists inverse
       // functions for each y_i so that it can be computed from from-/to-expression/guard.
       //
       // Let v'1, v'2, ... be the witnesses for y1, y2, ....
 
-      vprExistentialConstraint
+      Let actionGuards be the guards of action
+
+      constraints ≡ actionGuards map { reqGuard =>
+        Let heldGuard be the guard instance in guards of the same guard kind G
+        Let M be the guard modifier of G
+
+        switch (M, heldGuard, reqGuard):
+          case (unique | duplicable, G(h1, h2, ...)@r, G(k1, k2, ...)):
+            assert h1 == k1 && h2 == k2 && ...
+          case (divisible, G(h1, h2, ...)@r, G(k1, k2, ...)):
+            assert k1 <= h1 && k2 == h2 && ...
+          case (unique | duplicable, G(h1)@r, G|k1|):
+            assert forall T x :: x in k1 ==> k1 == h1
+          case (unique | duplicable, G|h1|@r, G(k1)):
+            assert k1 in h1
+          case (unique | duplicable, G|h1|@r, G|k1|):
+            assert forall T x :: x in k1 ==> x in h1
+      }
+
+      vprExistentialConstraint && constraints
         but instantiate y1 with v'1, y2 with v'2, ...
     )
   }

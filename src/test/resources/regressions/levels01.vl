@@ -4,25 +4,26 @@ struct cell {
   int value;
 }
 
-region Cell(id s, cell c)
+region Cell(id s, int lvl, cell c)
   guards { unique G; }
   interpretation { c.value |-> ?v }
   state { v }
   actions { G: ?n ~> ?m; }
 
-procedure test01(id s, cell c)
-  requires Cell(s, c);
+procedure test01(id s, int lvl, cell c)
+  requires Cell(s, lvl, c);
   ensures  false; // TODO: Should not hold!
 {
   // Duplicate the region assertion
-  assert Cell(s, c);
-  inhale Cell(s, c);
+  assert Cell(s, lvl, c);
+  inhale Cell(s, lvl, c);
 
   open_region
-    using Cell(s, c);
+    using Cell(s, lvl, c);
   {
+    //:: ExpectedOutput(open-region_error:inspect_level_too_high_error)
     open_region // TODO: Should be rejected
-      using Cell(s, c);
+      using Cell(s, lvl, c);
     {
       skip;
     }

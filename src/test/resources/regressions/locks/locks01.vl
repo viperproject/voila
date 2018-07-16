@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Lock(id a, memcell x)
+region Lock(id a, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
     x.f |-> ?v && (v == 0 || v == 1)
@@ -15,13 +15,14 @@ region Lock(id a, memcell x)
 
 predicate Inv()
 
-region CAPLock(id r, id a, memcell x)
+////:: ExpectedOutput(region_interpretation_not_stable_error)
+region CAPLock(id r, int alvl, id a, int lvl, memcell x)
   guards {
     duplicable Z;
     duplicable K; // [XXX] Wrong modifier: duplicable instead of unique
   }
   interpretation {
-       Lock(a, x, ?v) && G@a
+       Lock(a, lvl, x, ?v) && lvl < alvl && G@a
     && (v == 0 ==> K@r && Inv())
     && (v == 1 ==> true)
   }
@@ -33,48 +34,48 @@ region CAPLock(id r, id a, memcell x)
 
 
 
-abstract_atomic procedure unlock(id a, memcell x)
+abstract_atomic procedure unlock(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a;
-  ensures Lock(a, x, 0) && G@a;
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures Lock(a, lvl, x, 0) && G@a;
 
-procedure non_atomic_unlock01(id r, id a, memcell x)
-  requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
+procedure non_atomic_unlock01(id r, int alvl, id a, int lvl, memcell x)
+  requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   requires Inv();
 {
   skip;
 
   use_atomic
-    using CAPLock(r, a, x) with K@r;
+    using CAPLock(r, alvl, a, lvl, x) with K@r;
   {
     //:: ExpectedOutput(precondition_error:interference_error)
-    unlock(a, x);
+    unlock(a, lvl, x);
   }
 }
 
-procedure non_atomic_unlock02(id r, id a, memcell x)
-  requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
+procedure non_atomic_unlock02(id r, int alvl, id a, int lvl, memcell x)
+  requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   requires Inv();
 {
   use_atomic
-    using CAPLock(r, a, x) with K@r;
+    using CAPLock(r, alvl, a, lvl, x) with K@r;
   {
     //:: ExpectedOutput(precondition_error:interference_error)
-    unlock(a, x);
+    unlock(a, lvl, x);
   }
 
   skip;
 }
 
-procedure non_atomic_unlock03(id r, id a, memcell x)
-  requires CAPLock(r, a, x, ?v) && v == 1 && K@r;
+procedure non_atomic_unlock03(id r, int alvl, id a, int lvl, memcell x)
+  requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   requires Inv();
 {
   use_atomic
-    using CAPLock(r, a, x) with K@r;
+    using CAPLock(r, alvl, a, lvl, x) with K@r;
   {
     //:: ExpectedOutput(precondition_error:interference_error)
-    unlock(a, x);
+    unlock(a, lvl, x);
   }
 }
 

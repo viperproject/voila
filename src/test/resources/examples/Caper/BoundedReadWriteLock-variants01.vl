@@ -1,6 +1,6 @@
 //:: IgnoreFile(/voila/issue/49/)
 
-region RWLock(id r, memcell x)
+region RWLock(id r, int lvl, memcell x)
   guards {
     duplicable WLOCK;
     unique WUNLOCK;
@@ -34,32 +34,32 @@ region RWLock(id r, memcell x)
 
 
 
-abstract_atomic procedure readerAcquire1AA(id r, memcell x)
+abstract_atomic procedure readerAcquire1AA(id r, int lvl, memcell x)
   interference ?m in Set(-1, 0, 2) on r;
-  requires RWLock(r, x, m) && RLOCK1@r;
-  ensures  RWLock(r, x, ?n) && RLOCK1@r && RUNLOCK1@r;
+  requires RWLock(r, lvl, x, m) && RLOCK1@r;
+  ensures  RWLock(r, lvl, x, ?n) && RLOCK1@r && RUNLOCK1@r;
   ensures  m in Set(0, 2) && n == m + 1;
 {
   int v;
   bool b;
 
   make_atomic
-    using RWLock(r, x) with RLOCK1@r;
+    using RWLock(r, lvl, x) with RLOCK1@r;
   {
     do
-      invariant RWLock(r, x);
+      invariant RWLock(r, lvl, x);
       invariant !b ==> r |=> <D> ;
       invariant  b ==> r |=> (v, v + 1) && (v in Set(0, 2)) && RUNLOCK1@r;
     {
       open_region
-        using RWLock(r, x);
+        using RWLock(r, lvl, x);
       {
         v := x.f;
       }
 
       if (v >= 0) {
         update_region
-          using RWLock(r, x);
+          using RWLock(r, lvl, x);
         {
           b := CAS(x, v, v + 1);
         }
@@ -70,52 +70,52 @@ abstract_atomic procedure readerAcquire1AA(id r, memcell x)
   }
 }
 
-procedure readerAcquire1a(id r, memcell x)
-  requires RWLock(r, x, ?m) && RLOCK1@r && m != 1 && m != 3;
-  ensures  RWLock(r, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
+procedure readerAcquire1a(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, ?m) && RLOCK1@r && m != 1 && m != 3;
+  ensures  RWLock(r, lvl, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
 {
-  use_region_interpretation RWLock(r, x);
+  use_region_interpretation RWLock(r, lvl, x);
     // Learn that m != 1 && m != 3 implies that m in {-1, 0, 2}
-  readerAcquire1AA(r,x);
+  readerAcquire1AA(r, lvl,x);
 }
 
-procedure readerAcquire1b(id r, memcell x)
-  requires RWLock(r, x, ?m) && RLOCK1@r && m in Set(-1, 0, 2);
-  ensures  RWLock(r, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
+procedure readerAcquire1b(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, ?m) && RLOCK1@r && m in Set(-1, 0, 2);
+  ensures  RWLock(r, lvl, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
 {
-  readerAcquire1AA(r,x);
+  readerAcquire1AA(r, lvl,x);
 }
 
 
 
-abstract_atomic procedure readerRelease2AA(id r, memcell x)
+abstract_atomic procedure readerRelease2AA(id r, int lvl, memcell x)
   interference ?m in Set(2, 3) on r;
-  requires RWLock(r, x, m) && RUNLOCK2@r;
-  ensures  RWLock(r, x);
+  requires RWLock(r, lvl, x, m) && RUNLOCK2@r;
+  ensures  RWLock(r, lvl, x);
 {
   int v;
   bool b;
 
   make_atomic
-    using RWLock(r, x) with RUNLOCK2@r;
+    using RWLock(r, lvl, x) with RUNLOCK2@r;
   {
     do
-      invariant RWLock(r, x);
+      invariant RWLock(r, lvl, x);
       invariant !b ==> r |=> <D>;
       invariant  b ==> r |=> (v, v - 2) && (v in Set(2, 3));
     {
       open_region
-        using RWLock(r, x);
+        using RWLock(r, lvl, x);
       {
         v := x.f;
       }
 
       //:: ExpectedOutput(update-region_error:guard_permission_error)
-      //      Cannot close region RWLock(r, x) after a successful update: guard
+      //      Cannot close region RWLock(r, lvl, x) after a successful update: guard
       //      RUNLOCK2@r, which must go into the region, is currently not
       //      available since it is used by the surrounding make-atomic rule.
       update_region
-        using RWLock(r, x);
+        using RWLock(r, lvl, x);
       {
         b := CAS(x, v, v - 2);
       }
@@ -125,23 +125,23 @@ abstract_atomic procedure readerRelease2AA(id r, memcell x)
 
 
 
-abstract_atomic procedure writerAcquireAA(id r, memcell x)
+abstract_atomic procedure writerAcquireAA(id r, int lvl, memcell x)
   interference ?m in Int on r;
-  requires RWLock(r, x, m) && WLOCK@r;
-  ensures  RWLock(r, x, -1) && WLOCK@r && WUNLOCK@r;
+  requires RWLock(r, lvl, x, m) && WLOCK@r;
+  ensures  RWLock(r, lvl, x, -1) && WLOCK@r && WUNLOCK@r;
 {
   bool b;
 
   make_atomic
-    using RWLock(r, x) with WLOCK@r;
+    using RWLock(r, lvl, x) with WLOCK@r;
   {
     do
-      invariant RWLock(r, x);
+      invariant RWLock(r, lvl, x);
       invariant !b ==> r |=> <D>;
       invariant  b ==> r |=> (0, -1) && WUNLOCK@r;
     {
       update_region
-        using RWLock(r, x);
+        using RWLock(r, lvl, x);
       {
         b := CAS(x, 0, -1);
       }
@@ -149,23 +149,23 @@ abstract_atomic procedure writerAcquireAA(id r, memcell x)
   }
 }
 
-abstract_atomic procedure writerReleaseAA(id r, memcell x)
+abstract_atomic procedure writerReleaseAA(id r, int lvl, memcell x)
   interference ?m in Set(-1) on r;
-  requires RWLock(r, x, m) && WUNLOCK@r;
-  ensures  RWLock(r, x);
+  requires RWLock(r, lvl, x, m) && WUNLOCK@r;
+  ensures  RWLock(r, lvl, x);
 {
   use_atomic
-    using RWLock(r, x) with WUNLOCK@r;
+    using RWLock(r, lvl, x) with WUNLOCK@r;
   {
     x.f := 0;
   }
 }
 
-abstract_atomic procedure writerRelease(id r, memcell x)
-  requires RWLock(r, x, -1) && WUNLOCK@r;
-  ensures  RWLock(r, x);
+abstract_atomic procedure writerRelease(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, -1) && WUNLOCK@r;
+  ensures  RWLock(r, lvl, x);
 {
-  writerReleaseAA(r, x);
+  writerReleaseAA(r, lvl, x);
 }
 
 

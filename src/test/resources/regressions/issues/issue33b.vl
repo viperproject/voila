@@ -1,17 +1,17 @@
-region Cell(id r, memcell x)
+region Cell(id r, int lvl, memcell x)
   guards { unique G; }
   interpretation { x.f |-> ?v }
   state { v }
   actions { G: ?n ~> ?m; }
 
-procedure test01(id r, memcell x)
-  requires Cell(r, x, 0) && G@r;
+procedure test01(id r, int lvl, memcell x)
+  requires Cell(r, lvl, x, 0) && G@r;
 {
-  assert Cell(r, x, 0); // Duplicate the
-  inhale Cell(r, x);    // region assertion
+  assert Cell(r, lvl, x, 0); // Duplicate the
+  inhale Cell(r, lvl, x);    // region assertion
 
   use_atomic
-    using Cell(r, x) with G@r;
+    using Cell(r, lvl, x) with G@r;
   {
     x.f := 1;
   }
@@ -20,42 +20,42 @@ procedure test01(id r, memcell x)
   assert false;
 }
 
-procedure test02(id r, memcell x, id s, memcell y)
-  requires Cell(r, x, 0) && G@r;
-  requires Cell(s, y, 0) && G@s;
+procedure test02(id r, int lvl, memcell x, id s, memcell y)
+  requires Cell(r, lvl, x, 0) && G@r;
+  requires Cell(s, lvl, y, 0) && G@s;
   requires r != s;
 {
-  assert Cell(r, x, 0); // Duplicate the
-  inhale Cell(r, x);    // region assertion
+  assert Cell(r, lvl, x, 0); // Duplicate the
+  inhale Cell(r, lvl, x);    // region assertion
 
   use_atomic
-    using Cell(r, x) with G@r;
+    using Cell(r, lvl, x) with G@r;
   {
     x.f := 1;
   }
 
-  assert Cell(s, y, 0);
+  assert Cell(s, lvl, y, 0);
 
   //:: ExpectedOutput(assert_error:assertion_error)
   assert false;
 }
 
-procedure test03(id r, memcell x, id s, memcell y)
-  requires Cell(r, x, 0) && G@r;
-  requires Cell(s, y, 0);
+procedure test03(id r, int lvl, memcell x, id s, memcell y)
+  requires Cell(r, lvl, x, 0) && G@r;
+  requires Cell(s, lvl, y, 0);
   requires r != s;
 {
-  assert Cell(r, x, 0); // Duplicate the
-  inhale Cell(r, x);    // region assertion
+  assert Cell(r, lvl, x, 0); // Duplicate the
+  inhale Cell(r, lvl, x);    // region assertion
 
   use_atomic
-    using Cell(r, x) with G@r;
+    using Cell(r, lvl, x) with G@r;
   {
     x.f := 1;
   }
 
   //:: ExpectedOutput(assert_error:region_state_error)
-  assert Cell(s, y, 0);
+  assert Cell(s, lvl, y, 0);
 }
 
 struct memcell {

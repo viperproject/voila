@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Lock(id a, memcell x)
+region Lock(id a, int lvl, memcell x)
   guards { unique G; }
   interpretation {
     x.f |-> ?v && (v == 0 || v == 1)
@@ -13,23 +13,23 @@ region Lock(id a, memcell x)
     G: 1 ~> 0;
   }
 
-//predicate U(id a, memcell x) {
-//  Lock(a, x, 0) && G@a
+//predicate U(id a, int lvl, memcell x) {
+//  Lock(a, lvl, x, 0) && G@a
 //}
 //
-//predicate L(id a, memcell x) {
-//  Lock(a, x, 1) && G@a
+//predicate L(id a, int lvl, memcell x) {
+//  Lock(a, lvl, x, 1) && G@a
 //}
 
 predicate Inv() /* Invariant of CAP lock (left abstract) */
 
-region CAPLock(id r, id a, memcell x)
+region CAPLock(id r, int alvl, id a, int lvl, memcell x)
   guards {
     duplicable Z;
     unique K;
   }
   interpretation {
-       Lock(a, x, ?v) && G@a // Included in both L(a, x) and U(a, x)
+       Lock(a, lvl, x, ?v) && lvl < alvl && G@a // Included in both L(a, lvl, x) and U(a, lvl, x)
     && (v == 0 ==> K@r && Inv())
     && (v == 1 ==> true)
   }
@@ -39,12 +39,12 @@ region CAPLock(id r, id a, memcell x)
     K: 1 ~> 0;
   }
 
-predicate isLock(id r, id a, memcell x) {
-  CAPLock(r, a, x, ?v) && (v in Set(0, 1))
+predicate isLock(id r, int alvl, id a, int lvl, memcell x) {
+  CAPLock(r, alvl, a, lvl, x, ?v) && (v in Set(0, 1))
 }
 
-predicate Locked(id r, id a, memcell x) {
-  CAPLock(r, a, x, ?v) && v == 1 && K@r
+predicate Locked(id r, int alvl, id a, int lvl, memcell x) {
+  CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r
 }
 
 
@@ -57,87 +57,88 @@ primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
 
 
 
-abstract_atomic procedure unlock(id a, memcell x)
+abstract_atomic procedure unlock(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a; // L(a, x)
-  ensures Lock(a, x, 0) && G@a; // U(a, x)
+  requires Lock(a, lvl, x, s) && G@a; // L(a, lvl, x)
+  ensures Lock(a, lvl, x, 0) && G@a; // U(a, lvl, x)
 {
-  // unfold L(a, x);
+  // unfold L(a, lvl, x);
 
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     update_region
-      using Lock(a, x);
+      using Lock(a, lvl, x);
     {
       x.f := 0;
     }
   }
 
-  // fold U(a, x);
+  // fold U(a, lvl, x);
 }
 
-procedure non_atomic_unlock(id r, id a, memcell x)
-  requires Locked(r, a, x);
+
+procedure non_atomic_unlock(id r, int alvl, id a, int lvl, memcell x)
+  requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   requires Inv();
 {
-  unfold Locked(r, a, x);
-  // unfold CAPLock(r, a, x);
-  // fold L(a, x);
+  // unfold Locked(r, alvl, a, lvl, x);
+  // unfold CAPLock(r, alvl, a, lvl, x);
+  // fold L(a, lvl, x);
 
   use_atomic
-    using CAPLock(r, a, x) with K@r;
+    using CAPLock(r, alvl, a, lvl, x) with K@r;
   {
-    unlock(a, x);
+    unlock(a, lvl, x);
   }
 }
 
 
 
 
-abstract_atomic procedure lock(id a, memcell x)
+abstract_atomic procedure lock(id a, int lvl, memcell x)
   interference ?s in Set(0, 1) on a;
-  // requires s == 0 ? U(a, x) : L(a, x);
-  requires Lock(a, x, s) && G@a;
-  // ensures L(a, x) && s == 0;
-  ensures Lock(a, x, 1) && G@a && s == 0;
+  // requires s == 0 ? U(a, lvl, x) : L(a, lvl, x);
+  requires Lock(a, lvl, x, s) && G@a;
+  // ensures L(a, lvl, x) && s == 0;
+  ensures Lock(a, lvl, x, 1) && G@a && s == 0;
 {
   bool b;
 
-  // if (s == 0) { unfold U(a, x); }
-  // else { unfold L(a, x); }
+  // if (s == 0) { unfold U(a, lvl, x); }
+  // else { unfold L(a, lvl, x); }
 
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     do
-      invariant Lock(a, x);
+      invariant Lock(a, lvl, x);
       invariant !b ==> a |=> <D>;
       invariant  b ==> a |=> (0, 1);
     {
       update_region
-        using Lock(a, x);
+        using Lock(a, lvl, x);
       {
         b := CAS(x, 0, 1);
       }
     } while (!b);
   }
 
-  // fold L(a, x);
+  // fold L(a, lvl, x);
 }
 
-procedure non_atomic_lock(id r, id a, memcell x)
-  requires isLock(r, a, x) && Z@r;
-  ensures  Locked(r, a, x);
+procedure non_atomic_lock(id r, int alvl, id a, int lvl, memcell x)
+  requires CAPLock(r, alvl, a, lvl, x, ?v1) && (v1 in Set(0, 1)) && Z@r;
+  ensures  CAPLock(r, alvl, a, lvl, x, ?v2) && v2 == 1 && K@r;
   // ensures  isLock(r, a, x);
 {
-  unfold isLock(r, a, x);
+  // unfold isLock(r, alvl, a, lvl, x);
 
   use_atomic
-    using CAPLock(r, a, x) with Z@r;
+    using CAPLock(r, alvl, a, lvl, x) with Z@r;
   {
-    lock(a, x);
+    lock(a, lvl, x);
   }
 
-  fold Locked(r, a, x);
+  // fold Locked(r, alvl, a, lvl, x);
 }

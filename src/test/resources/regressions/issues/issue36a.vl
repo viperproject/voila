@@ -1,53 +1,53 @@
 // :: IgnoreFile(/voila/issue/36/)
 
-region R(id s, int x)
+region R(id s, int lvl, int x)
   guards { duplicable G; }
   interpretation { true }
   state { 0 }
   actions {}
 
-procedure test01(id s) returns (int ret)
-  requires true;
-  ensures R(s, ret);
+procedure test01(id s, int lvl) returns (int ret)
+  requires lvl >= 0;
+  ensures R(s, lvl, ret);
 {
   ret := 0;
-  fold R(s, ret);
+  fold R(s, lvl, ret);
 }
 
-procedure test02(id s) returns (int ret)
-  requires true;
-  ensures R(s, ret);
+procedure test02(id s, int lvl) returns (int ret)
+  requires lvl >= 0;
+  ensures R(s, lvl, ret);
 {
   ret := 0;
-  fold R(s, ret, 0);
+  fold R(s, lvl, ret, 0);
 }
 
-procedure test03(id s) returns (int ret)
-  requires true;
-  ensures R(s, ret);
+procedure test03(id s, int lvl) returns (int ret)
+  requires lvl >= 0;
+  ensures R(s, lvl, ret);
 {
   ret := 0;
   //:: ExpectedOutput(fold_error:region_state_error)
-  fold R(s, ret, 123456);
+  fold R(s, lvl, ret, 123456);
 }
 
-procedure test04(id s, int ret)
-  requires R(s, ret, 0);
+procedure test04(id s, int lvl, int ret)
+  requires R(s, lvl, ret, 0);
 {
-  unfold R(s, ret);
+  unfold R(s, lvl, ret);
 }
 
-procedure test05(id s, int ret)
-  requires R(s, ret, 0);
+procedure test05(id s, int lvl, int ret)
+  requires R(s, lvl, ret, 0);
 {
-  unfold R(s, ret, 0);
+  unfold R(s, lvl, ret, 0);
 }
 
-procedure test06(id s, int ret)
-  requires R(s, ret, 0);
+procedure test06(id s, int lvl, int ret)
+  requires R(s, lvl, ret, 0);
 {
   //:: ExpectedOutput(unfold_error:region_state_error)
-  unfold R(s, ret, 123456);
+  unfold R(s, lvl, ret, 123456);
 }
 
 

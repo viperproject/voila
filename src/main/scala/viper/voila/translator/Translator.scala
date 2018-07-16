@@ -26,6 +26,10 @@ class PProgramToViperTranslator(protected val config: Config,
        with HeapAccessTranslatorComponent
        with RegionTranslatorComponent
        with RuleTranslatorComponent
+       with InterferenceTranslatorComponent
+       with StabilizationComponent
+       with ActionTranslatorComponent
+       with LevelTranslatorComponent
        with CommentsComponent
        with FreshIdentifiersComponent
        with SetComprehensionComponent

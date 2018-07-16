@@ -1,4 +1,4 @@
-region Cell(id s, memcell x)
+region Cell(id s, int lvl, memcell x)
   guards { unique G; }
   interpretation { x.val |-> ?v }
   state { v }
@@ -8,32 +8,32 @@ region Cell(id s, memcell x)
 
 // Basically a simplified version of the spinCAS used in BoundedReadWriteLock-variants03.vl
 // TODO: Should return the last read value (i.e. v).
-abstract_atomic procedure spinIncBy(id s, memcell x, int k, set<int> from)
+abstract_atomic procedure spinIncBy(id s, int lvl, memcell x, int k, set<int> from)
   interference ?v0 in from on s;
-  requires Cell(s, x, v0) && G@s;
+  requires Cell(s, lvl, x, v0) && G@s;
   requires k != 0; // Needed because of Voila issue #8
-  ensures  Cell(s, x, ?v1) && G@s;
+  ensures  Cell(s, lvl, x, ?v1) && G@s;
   ensures  v1 == v0 + k;
 {
   int v;
   bool b;
 
   make_atomic
-    using Cell(s, x) with G@s;
+    using Cell(s, lvl, x) with G@s;
   {
     do
-      invariant Cell(s, x);
+      invariant Cell(s, lvl, x);
       invariant !b ==> s |=> <D>;
       invariant  b ==> s |=> (v, v + k) && v in from;
     {
       open_region
-        using Cell(s, x);
+        using Cell(s, lvl, x);
       {
         v := x.val;
       }
 
       update_region
-        using Cell(s, x);
+        using Cell(s, lvl, x);
       {
         b := CAS(x, v, v + k);
       }
@@ -45,12 +45,12 @@ abstract_atomic procedure spinIncBy(id s, memcell x, int k, set<int> from)
 
 
 
-region IncDec(id r, id s, memcell x)
+region IncDec(id r, int alvl, id s, int lvl, memcell x)
   guards {
     unique INC;
     unique DEC;
   }
-  interpretation { Cell(s, x, ?n) && G@s }
+  interpretation { Cell(s, lvl, x, ?n) && lvl < alvl && G@s }
   state { n }
   actions {
     ?n, ?m | n < m | INC: n ~> m;
@@ -60,26 +60,26 @@ region IncDec(id r, id s, memcell x)
   }
 
 // TODO: Should return the return value of spinIncBy, see comment above
-procedure increment(id r, id s, memcell x, int k)
-  requires IncDec(r, s, x, ?v0) && INC@r && k > 0;
-  ensures  IncDec(r, s, x, ?v1) && INC@r && v1 <= v0 + k;
+procedure increment(id r, int alvl, id s, int lvl, memcell x, int k)
+  requires IncDec(r, alvl, s, lvl, x, ?v0) && INC@r && k > 0;
+  ensures  IncDec(r, alvl, s, lvl, x, ?v1) && INC@r && v1 <= v0 + k;
 {
   use_atomic
-    using IncDec(r, s, x) with INC@r;
+    using IncDec(r, alvl, s, lvl, x) with INC@r;
   {
-    spinIncBy(s, x, k, Set(?t | t <= v0));
+    spinIncBy(s, lvl, x, k, Set(?t | t <= v0));
   }
 }
 
 // TODO: Should return the last read value (i.e. v), see comment above
-procedure decrement(id r, id s, memcell x, int k)
-  requires IncDec(r, s, x, ?v0) && DEC@r && k > 0;
-  ensures  IncDec(r, s, x, ?v1) && DEC@r && v1 >= v0 - k;
+procedure decrement(id r, int alvl, id s, int lvl, memcell x, int k)
+  requires IncDec(r, alvl, s, lvl, x, ?v0) && DEC@r && k > 0;
+  ensures  IncDec(r, alvl, s, lvl, x, ?v1) && DEC@r && v1 >= v0 - k;
 {
   use_atomic
-    using IncDec(r, s, x) with DEC@r;
+    using IncDec(r, alvl, s, lvl, x) with DEC@r;
   {
-    spinIncBy(s, x, -k, Set(?t | v0 <= t));
+    spinIncBy(s, lvl, x, -k, Set(?t | v0 <= t));
   }
 }
 

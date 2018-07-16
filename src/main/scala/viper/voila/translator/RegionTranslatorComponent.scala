@@ -11,25 +11,19 @@ import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.InsufficientGuardPermissionError
+import viper.voila.reporting.{ActionNotTransitiveError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, MakeAtomicError, RegionActionsNotTransitiveError, RegionInterpretationNotStableError}
 import viper.silver.ast.utility.Rewriter.Traverse
+import viper.silver.ast.utility.Simplifier
 import viper.silver.{ast => vpr}
+import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.silver.verifier.{reasons => vprrea}
+import viper.voila.translator.TranslatorUtils.{BaseSelector, BasicManagerWithSimpleApplication}
 
 trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   private val regionStateFunctionCache =
     mutable.Map.empty[PRegion, vpr.Function]
 
-  private val guardPredicateCache =
-    mutable.Map.empty[(PGuardDecl, PRegion), vpr.Predicate]
-
-  protected val collectedActionSkolemizationFunctionFootprints =
-    /* Maps regions to corresponding skolemization function footprints */
-    mutable.Map.empty[String, vpr.Predicate]
-
-  protected val collectedActionSkolemizationFunctions =
-    /* Maps pairs of region and variable names to corresponding skolemization functions */
-    mutable.Map.empty[(String, String), vpr.Function]
+  protected var collectingFunctions: List[PRegion => Vector[vpr.Declaration]] = Nil
 
   def regionPredicateAccess(region: PRegion,
                             arguments: Vector[vpr.Exp],
@@ -205,83 +199,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def actionSkolemizationFunctionFootprintName(regionName: String): String =
-    s"${regionName}_sk_fp"
 
-  def collectActionSkolemizationFunctionFootprint(region: PRegion): vpr.Predicate = {
-    val footprintPredicate =
-      vpr.Predicate(
-        name = actionSkolemizationFunctionFootprintName(region.id.name),
-        formalArgs = Vector.empty,
-        body = None
-      )()
-
-    collectedActionSkolemizationFunctionFootprints += region.id.name -> footprintPredicate
-
-    footprintPredicate
-  }
-
-  def actionSkolemizationFunctionFootprintAccess(regionName: String)
-                                                : vpr.PredicateAccessPredicate = {
-
-    vpr.PredicateAccessPredicate(
-      vpr.PredicateAccess(
-        args = Vector.empty,
-        predicateName = actionSkolemizationFunctionFootprintName(regionName)
-      )(),
-      vpr.FullPerm()()
-    )()
-  }
-
-  def actionSkolemizationFunctionName(regionName: String, variableName: String): String =
-    s"${regionName}_sk_$variableName"
-
-  def collectActionSkolemizationFunctions(region: PRegion): Vector[vpr.Function] = {
-    val binders: Vector[PNamedBinder] = region.actions.flatMap(_.binders).distinct
-
-    val vprSkolemizationFunctions =
-      binders map (binder => {
-        val vprFormalArguments = region.formalInArgs map translate
-        val vprFootprint = actionSkolemizationFunctionFootprintAccess(region.id.name)
-
-        val vprSkolemizationFunction =
-          vpr.Function(
-            name = actionSkolemizationFunctionName(region.id.name, binder.id.name),
-            formalArgs = vprFormalArguments,
-            typ = translate(semanticAnalyser.typeOfLogicalVariable(binder)),
-            pres = Vector(vprFootprint),
-            posts = Vector.empty,
-            decs = None,
-            body = None
-          )()
-
-        collectedActionSkolemizationFunctions +=
-          (region.id.name, binder.id.name) -> vprSkolemizationFunction
-
-        vprSkolemizationFunction
-      })
-
-    vprSkolemizationFunctions
-  }
-
-  def guardPredicateName(guard: PGuardDecl, region: PRegion): String =
-    s"${region.id.name}_${guard.id.name}"
-
-  def guardPredicate(guard: PGuardDecl, region: PRegion): vpr.Predicate = {
-    guardPredicateCache.getOrElseUpdate(
-      (guard, region),
-      {
-        val regionIdArgument = vpr.LocalVarDecl("$r", translate(PRegionIdType()))()
-        val otherArguments = guard.formalArguments map translate
-
-        vpr.Predicate(
-          name = guardPredicateName(guard, region),
-          formalArgs = regionIdArgument +: otherArguments,
-          body = None
-        )()
-      }
-    )
-  }
 
   def translate(region: PRegion): Vector[vpr.Declaration] = {
     val regionPredicateName = region.id.name
@@ -304,6 +222,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val skolemizationFunctions = collectActionSkolemizationFunctions(region)
 
     (   guardPredicates
+     ++ collectingFunctions.flatMap(_(region)).distinct
+     ++ region.guards.flatMap(guard => guardTriggerFunction(guard, region))
+     ++ region.guards.flatMap(guard => guardTriggerFunctionAxiom(guard, region))
      ++ Vector(skolemizationFunctionFootprint)
      ++ skolemizationFunctions
      ++ region.formalOutArgs.indices.map(regionOutArgumentFunction(region, _))
@@ -312,6 +233,397 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           regionStateFunction(region),
           regionStateTriggerFunction(region)))
   }
+
+  def additionalRegionChecks(region: PRegion): Vector[vpr.Declaration] = {
+    maybeRegionInterpretationStabilityCheck(region).toVector ++
+    maybeRegionActionsTransitivityCheck(region)
+    // maybeRegionActionIndividualTransitivityCheck(region)
+  }
+
+  def maybeRegionInterpretationStabilityCheck(region: PRegion): Option[vpr.Method] = {
+    if (config.stableConditionsCheck()) {
+      Some(regionInterpretationStabilityCheck(region))
+    } else {
+      None
+    }
+  }
+
+  def regionInterpretationStabilityCheck(region: PRegion): vpr.Method = {
+
+    val methodName = s"$$_${region.id.name}_interpretation_stability_check"
+
+    val formalArgs = region.formalInArgs map translate
+
+    val body = {
+
+      val inhaleSkolemizationFunctionFootprints =
+        vpr.Inhale(
+          viper.silicon.utils.ast.BigAnd(
+            /* TODO: Would benefit from an optimisation similar to issue #47 */
+            tree.root.regions map (region =>
+              actionSkolemizationFunctionFootprintAccess(region.id.name)))
+        )()
+
+      val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
+
+      val interpretation = translate(region.interpretation)
+
+      val inhaleInterpretation = vpr.Inhale(interpretation)().withSource(region.interpretation)
+
+      // TODO: could be optimized to only havocing regions that occur inside region interpretation
+      val stabilizationCode = stabilizeAllInstances("check stability of region interpretation")
+
+      val assertInterpretation = vpr.Assert(interpretation)().withSource(region.interpretation)
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy assertInterpretation =>
+          RegionInterpretationNotStableError(region)
+      }
+
+      vpr.Seqn(
+        inhaleSkolemizationFunctionFootprints +:
+        initializeFootprints ++:
+        Vector(
+          inhaleInterpretation,
+          stabilizationCode,
+          assertInterpretation
+        ),
+        Vector.empty
+      )()
+    }
+
+    vpr.Method(
+      name = methodName,
+      formalArgs = formalArgs,
+      formalReturns = Vector.empty,
+      pres = Vector.empty,
+      posts = Vector.empty,
+      body = Some(body)
+    )()
+  }
+
+  def maybeRegionActionIndividualTransitivityCheck(region: PRegion): Vector[vpr.Method] = {
+    if(config.transitiveActionsCheck()) {
+      region.actions.zipWithIndex.map{case (a,i) => regionActionIndividualTransitivityCheck(region,a,i.toString)}
+    } else {
+      Vector.empty
+    }
+  }
+
+  def maybeRegionActionsTransitivityCheck(region: PRegion): Vector[vpr.Method] = {
+    if(config.transitiveActionsCheck()) {
+      Vector(regionActionTransitivityCheck(region))
+    } else {
+      Vector.empty
+    }
+  }
+
+  def regionActionTransitivityCheck(region: PRegion): vpr.Method = {
+
+    val methodName = s"$$_${region.id.name}_action_transitivity_check"
+
+    val guards = region.guards
+
+    val guardIds = guards.map{_.id.name}
+
+    val guardDecls = guards.map{g => g.modifier match {
+      case _: PUniqueGuard | _: PDuplicableGuard =>
+        g.formalArguments.length match {
+          case 0 =>
+            vpr.LocalVarDecl(g.id.name, vpr.Bool)()
+
+          case 1 =>
+            val elementType = translate(g.formalArguments.head.typ)
+            vpr.LocalVarDecl(g.id.name, vpr.SetType(elementType))()
+
+          case n =>
+            val elementType =
+              vpr.DomainType(
+                preamble.tuples.domain(n),
+                preamble.tuples.typeVarMap(g.formalArguments map (d => translate(d.typ)))
+              )
+            vpr.LocalVarDecl(g.id.name, vpr.SetType(elementType))()
+        }
+
+      case _: PDivisibleGuard =>
+        vpr.LocalVarDecl(g.id.name, vpr.Perm)()
+    }}
+
+    val guardVarMap = guardIds.zip(guardDecls map (_.localVar)).toMap
+    val guardModifierMap = guardIds.zip(guards map (_.modifier)).toMap
+
+    val actionMaps: Map[Int, Map[String, TranslatedPGuardArg]] =
+      region.actions.zipWithIndex.map{ case (a,i) =>
+        i -> groupGuards(a.guards)
+      }(breakOut)
+
+    def actionApplication(action: PAction,
+                          index: Int,
+                          postfix: String)
+    : (Vector[vpr.LocalVarDecl], vpr.Exp, vpr.Exp, vpr.Exp, vpr.Exp) = {
+
+      val initialDecls = action.binders map localVariableDeclaration
+      val initialVars = initialDecls map (_.localVar)
+
+      val formalDecls = initialDecls.map{v => vpr.LocalVarDecl(s"${v.name}_${index}_$postfix", v.typ)()}
+      val vars = formalDecls map (_.localVar)
+
+      val renaming = initialVars.zip(vars).toMap
+
+      val condition = translate(action.condition).replace(renaming)
+      val from = translate(action.from).replace(renaming)
+      val to = translate(action.to).replace(renaming)
+
+      val guards = actionMaps(index).toVector
+
+      val guardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
+
+        case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
+          args.length match {
+            case 0 => guardVarMap(name)
+            case n => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
+          }
+
+        case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
+          vpr.AnySetSubset(set, guardVarMap(name))()
+
+        case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
+          vpr.GeCmp(args.head, guardVarMap(name))()
+
+      }}
+
+      (formalDecls, condition, from, to, viper.silicon.utils.ast.BigAnd(guardConstraints).replace(renaming))
+    }
+
+    def allActionApplication(from: vpr.Exp, to: vpr.Exp, postfix: String): (Vector[vpr.LocalVarDecl], vpr.Exp) = {
+
+      val (declss, constraints) = region.actions.zipWithIndex.map{ case (a,i) =>
+        val (decls, aCondition, aFrom, aTo, aGuardConstraint) = actionApplication(a, i, postfix)
+        val constraint = viper.silicon.utils.ast.BigAnd(Vector(
+          vpr.EqCmp(aFrom, from)(),
+          vpr.EqCmp(aTo, to)(),
+          aCondition,
+          aGuardConstraint
+        ))
+
+        (decls, constraint)
+      }.unzip
+
+      (declss.flatten, viper.silicon.utils.ast.BigOr(constraints))
+    }
+
+    def allActionApplication2(from: vpr.Exp, to: vpr.Exp, postfix: String): vpr.Exp = {
+
+      val constraints = region.actions.zipWithIndex.map{ case (a,i) =>
+
+        val (fromBound, notFromBound) = a.binders.partition(isBoundExpExtractableFromPoint(_, a.from))
+        val (toBound, restBinders) = notFromBound.partition(isBoundExpExtractableFromPoint(_, a.to))
+
+        val fromBoundRenaming = fromBound.map(
+          b => localVariableDeclaration(b).localVar -> extractBoundExpFromPoint(b, a.from, from).get
+        )(breakOut)
+
+        val toBoundRenaming = toBound.map(
+          b => localVariableDeclaration(b).localVar -> extractBoundExpFromPoint(b, a.to, to).get
+        )(breakOut)
+
+        val initialDecls = restBinders map localVariableDeclaration
+        val initialVars = initialDecls map (_.localVar)
+
+        val formalDecls = initialDecls.map{v => vpr.LocalVarDecl(s"${v.name}_${i}_$postfix", v.typ)()}
+        val vars = formalDecls map (_.localVar)
+
+        val renaming = initialVars.zip(vars).toMap ++ fromBoundRenaming ++ toBoundRenaming
+
+        val aCondition = translate(a.condition).replace(renaming)
+        val aFrom = translate(a.from).replace(renaming)
+        val aTo = translate(a.to).replace(renaming)
+
+        val guards = actionMaps(i).toVector
+
+        val aGuardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
+
+          case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
+            args.length match {
+              case 0 => guardVarMap(name)
+              case n => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
+            }
+
+          case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
+            vpr.AnySetSubset(set, guardVarMap(name))()
+
+          case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
+            vpr.GeCmp(args.head, guardVarMap(name))()
+
+        }}
+
+        val aGuardConstraint = viper.silicon.utils.ast.BigAnd(aGuardConstraints).replace(renaming)
+
+        val constraint = viper.silicon.utils.ast.BigAnd(Vector(
+          vpr.EqCmp(aFrom, from)(),
+          vpr.EqCmp(aTo, to)(),
+          aCondition,
+          aGuardConstraint
+        ))
+
+        if (formalDecls.isEmpty) {
+          constraint
+        } else {
+          vpr.Exists(
+            formalDecls,
+            constraint
+          )()
+        }
+      }
+
+      viper.silicon.utils.ast.BigOr(constraints)
+    }
+
+    val stateType = translate(semanticAnalyser.typ(region.state))
+    val aStateDecl = vpr.LocalVarDecl("aState", stateType)()
+    val bStateDecl = vpr.LocalVarDecl("bState", stateType)()
+    val cStateDecl = vpr.LocalVarDecl("cState", stateType)()
+
+    val (xDecls, xConstraint) = allActionApplication(aStateDecl.localVar, bStateDecl.localVar, "x")
+    val (yDecls, yConstraint) = allActionApplication(bStateDecl.localVar, cStateDecl.localVar, "y")
+    val zConstraint = allActionApplication2(aStateDecl.localVar, cStateDecl.localVar, "z")
+
+    val body = {
+
+      val xInhale = vpr.Inhale(xConstraint)()
+      val yInhale = vpr.Inhale(yConstraint)()
+
+      val zAssert = vpr.Assert(zConstraint)()
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy zAssert =>
+          RegionActionsNotTransitiveError(region)
+      }
+
+      vpr.Seqn(
+        Vector(
+          xInhale,
+          yInhale,
+          zAssert
+        ),
+        guardDecls ++ xDecls ++ yDecls ++ Vector(aStateDecl, bStateDecl, cStateDecl)
+      )()
+    }
+
+    vpr.Method(
+      name = methodName,
+      formalArgs = Vector.empty,
+      formalReturns = Vector.empty,
+      pres = Vector.empty,
+      posts = Vector.empty,
+      body = Some(body)
+    )()
+  }
+
+  def regionActionIndividualTransitivityCheck(region: PRegion, action: PAction, actionName: String): vpr.Method = {
+
+    val methodName = s"$$_${region.id.name}_${actionName}_action_transitivity_check"
+
+    val (guardBinder, stateBinder) = action.binders partition { binder =>
+      action.guards.exists{ _.argument match {
+        case PStandartGuardArg(args) =>
+          args.exists(isBoundExpExtractableFromPoint(binder, _))
+
+        case _ => false
+      }}
+    }
+
+    val guardDecls = guardBinder map localVariableDeclaration
+
+    val initialStateDecls = stateBinder map localVariableDeclaration
+    val initialStateVars = initialStateDecls map (_.localVar)
+
+    def actionApplication(postfix: String): (Vector[vpr.LocalVarDecl], vpr.Exp, vpr.Exp, vpr.Exp) = {
+      val formalArgs = initialStateDecls map {v => vpr.LocalVarDecl(s"${v.name}_$postfix", v.typ)()}
+      val vars = formalArgs map (_.localVar)
+
+      val renaming = initialStateVars.zip(vars).toMap
+
+      val condition = translate(action.condition).replace(renaming)
+      val from = translate(action.from).replace(renaming)
+      val to = translate(action.to).replace(renaming)
+
+      val guardArgs = action.guards
+
+      (formalArgs, condition, from, to)
+    }
+
+    val (aDecls, aCond, aFrom, aTo) = actionApplication("a")
+    val (bDecls, bCond, bFrom, bTo) = actionApplication("b")
+    val (cDecls, cCond, cFrom, cTo) = actionApplication("c")
+
+    val body = {
+
+      val assumptions =
+        viper.silicon.utils.ast.BigAnd(Vector(
+          aCond, bCond, vpr.EqCmp(aTo, bFrom)(), vpr.EqCmp(aFrom, cFrom)(), vpr.EqCmp(bTo, cTo)()
+        ))
+
+      val transitivityAssertion = vpr.Assert(cCond)()
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy transitivityAssertion =>
+          ActionNotTransitiveError(action)
+      }
+
+      vpr.Seqn(
+        Vector(
+          vpr.Inhale(assumptions)(),
+          transitivityAssertion
+        ),
+        guardDecls ++ aDecls ++ bDecls ++ cDecls
+      )()
+    }
+
+    vpr.Method(
+      name = methodName,
+      formalArgs = Vector.empty,
+      formalReturns = Vector.empty,
+      pres = Vector.empty,
+      posts = Vector.empty,
+      body = Some(body)
+    )()
+  }
+
+  def extractBoundRegionInstance(id: PIdnUse): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
+
+    semanticAnalyser.entity(id) match {
+      case entity: LogicalVariableEntity =>
+
+        val binder = entity.declaration
+
+        semanticAnalyser.boundBy(binder) match {
+          case predicateExp@PPredicateExp(_, innerArgs) if innerArgs.last eq binder =>
+            Some(getRegionPredicateDetails(predicateExp))
+
+          case PInterferenceClause(`binder`, _, regId) =>
+            Some(getRegionPredicateDetails(semanticAnalyser.usedWithRegionPredicate(regId)))
+
+          case _ => None
+        }
+
+      case _ => None
+    }
+
+  }
+
+  def extractRegionInstance(pred: PPredicateExp): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
+
+    if (extractableRegionInstance(pred)) {
+      Some(getRegionPredicateDetails(pred))
+    } else {
+      None
+    }
+  }
+
+  def extractableRegionInstance(pred: PPredicateExp): Boolean =
+    semanticAnalyser.entity(pred.predicate).isInstanceOf[RegionEntity]
+
 
   def getRegionPredicateDetails(predicateExp: PPredicateExp)
                                : (PRegion, Vector[PExpression], Vector[PExpression]) = {
@@ -328,11 +640,18 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def getAndTranslateRegionPredicateDetails(predicateExp: PPredicateExp)
-                                           : (PRegion, Vector[vpr.Exp], Vector[vpr.EqCmp]) = {
+                                           : (PRegion, Vector[vpr.Exp], Vector[vpr.Exp], Vector[vpr.Exp]) = {
 
     val (region, inArgs, outArgsAndState) = getRegionPredicateDetails(predicateExp)
 
     val vprInArgs = inArgs map translate
+
+    val vprInArgConstraints = {
+      Vector(
+        /* levels are always positive */
+        vpr.GeCmp(vprInArgs(1), vpr.IntLit(0)())()
+      )
+    }
 
     val vprOutConstraints =
       outArgsAndState.zipWithIndex.flatMap {
@@ -354,7 +673,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           Some(constraint)
       }
 
-    (region, vprInArgs, vprOutConstraints)
+    (region, vprInArgs, vprInArgConstraints, vprOutConstraints)
   }
 
   def regionState(predicateExp: PPredicateExp): vpr.FuncApp = {
@@ -371,433 +690,24 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vprRegionArguments)()
   }
 
-  def translate(guardExp: PGuardExp): vpr.PredicateAccessPredicate = {
-    semanticAnalyser.entity(guardExp.guard) match {
-      case GuardEntity(guardDecl, region) =>
-        val guardPredicateAccess =
-          translateUseOf(guardExp, guardDecl, region)
+  trait RegionManager[M <: vpr.Declaration, A <: vpr.Exp] extends BasicManagerWithSimpleApplication[PRegion, M, A] {
 
-        errorBacktranslator.addReasonTransformer {
-          case e: vprrea.InsufficientPermission if e causedBy guardPredicateAccess.loc =>
-            InsufficientGuardPermissionError(guardExp)
-        }
+    this: BaseSelector[PRegion] =>
 
-        guardPredicateAccess
-    }
-  }
+    override def idToName(id: PRegion): String = id.id.name
 
-  def translateUseOf(guardExp: PGuardExp, guardDecl: PGuardDecl, region: PRegion)
-                    : vpr.PredicateAccessPredicate = {
+    override def getID(objName: String): PRegion =
+      tree.root.regions.find(_.id.name == objName).get
 
-    val vprGuardPredicate = guardPredicate(guardDecl, region)
+    def collectMember(obj: PRegion): Vector[vpr.Declaration] =
+      collectMember(TranslatorUtils.ManagedObject(obj, obj.formalInArgs map translate))
 
-    val vprGuardArguments = guardExp.arguments map translate
-
-    val guardPredicateAccess =
-      vpr.PredicateAccessPredicate(
-        vpr.PredicateAccess(
-          vprGuardArguments,
-          vprGuardPredicate.name
-        )().withSource(guardExp),
-        vpr.FullPerm()()
-      )().withSource(guardExp)
-
-    guardPredicateAccess
-  }
-
-  private def generateCodeForStabilizingAllRegionInstances(
-                region: PRegion,
-                actionFilter: PAction => Boolean,
-                preRegionState: Vector[vpr.Exp] => vpr.Exp,
-                postRegionState: Vector[vpr.Exp] => vpr.Exp,
-                prePermissions: vpr.Exp => vpr.Exp,
-                stateTrigger: Vector[vpr.Exp] => vpr.Trigger)
-               : vpr.Seqn = {
-
-    /* Arguments as for region R */
-    val vprRegionArgumentDecls: Vector[vpr.LocalVarDecl] = region.formalInArgs.map(translate)
-
-    /* Arguments as for region R */
-    val vprRegionArguments: Vector[vpr.LocalVar] = vprRegionArgumentDecls map (_.localVar)
-
-    /* First element a_0 of region arguments as */
-    val vprRegionId = vprRegionArguments.head
-
-    /* R(as) */
-    val vprRegionPredicateInstance =
-      vpr.PredicateAccess(
-        args = vprRegionArguments,
-        predicateName = region.id.name
-      )()
-
-
-    /* π */
-    val vprPreHavocRegionPermissions =
-      prePermissions(vpr.CurrentPerm(vprRegionPredicateInstance)())
-
-    /* Note: It is assumed that havocking a region R(as) should not affect the permission
-     * amount. Hence, π is used everywhere, i.e. there is not dedicated post-havoc permission
-     * amount in use.
-     */
-
-    /* acc(R(as), π) */
-    val vprRegionAssertion =
-      vpr.PredicateAccessPredicate(
-        loc = vprRegionPredicateInstance,
-        perm = vprPreHavocRegionPermissions
-      )()
-
-    /* R_state(as) */
-    val vprPreRegionState = preRegionState(vprRegionArguments)
-
-    /* R_state'(as) */
-    val vprPostRegionState = postRegionState(vprRegionArguments)
-
-    /* ∀ as · acc(R(as), π) */
-    val vprQuantifiedRegionAssertion =
-      vpr.Forall(
-        variables = vprRegionArgumentDecls,
-        triggers = Vector.empty, /* TODO: Picking triggers not yet possible due to Viper limitations */
-        exp = vprRegionAssertion
-      )()
-
-    /* exhale ∀ as · acc(R(as), π) */
-    val vprExhaleAllRegionInstances = vpr.Exhale(vprQuantifiedRegionAssertion)()
-
-    /* inhale ∀ as · acc(R(as), π) */
-    val vprInhaleAllRegionInstances = vpr.Inhale(vprQuantifiedRegionAssertion)()
-
-
-    /* none < π */
-    val vprIsRegionAccessible =
-      vpr.PermLtCmp(
-        vpr.NoPerm()(),
-        vprPreHavocRegionPermissions
-      )()
-
-    /* R_state'(as) == R_state(as) */
-    val vprStateUnchanged =
-      vpr.EqCmp(
-        vprPostRegionState,
-        vprPreRegionState
-      )()
-
-    val vprStateConstraintsFromActions: vpr.Exp =
-      viper.silicon.utils.ast.BigOr(
-        region.actions map (action =>
-          stateConstraintsFromAction(
-            action,
-            vprPreRegionState,
-            vprPostRegionState,
-            assembleCheckIfEnvironmentMayHoldActionGuard(region, vprRegionId, action))))
-
-    val vprStateConstraintsFromAtomicityContext = {
-      /* none < perm(a_0 |=> <D>) */
-      val vprDiamondHeld =
-        vpr.PermLtCmp(
-          vpr.NoPerm()(),
-          vpr.CurrentPerm(diamondAccess(vprRegionId).loc)()
-        )()
-
-      /* X(as) */
-      val vprAtomicityContext =
-        vpr.DomainFuncApp(
-          atomicityContextFunction(region),
-          vprRegionArguments,
-          Map.empty[vpr.TypeVar, vpr.Type]
-        )()
-
-      vpr.Implies(
-        vprDiamondHeld,
-        vpr.AnySetContains(
-          vprPostRegionState,
-          vprAtomicityContext
-        )()
-      )()
+    if (this.isInstanceOf[TranslatorUtils.FrontSelector[PRegion]]) {
+      collectingFunctions ::= (collectMember(_: PRegion)) // TODO: not sure if this is safe
     }
 
-
-    val vprConstrainRegionState =
-      vpr.And(
-        vprStateConstraintsFromAtomicityContext,
-        vpr.Or(
-          vprStateUnchanged,
-          vprStateConstraintsFromActions
-        )()
-      )()
-
-    val vprConstrainStateIfRegionAccessible =
-      vpr.Implies(
-        vprIsRegionAccessible,
-        vprConstrainRegionState
-      )()
-
-    val vprConstrainStateOfAllAccessibleRegions =
-      vpr.Inhale(
-        vpr.Forall(
-          variables = vprRegionArgumentDecls,
-          triggers = Vector(stateTrigger(vprRegionArguments)),
-          exp = vprConstrainStateIfRegionAccessible
-        )()
-      )()
-
-    var vprPreliminaryResult =
-      vpr.Seqn(
-        Vector(
-          vprExhaleAllRegionInstances,
-          vprInhaleAllRegionInstances,
-          vprConstrainStateOfAllAccessibleRegions
-        ),
-        Vector.empty
-      )()
-
-
-    /* Skolemize action existentials */
-
-    def substitute(v: vpr.LocalVar, qvars: Seq[vpr.LocalVar]): vpr.Exp = {
-      vpr.FuncApp(
-        collectedActionSkolemizationFunctions(region.id.name, v.name),
-        qvars
-      )()
-    }
-
-    val vprSkolemizedResult =
-      ViperAstUtils.skolemize(vprPreliminaryResult, substitute)
-
-    /* TODO: Ideally, method substitute records which skolemization functions are in use, and then
-     *       only their footprints are havocked. See also issue #47.
-     */
-
-    /* acc(R_sk_fp()) */
-    val vprActionSkolemizationFunctionFootprintAccess =
-      actionSkolemizationFunctionFootprintAccess(region.id.name)
-
-    /* exhale acc(R_sk_fp()) */
-    val vprExhaleActionSkolemizationFunctionFootprint =
-      vpr.Exhale(vprActionSkolemizationFunctionFootprintAccess)()
-
-    /* inhale acc(R_sk_fp()) */
-    val vprInhaleActionSkolemizationFunctionFootprint =
-      vpr.Inhale(vprActionSkolemizationFunctionFootprintAccess)()
-
-    vprPreliminaryResult =
-      vprSkolemizedResult.copy(
-        ss =
-          Vector(vprExhaleActionSkolemizationFunctionFootprint,
-                 vprInhaleActionSkolemizationFunctionFootprint) ++
-          vprSkolemizedResult.ss
-      )(vprSkolemizedResult.pos, vprSkolemizedResult.info, vprSkolemizedResult.errT)
-
-
-    ViperAstUtils.sanitizeBoundVariableNames(vprPreliminaryResult)
-  }
-
-  def stabilizeAllRegionInstances(region: PRegion, preHavocLabel: vpr.Label): vpr.Seqn = {
-    val actionFilter: PAction => Boolean =
-      _ => true
-
-    val postRegionState =
-      (args: Vector[vpr.Exp]) => vpr.FuncApp(regionStateFunction(region), args)()
-
-    val preRegionState =
-      (args: Vector[vpr.Exp]) => vpr.LabelledOld(postRegionState(args), preHavocLabel.name)()
-
-    val prePermissions =
-      (exp: vpr.Exp) => vpr.LabelledOld(exp, preHavocLabel.name)()
-
-    val stateTrigger =
-      (args: Vector[vpr.Exp]) =>
-        vpr.Trigger(Vector(regionStateTriggerFunctionApplication(postRegionState(args))))()
-
-    generateCodeForStabilizingAllRegionInstances(
-      region,
-      actionFilter,
-      preRegionState,
-      postRegionState,
-      prePermissions,
-      stateTrigger)
-  }
-
-  def stabilizeRegionInstance(region: PRegion,
-                              vprRegionInArgs: Vector[vpr.Exp],
-                              vprPreHavocLabel: vpr.Label)
-                             : vpr.Seqn = {
-
-    val vprHavocAllInstances = stabilizeAllRegionInstances(region, vprPreHavocLabel)
-
-    /* R(as) */
-    val vprRegionPredicateInstance =
-      vpr.PredicateAccess(
-        args = vprRegionInArgs,
-        predicateName = region.id.name
-      )()
-
-    /* Note: The instantiation code is rather brittle since it makes the following assumptions:
-     *   1. Each forall quantifies over region instance arguments 'as' of the given region and thus
-     *      is to be instantiated
-     *   2. Each perm(R(as)) is to be replaced with write
-     */
-
-    /* Note: Certain expressions in the resulting Viper AST could be simplified to potentially
-     * improve performance, e.g. none < old[pre_havoc](write).
-     */
-
-    vprHavocAllInstances.transform(
-      {
-        case forall: vpr.Forall =>
-          val substitutions: Map[vpr.LocalVar, vpr.Exp] =
-            forall.variables.map(_.localVar).zip(vprRegionInArgs)(breakOut)
-
-          forall.exp.replace(substitutions)
-
-        case _: vpr.ForPerm =>
-          sys.error("Unexpectedly found forperm quantifier while instantiating region havocking code")
-
-        case vpr.CurrentPerm(`vprRegionPredicateInstance`) =>
-          vpr.FullPerm()(): vpr.Node // TODO: Type ascription suppresses false IntelliJ type error
-      },
-      Traverse.TopDown)
-  }
-
-  def regionStateChangeAllowedByGuard(region: PRegion,
-                                      vprRegionInArgs: Vector[vpr.Exp],
-                                      guardName: String,
-                                      vprGuard: vpr.PredicateAccessPredicate,
-                                      vprFrom: vpr.Exp,
-                                      vprTo: vpr.Exp)
-                                     : vpr.Assert = {
-
-    /* from == to */
-    val vprUnchanged = vpr.EqCmp(vprFrom, vprTo)()
-
-    val relevantActions =
-      region.actions.filter(_.guardId.name == guardName)
-
-    val vprActionConstraints: Vector[vpr.Exp] =
-      relevantActions.map(action => {
-        val vprExistentialConstraint =
-          stateConstraintsFromAction(
-            action,
-            vprFrom,
-            vprTo,
-            vpr.TrueLit()())
-
-        val binderInstantiations: Map[String, vpr.Exp] =
-          action.binders.map(binder =>
-            if (AstUtils.isBoundVariable(action.from, binder)) {
-              binder.id.name -> vprFrom
-            } else if (AstUtils.isBoundVariable(action.to, binder)) {
-              binder.id.name -> vprTo
-            } else if (action.guardArguments.exists(arg => AstUtils.isBoundVariable(arg, binder))) {
-              /* The bound variable is a direct argument of the action guard G, i.e. the action
-               * guard is of the shape G(..., k, ...).
-               */
-
-              val argumentIndex = /* Index of k in G(..., k, ...) */
-                action.guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
-
-              val vprArgument = /* Guard predicate is G(r, ..., k, ...) */
-                vprGuard.loc.args(1 + argumentIndex)
-
-              binder.id.name -> vprArgument
-            } else {
-              sys.error(
-                s"The action at ${action.lineColumnPosition} does not belong to the class of "+
-                    "currently supported actions. See issue #51 for further details.")
-            }
-          )(breakOut)
-
-        val substitutes: Map[vpr.LocalVar, vpr.Exp] =
-          vprExistentialConstraint.variables.map(v =>
-            v.localVar -> binderInstantiations(v.name)
-          )(breakOut)
-
-        vprExistentialConstraint.exp.replace(substitutes)
-      })
-
-    val vprConstraint = viper.silicon.utils.ast.BigOr(vprUnchanged +: vprActionConstraints)
-
-    vpr.Assert(
-      /* The AST simplifier is invoked because the substitution of the bound action variables
-       * will result in several trivially-true subexpressions of the shape
-       * state(r, x) == state(r, x).
-       */
-      viper.silver.ast.utility.Simplifier.simplify(vprConstraint)
-    )()
-  }
-
-  private def stateConstraintsFromAction(action: PAction,
-                                         vprFrom: vpr.Exp,
-                                         vprTo: vpr.Exp,
-                                         vprGuardCheck: vpr.Exp)
-                                        : vpr.Exists = {
-
-    /* Let action be defined as follows:
-     *   ?xs | c(xs) | G(g(xs)): e(xs) ~> e'(xs)
-     */
-
-    /* e(xs) == from */
-    val vprFromWasPreHavocState =
-      vpr.EqCmp(
-        translate(action.from),
-        vprFrom
-      )()
-
-    /* e'(xs) == to */
-    val vprToIsNewState =
-      vpr.EqCmp(
-        translate(action.to),
-        vprTo
-      )()
-
-    /* c(xs) */
-    val vprCondition = translate(action.condition)
-
-    /*  e(xs) == from ∧ e'(xs) == to ∧ c(x) ∧ guard_check */
-    val vprExistentialBody =
-      viper.silicon.utils.ast.BigAnd(
-        Vector(
-          vprFromWasPreHavocState,
-          vprToIsNewState,
-          vprCondition,
-          vprGuardCheck))
-
-    /* ∃ xs · body(xs) */
-    vpr.Exists(
-      action.binders map localVariableDeclaration,
-      vprExistentialBody
-    )()
-  }
-
-  private def assembleCheckIfEnvironmentMayHoldActionGuard(region: PRegion,
-                                                           vprRegionId: vpr.Exp,
-                                                           action: PAction)
-                                                          : vpr.Exp = {
-
-    semanticAnalyser.entity(action.guardId) match {
-      case GuardEntity(guardDecl, `region`) =>
-        guardDecl.modifier match {
-          case _: PDuplicableGuard =>
-            vpr.TrueLit()()
-
-          case _: PUniqueGuard =>
-            val vprGuardArguments = vprRegionId +: (action.guardArguments map translate)
-
-            vpr.EqCmp(
-              vpr.CurrentPerm(
-                vpr.PredicateAccess(
-                  vprGuardArguments,
-                  guardPredicate(guardDecl, region).name
-                )()
-              )(),
-              vpr.NoPerm()()
-            )()
-        }
-
-      case _ =>
-        sys.error(
-          s"Unexpectedly failed to find a declaration for the guard denoted by " +
-              s"${action.guardId} (${action.guardId.position})")
+    if (this.isInstanceOf[TranslatorUtils.FootprintManager[PRegion]]) {
+      initializingFunctions ::= (this.asInstanceOf[TranslatorUtils.FootprintManager[PRegion]].initialize(_: PRegion))
     }
   }
 }

@@ -8,54 +8,54 @@ struct cell {
 
 predicate resource(int v)
 
-region Buffer(id r, cell buf)
+region Buffer(id r, int lvl, cell buf)
   guards { duplicable Z; }
   interpretation { buf.value |-> ?v && (v != 0 ==> resource(v)) }
   state { v }
   actions { Z: ?n ~> ?m; }
 
-procedure send(id r, cell buf, int x)
-  requires Buffer(r, buf) && resource(x) && x != 0;
+procedure send(id r, int lvl, cell buf, int x)
+  requires Buffer(r, lvl, buf) && resource(x) && x != 0;
   requires Z@r;
   ensures  true;
 {
   bool b;
 
   use_atomic
-    using Buffer(r, buf) with Z@r;
+    using Buffer(r, lvl, buf) with Z@r;
   {
     b := CAS(buf, 0, x);
   }
 
   if (!b) {
-    send(r, buf, x);
+    send(r, lvl, buf, x);
   }
 }
 
-procedure recv(id r, cell buf) returns (int ret)
-  requires Buffer(r, buf);
+procedure recv(id r, int lvl, cell buf) returns (int ret)
+  requires Buffer(r, lvl, buf);
   requires Z@r;
   ensures  resource(ret);
 {
   bool b;
 
   open_region
-    using Buffer(r, buf);
+    using Buffer(r, lvl, buf);
   {
     ret := buf.value;
   }
 
   if (ret == 0) {
-    ret := recv(r, buf);
+    ret := recv(r, lvl, buf);
   } else {
     use_atomic
-      using Buffer(r, buf) with Z@r;
+      using Buffer(r, lvl, buf) with Z@r;
     {
       b := CAS(buf, ret, 0);
     }
 
     if (!b) {
-      ret := recv(r, buf);
+      ret := recv(r, lvl, buf);
     }
   }
 }

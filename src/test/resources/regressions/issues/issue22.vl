@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Counter(id c, memcell x)
+region Counter(id c, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
     x.f |-> ?n
@@ -12,12 +12,12 @@ region Counter(id c, memcell x)
     ?n, ?m | G: n ~> m;
   }
 
-abstract_atomic procedure test03(id c, memcell x)
+abstract_atomic procedure test03(id c, int lvl, memcell x)
   interference ?n in Int on c;
-  requires Counter(c, x, n);
+  requires Counter(c, lvl, x, n);
 {
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     //:: ExpectedOutput(typechecker_error)
     x.f := n;
@@ -25,13 +25,13 @@ abstract_atomic procedure test03(id c, memcell x)
   }
 }
 
-abstract_atomic procedure test02(id c, memcell x) returns (int ret)
+abstract_atomic procedure test02(id c, int lvl, memcell x) returns (int ret)
   interference ?n in Int on c;
-  requires Counter(c, x, n);
+  requires Counter(c, lvl, x, n);
 {
   //:: ExpectedOutput(typechecker_error)
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     ret := x.f;
   }
@@ -39,14 +39,14 @@ abstract_atomic procedure test02(id c, memcell x) returns (int ret)
   skip;
 }
 
-abstract_atomic procedure test10(id c, memcell x) returns (int ret)
+abstract_atomic procedure test10(id c, int lvl, memcell x) returns (int ret)
   interference ?n in Int on c;
-  requires Counter(c, x, n);
+  requires Counter(c, lvl, x, n);
 {
   assert true;
 
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     ret := x.f;
   }
@@ -54,13 +54,13 @@ abstract_atomic procedure test10(id c, memcell x) returns (int ret)
   assert true;
 }
 
-procedure test01(id c, memcell x)
-  requires Counter(c, x) && G@c;
+procedure test01(id c, int lvl, memcell x)
+  requires Counter(c, lvl, x) && G@c;
 {
   int n;
 
   use_atomic
-    using Counter(c, x) with G@c;
+    using Counter(c, lvl, x) with G@c;
   {
     //:: ExpectedOutput(typechecker_error)
     n := x.f;
@@ -68,13 +68,13 @@ procedure test01(id c, memcell x)
   }
 }
 
-procedure test05(id c, memcell x)
-  requires Counter(c, x) && G@c;
+procedure test05(id c, int lvl, memcell x)
+  requires Counter(c, lvl, x) && G@c;
 {
   int n;
 
   update_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     //:: ExpectedOutput(typechecker_error)
     n := x.f;
@@ -82,13 +82,13 @@ procedure test05(id c, memcell x)
   }
 }
 
-procedure test06(id c, memcell x)
-  requires Counter(c, x);
+procedure test06(id c, int lvl, memcell x)
+  requires Counter(c, lvl, x);
 {
   int n;
 
   open_region
-    using Counter(c, x);
+    using Counter(c, lvl, x);
   {
     n := x.f;
     assert x.f |-> ?v;

@@ -2,51 +2,57 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/ForkJoinClient.t
 //
 
+region LevelDummy(id r, int lvl)
+  guards { duplicable LevelDummyG; }
+  interpretation { true }
+  state { 0 }
+  actions {  }
+
 struct memcell {
   int f;
 }
 
 
 
-region Join(id r, memcell x)
+region Join(id r, int lvl, memcell x)
   guards { unique SET; }
   interpretation { x.f |-> ?v && (v == 0 || v == 1) }
   state { v }
   actions { SET: 0 ~> 1; }
 
 // TODO: make_join()
-procedure make_join(id r) returns (memcell ret)
+procedure make_join(id r, int lvl) returns (memcell ret)
   requires true;
-  ensures Join(r, ret, 0) && SET@r;
+  ensures Join(r, lvl, ret, 0) && SET@r;
 //{
 //    v := alloc(1);
 //    [v] := 0;
 //    return v;
 //}
 
-procedure set_to_one(id r, memcell x)
-  requires Join(r, x, 0) && SET@r;
-  ensures  Join(r, x, 1) && SET@r;
+procedure set_to_one(id r, int lvl, memcell x)
+  requires Join(r, lvl, x, 0) && SET@r;
+  ensures  Join(r, lvl, x, 1) && SET@r;
 {
   use_atomic
-    using Join(r, x) with SET@r;
+    using Join(r, lvl, x) with SET@r;
   {
     x.f := 1;
   }
 }
 
-procedure wait(id r, memcell x)
-  requires Join(r, x, ?z);
-  ensures  Join(r, x, 1);
+procedure wait(id r, int lvl, memcell x)
+  requires Join(r, lvl, x, ?z);
+  ensures  Join(r, lvl, x, 1);
 {
   int v;
 
   do
-    invariant Join(r, x, ?w);
+    invariant Join(r, lvl, x, ?w);
     invariant (v == 0 ? w >= 0 : w == 1);
   {
     open_region
-      using Join(r, x);
+      using Join(r, lvl, x);
     {
       v := x.f;
     }
@@ -55,40 +61,44 @@ procedure wait(id r, memcell x)
 
 
 
-region Flag(id r, id s, memcell x, memcell y)
+region Flag(id r, int alvl, id s, int lvl, memcell x, memcell y)
   guards {unique SFLAG; }
   interpretation {
-    x.f |-> ?v && (v == 0 ==> Join(s, y, 0) && SET@s)
+    x.f |-> ?v && (v == 0 ==> Join(s, lvl, y, 0) && lvl < alvl && SET@s)
   }
   state { v }
   actions { SFLAG: 0 ~> 1; }
 
-procedure thread2(id r, id s, memcell x, memcell y)
-  requires Flag(r, s, x, y, 0) && SFLAG@r;
+procedure thread2(id r, int alvl, id s, int lvl, memcell x, memcell y)
+  requires Flag(r, alvl, s, lvl, x, y, 0) && SFLAG@r;
 {
   use_atomic
-    using Flag(r, s, x, y) with SFLAG@r;
+    using Flag(r, alvl, s, lvl, x, y) with SFLAG@r;
   {
-    assert Join(s, y, 0);
+    assert Join(s, lvl, y, 0);
     x.f := 1;
   }
 
-  set_to_one(s, y);
+  set_to_one(s, lvl, y);
 }
 
-procedure main()
-  requires true;
-  // ensures Flag(r,x,y,1) &*& ret = 1;
+procedure main(id dummy, int methodLvl)
+  requires LevelDummy(dummy, methodLvl);
+  // ensures Flag(r, alvl,x, lvl,y,1) &*& ret = 1;
 {
   id r;
   id s;
+  int lvl;
+  int alvl;
   memcell x;
   memcell y;
   int v;
 
+  assume methodLvl > alvl > lvl;
+
   // y := make_join();
-  // Yields Join(s, y, 0) && SET@s
-    y := make_join(s);
+  // Yields Join(s, lvl, y, 0) && SET@s
+    y := make_join(s, lvl);
 
   // x := alloc(1);
     inhale x.f |-> ?q;
@@ -99,38 +109,38 @@ procedure main()
   (
     // TODO: Encode region predicates with wildcard access to account for duplicability?
     //       Problem: unfolding doesn't automatically give write access to nested locations.
-      inhale Join(s, y);
+      inhale Join(s, lvl, y);
 
     // TODO: View shift in TaDA to get Flag(...) and SFLAG?
-      fold Flag(r, s, x, y, 0);
+      fold Flag(r, alvl, s, lvl, x, y, 0);
       inhale SFLAG@r;
     // TODO: Account for duplicability
-      inhale Flag(r, s, x, y);
+      inhale Flag(r, alvl, s, lvl, x, y);
 
     // fork thread2(x, y);
-      exhale Flag(r, s, x, y, 0) && SFLAG@r;
+      exhale Flag(r, alvl, s, lvl, x, y, 0) && SFLAG@r;
 
-    // TODO: Since SFLAG@r has been exhaled, the remaining region assertion Flag(r, s, x, y, 0)
+    // TODO: Since SFLAG@r has been exhaled, the remaining region assertion Flag(r, alvl, s, lvl, x, y, 0)
     //       is no longer stable. The remaining region predicate must therefore be havocked.
     //       See Voila issue #33.
   );
 
   // Any non-ghost statement here will make sure that the Flag region is havocked.
   //   skip;
-  //   assert Flag(r, s, x, y, 0); // Will fail
+  //   assert Flag(r, alvl, s, lvl, x, y, 0); // Will fail
   //   assert false;
 
   // wait(y);
   // Note: Flag will be havocked before calling 'wait' since the call is a non-ghost statement
-    wait(s, y);
+    wait(s, lvl, y);
 
   // v := [x];
     open_region
-      using Flag(r, s, x, y);
+      using Flag(r, alvl, s, lvl, x, y);
     {
       v := x.f;
     }
 
   // return v;
-    assert Flag(r, s, x, y, 1) && v == 1;
+    assert Flag(r, alvl, s, lvl, x, y, 1) && v == 1;
 }

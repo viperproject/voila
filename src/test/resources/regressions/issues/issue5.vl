@@ -1,16 +1,16 @@
 //:: IgnoreFile(/voila/issue/5/)
 
-region R(id a, bool v)
+region R(id a, int lvl, bool v)
   guards { unique X; unique Y; }
   interpretation { true }
   state { true }
   actions { }
 
-procedure test03(id a, id b)
-  requires R(a, true) && X@b;
+procedure test03(id a, int lvl, id b)
+  requires R(a, lvl, true) && X@b;
 {
   use_atomic
-    using R(a, true) with X@b;
+    using R(a, lvl, true) with X@b;
   {
     skip;
   }

@@ -1,0 +1,211 @@
+
+
+struct memcell {
+  int next;
+  int owner;
+}
+
+// && TICKET|Set( ?k | k >= m )|@r
+
+region TLock(id r, int lvl, memcell x; int m)
+  guards { unique TICKET(int n); }
+  interpretation {
+  	x.owner |-> ?n && x.next |-> ?m && TICKET|Set( ?k | k >= m )|@r
+  }
+  state { n }
+  actions {
+  	?n, ?m | n < m | TICKET|Set( ?k | n <= k && k < m )|: n ~> m;
+  }
+
+
+
+
+procedure test(id r, int lvl, memcell x)
+  requires TLock(r, lvl, x, ?m, ?n) && TICKET|Set( ?k | k >= m )|@r;
+{
+  assert (m+3) in Set( ?f | f >= m );
+  exhale TICKET(m+3)@r;
+}
+
+
+procedure test2(id r, int lvl, memcell x) returns (int ret1, int ret2)
+  requires TLock(r, lvl, x, ?m, ?n) && TICKET(n)@r;
+  ensures TICKET(n)@r && ret1 == ret2;
+{
+  open_region
+    using TLock(r, lvl, x);
+  {
+  	ret1 := x.owner;
+  }
+
+  open_region
+    using TLock(r, lvl, x);
+  {
+  	ret2 := x.owner;
+  }
+}
+
+procedure test3(id r, int lvl, memcell x) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n) && TICKET(n)@r;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures TICKET(n)@r;
+  ensures nf >= n + 1;
+{
+  int z;
+  int q;
+
+  open_region
+    using TLock(r, lvl, x);
+  {
+  	z := x.owner;
+  }
+
+  use_atomic
+  	using TLock(r,lvl,x) with TICKET(n)@r;
+  {
+  	x.owner := z + 1;
+  }
+}
+
+procedure test4(id r, int lvl, memcell x) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n) && TICKET(n)@r && TICKET(n+1)@r;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures TICKET(n)@r && TICKET(n+1)@r;
+  ensures nf == n + 1;
+{
+  int z;
+
+  open_region
+    using TLock(r, lvl, x);
+  {
+  	z := x.owner;
+  }
+
+  use_atomic
+  	using TLock(r, lvl, x) with TICKET(n)@r;
+  {
+  	x.owner := z + 1;
+  }
+
+}
+
+
+
+procedure test5(id r, int lvl, memcell x, int d) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n);
+  requires n < d;
+  requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures nf >= d;
+{
+  use_atomic
+   	using TLock(r, lvl, x) with TICKET|Set(?k3 | n <= k3 && k3 < d)|@r;
+   {
+   	x.owner := d;
+   }
+}
+
+
+
+procedure test6(id r, int lvl, memcell x, int d) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n);
+  requires n < d;
+  requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures nf == d-1;
+{
+  int z;
+  int q;
+
+  use_atomic
+   	using TLock(r, lvl, x) with TICKET|Set(?k3 | n <= k3 && k3 < d)|@r;
+   {
+   	x.owner := d-1;
+   }
+
+  assert TICKET(d-1)@r; // is required
+}
+
+procedure test7(id r, int lvl, memcell x, int d) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n);
+  requires n < d;
+  requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  ensures TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures nf >= d-1;
+{
+  int z;
+  int q;
+
+  use_atomic
+   	using TLock(r,lvl, x) with TICKET|Set(?k3 | n <= k3 && k3 < d-1)|@r;
+   {
+   	x.owner := d-1;
+   }
+}
+
+
+procedure test8(id r, int lvl, memcell x, int d) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n) && TICKET(d)@r;
+  requires n < d;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures TICKET(d)@r;
+  ensures nf <= d;
+{
+	skip;
+}
+
+procedure test9(id r, int lvl, memcell x, int d) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n);
+  requires n < d;
+  requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures nf >= d;
+{
+  int z;
+  assume n < z < d;
+
+  use_atomic
+    using TLock(r, lvl, x)
+    with TICKET|Set(?q1 | n <= q1 && q1 < z)|@r
+      && TICKET|Set(?q2 | z <= q2 && q2 < d-1)|@r
+      && TICKET(d-1)@r;
+   {
+    x.owner := d;
+   }
+}
+
+procedure test10(id r, int lvl, memcell x, int d) returns (int ret)
+  requires TLock(r, lvl, x, ?m, ?n);
+  requires n+1 < d;
+  requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  ensures TLock(r, lvl, x, ?mf, ?nf);
+  ensures nf == n+1;
+{
+  int z;
+  int q;
+  assume q == n;
+
+  open_region
+    using TLock(r, lvl, x);
+  {
+    z := x.owner;
+  }
+
+  use_atomic
+    using TLock(r, lvl, x) with TICKET|Set(?k3 | q <= k3 && k3 < d )|@r;
+  {
+    assert (z+1) in Set(?k4 | q <= k4 && k4 < d ); // is required
+    x.owner := z + 1;
+  }
+
+  assert TICKET(n+1)@r;
+}
+
+
+
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
+  requires x.next |-> ?v1;
+  ensures  v1 == now
+              ? ret && x.next |-> thn
+              : !ret && x.next |-> v1;

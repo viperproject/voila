@@ -8,7 +8,7 @@ struct node {
 }
 
 
-region Qu(id s, hd h)
+region Qu(id s, int lvl, hd h)
   guards {
     duplicable G;
   }
@@ -20,9 +20,9 @@ region Qu(id s, hd h)
 
 
 
-procedure makeQueue(id r) returns (hd ret)
-  requires true;
-  ensures Qu(r, ret);
+procedure makeQueue(id r, int lvl) returns (hd ret)
+  requires lvl >= 0;
+  ensures Qu(r, lvl, ret);
 {
   node y;
   hd x;
@@ -37,5 +37,5 @@ procedure makeQueue(id r) returns (hd ret)
   x.ptr := y;
 
   ret := x;
-  fold Qu(r, ret);
+  fold Qu(r, lvl, ret);
 }

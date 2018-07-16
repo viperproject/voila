@@ -13,7 +13,7 @@ procedure test() {
   n.nxt := null;
 }
 
-region R(id a, llnode x)
+region R(id a, int lvl, llnode x)
   guards { unique G; }
   interpretation { x.nxt |-> ?n }
   state { n }

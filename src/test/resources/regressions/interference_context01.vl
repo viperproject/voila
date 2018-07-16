@@ -1,0 +1,83 @@
+
+struct memcell {
+  int f;
+}
+
+region Client(id r, int alvl, id c, int lvl, memcell x)
+  guards { duplicable Z; }
+  interpretation { Counter(c,lvl,x,?n) && alvl > lvl && INCREMENT@c }
+  state { n }
+  actions {
+  	?a, ?b | a < b | Z: a ~> b;
+  }
+
+region Counter(id r, int lvl, memcell x)
+  guards { unique INCREMENT; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions {
+    ?n, ?m | n < m | INCREMENT: n ~> m;
+  }
+
+
+abstract_atomic procedure incr(id c, int lvl, memcell x)
+  interference ?n in Int on c;
+  requires Counter(c, lvl, x, n) && INCREMENT@c;
+  ensures Counter(c, lvl, x, n + 1) && INCREMENT@c;
+
+abstract_atomic procedure wkincr(id c, int lvl, memcell x)
+  interference ?n in Set[int](n) on c;
+  requires Counter(c, lvl, x, n) && INCREMENT@c;
+  ensures Counter(c, lvl, x, n + 1) && INCREMENT@c;
+
+
+procedure incr_call(id r, int lvl, memcell x) returns (int ret)
+  requires Counter(r,  lvl,x, ?v0) && INCREMENT@r;
+  ensures  Counter(r,  lvl,x, ?v1) && INCREMENT@r;
+{
+  incr(r,lvl,x);
+}
+
+procedure no_error(id r, int alvl, id c, int lvl, memcell x)
+  requires Client(r,alvl,c,lvl,x,?n) && Z@r;
+ {
+ 	use_atomic using Client(r,alvl,c,lvl,x)  with Z@r;
+ 	{
+ 	  incr(c,lvl,x);
+ 	}
+ }
+
+procedure error(id r, int alvl, id c, int lvl, memcell x)
+  requires Client(r,alvl,c,lvl,x,?n) && Z@r;
+ {
+ 	use_atomic using Client(r,alvl,c,lvl,x)  with Z@r;
+ 	{
+ 	  //:: ExpectedOutput(precondition_error:interference_error)
+ 	  wkincr(c,lvl,x);
+ 	}
+ }
+
+abstract_atomic procedure errorCallee(id r, int alvl, id c, int lvl, memcell x)
+  interference ?n in Set[int](n) on r;
+  requires Client(r,alvl,c,lvl,x,n);
+  ensures Client(r,alvl,c,lvl,x,n);
+
+abstract_atomic procedure error2(id r, int alvl, id c, int lvl, memcell x)
+  interference ?n in Set[int](n) on r;
+  requires Client(r,alvl,c,lvl,x,n) && Z@r;
+{
+  make_atomic using Client(r,alvl,c,lvl,x)  with Z@r;
+  {
+    update_region using Client(r,alvl,c,lvl,x);
+    {
+      //:: ExpectedOutput(precondition_error:interference_error)
+      errorCallee(r,alvl,c,lvl,x);
+    }
+  }
+}
+
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;

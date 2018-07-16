@@ -1,6 +1,6 @@
 //:: IgnoreFile(/voila/issue/49/)
 
-region Cell(id s, memcell x)
+region Cell(id s, int lvl, memcell x)
   guards { unique G; }
   interpretation { x.f |-> ?v }
   state { v }
@@ -8,15 +8,15 @@ region Cell(id s, memcell x)
     G: ?n ~> ?m;
   }
 
-abstract_atomic procedure spinCAS(id s,
+abstract_atomic procedure spinCAS(id s, int lvl,
                                   memcell x,
                                   set<int> from)
                                   // lambda<bool(int)> cas_if,
                                   // lambda<int(int)> cas_to)
   interference ?m in from on s;
-  requires Cell(s, x, m) && G@s;
+  requires Cell(s, lvl, x, m) && G@s;
   // requires forall v: Int :: v != cas_to(v) // Voila issue #8
-  ensures  Cell(s, x, ?n) && G@s;
+  ensures  Cell(s, lvl, x, ?n) && G@s;
   // ensures  cas_if(m);
   // ensures  n == cas_to(m);
 {
@@ -27,16 +27,16 @@ abstract_atomic procedure spinCAS(id s,
   int cas_to;
 
   make_atomic
-    using Cell(s, x) with G@s;
+    using Cell(s, lvl, x) with G@s;
   {
     do
-      invariant Cell(s, x);
+      invariant Cell(s, lvl, x);
       invariant !b ==> s |=> <D>;
 //      invariant  b ==> s |=> (v, cas_to(v)) && (v in from) && cas_if(v);
       invariant  b ==> s |=> (v, cas_to) && (v in from) && cas_if;
     {
       open_region
-        using Cell(s, x);
+        using Cell(s, lvl, x);
       {
         v := x.f;
       }
@@ -48,7 +48,7 @@ abstract_atomic procedure spinCAS(id s,
 //      if (cas_if(v)) {
       if (cas_if) {
         update_region
-          using Cell(s, x);
+          using Cell(s, lvl, x);
         {
 //          b := CAS(x, v, cas_to(v));
           b := CAS(x, v, cas_to);
@@ -64,7 +64,7 @@ abstract_atomic procedure spinCAS(id s,
 // From Caper/BoundedReadWriteLock
 //
 
-region RWLock(id r, id s, memcell x)
+region RWLock(id r, int alvl, id s, int lvl, memcell x)
   guards {
     duplicable WLOCK;
     unique WUNLOCK;
@@ -74,7 +74,7 @@ region RWLock(id r, id s, memcell x)
     unique RUNLOCK2;
   }
   interpretation {
-    Cell(s, x, ?v) && G@s &&
+    Cell(s, lvl, x, ?v) && lvl < alvl && G@s &&
     (v ==  0 ? RUNLOCK1@r && RUNLOCK2@r && WUNLOCK@r :
      v ==  1 ? WUNLOCK@r && RUNLOCK2@r :
      v ==  2 ? WUNLOCK@r && RUNLOCK1@r :
@@ -96,125 +96,125 @@ region RWLock(id r, id s, memcell x)
     WUNLOCK : -1 ~>  0;
   }
 
-procedure readerAcquire1(id r, id s, memcell x)
-  requires RWLock(r, s, x, ?m) && RLOCK1@r && m != 1 && m != 3;
-  ensures  RWLock(r, s, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
+procedure readerAcquire1(id r, int alvl, id s, int lvl, memcell x)
+  requires RWLock(r, alvl, s, lvl, x, ?m) && RLOCK1@r && m != 1 && m != 3;
+  ensures  RWLock(r, alvl, s, lvl, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
 {
-  use_region_interpretation RWLock(r, s, x);
+  use_region_interpretation RWLock(r, alvl, s, lvl, x);
     // Learn that m != 1 && m != 3 implies that m in {-1, 0, 2}
 
   use_atomic
-    using RWLock(r, s, x) with RLOCK1@r;
+    using RWLock(r, alvl, s, lvl, x) with RLOCK1@r;
   {
-    assert Cell(s, x, ?v); // Bind region value before call
-    spinCAS(s, x, Set(-1, 0, 2));
+    assert Cell(s, lvl, x, ?v); // Bind region value before call
+    spinCAS(s, lvl, x, Set(-1, 0, 2));
       // cas_if := \v -> v >= 0
       // cas_to := \v -> v + 1
-    assert Cell(s, x, ?w); // Bind region value after call
+    assert Cell(s, lvl, x, ?w); // Bind region value after call
     assume v >= 0; // From cas_if
     assume w == v + 1; // From cas_to
   }
 }
 
-procedure readerRelease1(id r, id s, memcell x)
-  requires RWLock(r, s, x, ?n) && n > 0 && RUNLOCK1@r;
-  ensures  RWLock(r, s, x);
+procedure readerRelease1(id r, int alvl, id s, int lvl, memcell x)
+  requires RWLock(r, alvl, s, lvl, x, ?n) && n > 0 && RUNLOCK1@r;
+  ensures  RWLock(r, alvl, s, lvl, x);
 {
-  use_region_interpretation RWLock(r, s, x);
+  use_region_interpretation RWLock(r, alvl, s, lvl, x);
     // Learn that n > 0 && RUNLOCK1@r implies that n in {1, 3}
 
   use_atomic
-    using RWLock(r, s, x) with RUNLOCK1@r;
+    using RWLock(r, alvl, s, lvl, x) with RUNLOCK1@r;
   {
-    assert Cell(s, x, ?v); // Bind region value before call
-    spinCAS(s, x, Set(1, 3));
+    assert Cell(s, lvl, x, ?v); // Bind region value before call
+    spinCAS(s, lvl, x, Set(1, 3));
       // cas_if := \v -> true
       // cas_to := \v -> v - 1
-    assert Cell(s, x, ?w); // Bind region value after call
+    assert Cell(s, lvl, x, ?w); // Bind region value after call
     assume true; // From cas_if
     assume w == v - 1; // From cas_to
   }
 }
 
-procedure readerAcquire2(id r, id s, memcell x)
-  requires RWLock(r, s, x, ?m) && RLOCK2@r && m != 2 && m != 3;
-  ensures  RWLock(r, s, x, ?n) && RLOCK2@r && RUNLOCK2@r && n > 0;
+procedure readerAcquire2(id r, int alvl, id s, int lvl, memcell x)
+  requires RWLock(r, alvl, s, lvl, x, ?m) && RLOCK2@r && m != 2 && m != 3;
+  ensures  RWLock(r, alvl, s, lvl, x, ?n) && RLOCK2@r && RUNLOCK2@r && n > 0;
 {
-  use_region_interpretation RWLock(r, s, x);
+  use_region_interpretation RWLock(r, alvl, s, lvl, x);
     // Learn that m != 1 && m != 3 implies that m in {-1, 0, 1}
 
   use_atomic
-    using RWLock(r, s, x) with RLOCK2@r;
+    using RWLock(r, alvl, s, lvl, x) with RLOCK2@r;
   {
-    assert Cell(s, x, ?v); // Bind region value before call
-    spinCAS(s, x, Set(-1, 0, 1));
+    assert Cell(s, lvl, x, ?v); // Bind region value before call
+    spinCAS(s, lvl, x, Set(-1, 0, 1));
       // cas_if := \v -> v >= 0
       // cas_to := \v -> v + 2
-    assert Cell(s, x, ?w); // Bind region value after call
+    assert Cell(s, lvl, x, ?w); // Bind region value after call
     assume v >= 0; // From cas_if
     assume w == v + 2; // From cas_to
   }
 }
 
-procedure readerRelease2(id r, id s, memcell x)
-  requires RWLock(r, s, x, ?n) && n > 0 && RUNLOCK2@r;
-  ensures  RWLock(r, s, x);
+procedure readerRelease2(id r, int alvl, id s, int lvl, memcell x)
+  requires RWLock(r, alvl, s, lvl, x, ?n) && n > 0 && RUNLOCK2@r;
+  ensures  RWLock(r, alvl, s, lvl, x);
 {
-  use_region_interpretation RWLock(r, s, x);
+  use_region_interpretation RWLock(r, alvl, s, lvl, x);
     // Learn that n > 0 && RUNLOCK2@r implies that n in {2, 3}
 
   use_atomic
-    using RWLock(r, s, x) with RUNLOCK2@r;
+    using RWLock(r, alvl, s, lvl, x) with RUNLOCK2@r;
   {
-    assert Cell(s, x, ?v); // Bind region value before call
-    spinCAS(s, x, Set(2, 3));
+    assert Cell(s, lvl, x, ?v); // Bind region value before call
+    spinCAS(s, lvl, x, Set(2, 3));
       // cas_if := \v -> true
       // cas_to := \v -> v - 2
-    assert Cell(s, x, ?w); // Bind region value after call
+    assert Cell(s, lvl, x, ?w); // Bind region value after call
     assume true; // From cas_if
     assume w == v - 2; // From cas_to
   }
 }
 
-procedure writerAcquire(id r, id s, memcell x)
-  requires RWLock(r, s, x) && WLOCK@r;
-  ensures  RWLock(r, s, x, -1) && WLOCK@r && WUNLOCK@r;
+procedure writerAcquire(id r, int alvl, id s, int lvl, memcell x)
+  requires RWLock(r, alvl, s, lvl, x) && WLOCK@r;
+  ensures  RWLock(r, alvl, s, lvl, x, -1) && WLOCK@r && WUNLOCK@r;
 {
   bool b;
 
   use_atomic
-    using RWLock(r, s, x) with WLOCK@r;
+    using RWLock(r, alvl, s, lvl, x) with WLOCK@r;
   {
-    assert Cell(s, x, ?v); // Bind region value before call
-    spinCAS(s, x, Int);
+    assert Cell(s, lvl, x, ?v); // Bind region value before call
+    spinCAS(s, lvl, x, Int);
       // cas_if := \v -> v == 0
       // cas_to := \v -> -1
-    assert Cell(s, x, ?w); // Bind region value after call
+    assert Cell(s, lvl, x, ?w); // Bind region value after call
     assume v == 0; // From cas_if
     assume w == -1; // From cas_to
   }
 }
 
-abstract_atomic procedure writerReleaseAA(id s, memcell x)
+abstract_atomic procedure writerReleaseAA(id s, int lvl, memcell x)
   interference ?m in Set(-1) on s;
-  requires Cell(s, x, m) && G@s;
-  ensures  Cell(s, x, 0) && G@s;
+  requires Cell(s, lvl, x, m) && G@s;
+  ensures  Cell(s, lvl, x, 0) && G@s;
 {
   use_atomic
-    using Cell(s, x) with G@s;
+    using Cell(s, lvl, x) with G@s;
   {
     x.f := 0;
   }
 }
 
-procedure writerRelease(id r, id s, memcell x)
-  requires RWLock(r, s, x, -1) && WUNLOCK@r;
-  ensures  RWLock(r, s, x);
+procedure writerRelease(id r, int alvl, id s, int lvl, memcell x)
+  requires RWLock(r, alvl, s, lvl, x, -1) && WUNLOCK@r;
+  ensures  RWLock(r, alvl, s, lvl, x);
 {
   use_atomic
-    using RWLock(r, s, x) with WUNLOCK@r;
+    using RWLock(r, alvl, s, lvl, x) with WUNLOCK@r;
   {
-    writerReleaseAA(s, x);
+    writerReleaseAA(s, lvl, x);
   }
 }
 
@@ -224,13 +224,13 @@ procedure writerRelease(id r, id s, memcell x)
 
 predicate Inv() /* Invariant of CAP lock (left abstract) */
 
-region CAPLock(id r, id s, memcell x)
+region CAPLock(id r, int alvl, id s, int lvl, memcell x)
   guards {
     duplicable Z;
     unique K;
   }
   interpretation {
-       Cell(s, x, ?v) && G@s
+       Cell(s, lvl, x, ?v) && lvl < alvl && G@s
     && (v == 0 ==> K@r && Inv())
     && (v == 1 ==> true)
   }
@@ -240,47 +240,47 @@ region CAPLock(id r, id s, memcell x)
     K: 1 ~> 0;
   }
 
-procedure lock(id r, id s, memcell x)
-  requires CAPLock(r, s, x, ?m) && (m in Set(0, 1)) && Z@r;
-  ensures  CAPLock(r, s, x, ?n) && n == 1 && K@r && Z@r;
+procedure lock(id r, int alvl, id s, int lvl, memcell x)
+  requires CAPLock(r, alvl, s, lvl, x, ?m) && (m in Set(0, 1)) && Z@r;
+  ensures  CAPLock(r, alvl, s, lvl, x, ?n) && n == 1 && K@r && Z@r;
 {
   use_atomic
-    using CAPLock(r, s, x) with Z@r;
+    using CAPLock(r, alvl, s, lvl, x) with Z@r;
   {
-    assert Cell(s, x, ?v); // Bind region value before call
-    spinCAS(s, x, Int);
+    assert Cell(s, lvl, x, ?v); // Bind region value before call
+    spinCAS(s, lvl, x, Int);
       // cas_if := \v -> v == 0
       // cas_to := \v -> 1
-    assert Cell(s, x, ?w); // Bind region value after call
+    assert Cell(s, lvl, x, ?w); // Bind region value after call
     assume v == 0; // From cas_if
     assume w == 1; // From cas_to
   }
 }
 
-abstract_atomic procedure unlockAA(id s, memcell x)
+abstract_atomic procedure unlockAA(id s, int lvl, memcell x)
   interference ?v in Set(1) on s;
-  requires Cell(s, x, v) && G@s;
-  ensures Cell(s, x, 0) && G@s;
+  requires Cell(s, lvl, x, v) && G@s;
+  ensures Cell(s, lvl, x, 0) && G@s;
 {
   make_atomic
-    using Cell(s, x) with G@s;
+    using Cell(s, lvl, x) with G@s;
   {
     update_region
-      using Cell(s, x);
+      using Cell(s, lvl, x);
     {
       x.f := 0;
     }
   }
 }
 
-procedure unlock(id r, id s, memcell x)
-  requires CAPLock(r, s, x, ?m) && m == 1 && K@r;
+procedure unlock(id r, int alvl, id s, int lvl, memcell x)
+  requires CAPLock(r, alvl, s, lvl, x, ?m) && m == 1 && K@r;
   requires Inv();
 {
   use_atomic
-    using CAPLock(r, s, x) with K@r;
+    using CAPLock(r, alvl, s, lvl, x) with K@r;
   {
-    unlockAA(s, x);
+    unlockAA(s, lvl, x);
   }
 }
 

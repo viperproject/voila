@@ -6,7 +6,7 @@ struct memcell {
   int f;
 }
 
-region SLock(id r, memcell x)
+region SLock(id r, int lvl, memcell x)
   guards {
     duplicable LOCK;
     unique UNLOCK;
@@ -24,8 +24,8 @@ region SLock(id r, memcell x)
   }
 
 // TODO: Too many issues
-procedure makeLock(id r) returns (memcell ret)
-//  // ensures SLock(r, ret, 0) && LOCK@r; // TODO: See issue #23
+procedure makeLock(id r, int lvl) returns (memcell ret)
+//  // ensures SLock(r, lvl, ret, 0) && LOCK@r; // TODO: See issue #23
 {
 //  // ret := alloc(1); // See Voila issue #17
 //  memcell x;
@@ -35,30 +35,30 @@ procedure makeLock(id r) returns (memcell ret)
 //
 //  inhale UNLOCK@r; // See Voila issues #18 ...
 //  inhale LOCK@r;   // ... and #19
-//  fold SLock(r, x, 0);
+//  fold SLock(r, lvl, x, 0);
 //
 //  ret := x;
 }
 
-abstract_atomic procedure acquire(id r, memcell x)
+abstract_atomic procedure acquire(id r, int lvl, memcell x)
   interference ?v in Set(0, 1) on r;
-  requires SLock(r, x) && LOCK@r;
-  ensures  SLock(r, x, 1);
+  requires SLock(r, lvl, x) && LOCK@r;
+  ensures  SLock(r, lvl, x, 1);
   ensures  UNLOCK@r;
   ensures  LOCK@r;
 {
   bool b;
 
   make_atomic
-    using SLock(r, x) with LOCK@r;
+    using SLock(r, lvl, x) with LOCK@r;
   {
     do
-      invariant SLock(r, x);
+      invariant SLock(r, lvl, x);
       invariant !b ==> r |=> <D>; // TODO: Why isn't it necessary to specify LOCK@r here?
       invariant  b ==> r |=> (0, 1) && UNLOCK@r;
     {
       update_region
-        using SLock(r, x);
+        using SLock(r, lvl, x);
       {
         b := CAS(x, 0, 1);
       }
@@ -66,37 +66,37 @@ abstract_atomic procedure acquire(id r, memcell x)
   }
 }
 
-abstract_atomic procedure release1(id r, memcell x)
+abstract_atomic procedure release1(id r, int lvl, memcell x)
   interference ?s in Set(1) on r;
-  requires SLock(r, x, 1) && UNLOCK@r;
-  ensures  SLock(r, x, 0) && LOCK@r;
+  requires SLock(r, lvl, x, 1) && UNLOCK@r;
+  ensures  SLock(r, lvl, x, 0) && LOCK@r;
 {
   /* PROBLEM: Rule make-atomic temporarily consumes the used guard, which thus
-   *          isn't available in the body. There, folding SLock(r, x, 0) fails.
+   *          isn't available in the body. There, folding SLock(r, lvl, x, 0) fails.
    *
    *          This seems to be a limitation of/design decision made by TaDA.
    */
   make_atomic
-    using SLock(r, x) with UNLOCK@r;
+    using SLock(r, lvl, x) with UNLOCK@r;
   {
     //:: ExpectedOutput(update-region_error:guard_permission_error)
     update_region
-      using SLock(r, x);
+      using SLock(r, lvl, x);
     {
       x.f := 0;
     }
   }
 }
 
-abstract_atomic procedure release2(id r, memcell x)
+abstract_atomic procedure release2(id r, int lvl, memcell x)
   interference ?s in Set(1) on r;
-  requires SLock(r, x, 1) && UNLOCK@r;
-  ensures  SLock(r, x, 0);
+  requires SLock(r, lvl, x, 1) && UNLOCK@r;
+  ensures  SLock(r, lvl, x, 0);
   //:: UnexpectedOutput(postcondition_error:guard_permission_error, /voila/issue/19/)
   ensures  LOCK@r;
 {
   use_atomic
-    using SLock(r, x) with UNLOCK@r;
+    using SLock(r, lvl, x) with UNLOCK@r;
   {
     x.f := 0;
   }

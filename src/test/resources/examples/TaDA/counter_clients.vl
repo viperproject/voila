@@ -2,40 +2,40 @@ struct cell {
   int f;
 }
 
-region Counter(id c, cell x)
+region Counter(id c, int lvl, cell x)
   guards { unique G; }
   interpretation { x.f |-> ?n }
   state { n }
   actions { G: ?n ~> ?m; }
 
-abstract_atomic procedure read(id c, cell x) returns (int ret)
+abstract_atomic procedure read(id c, int lvl, cell x) returns (int ret)
   interference ?n in Int on c;
-  requires Counter(c, x, n) && G@c;
-  ensures Counter(c, x, n) && G@c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n) && G@c;
   ensures ret == n;
 
-abstract_atomic procedure incr(id c, cell x)
+abstract_atomic procedure incr(id c, int lvl, cell x)
   interference ?n in Int on c;
-  requires Counter(c, x, n) && G@c;
-  ensures Counter(c, x, n + 1) && G@c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n + 1) && G@c;
 
 
 /*
  * Corresponds to Fig. 7.2 from Pedro's thesis
  */
-procedure seq_client(id c, cell x, int n)
+procedure seq_client(id c, int lvl, cell x, int n)
   requires 0 < n;
-  requires Counter(c, x, 0) && G@c;
-  ensures  Counter(c, x, n) && G@c;
+  requires Counter(c, lvl, x, 0) && G@c;
+  ensures  Counter(c, lvl, x, n) && G@c;
 {
   int m;
   m := n;
 
   while (0 < m)
     invariant 0 <= m;
-    invariant Counter(c, x, n - m) && G@c;
+    invariant Counter(c, lvl, x, n - m) && G@c;
   {
-    incr(c, x);
+    incr(c, lvl, x);
     m := m - 1;
   }
 }
@@ -57,14 +57,14 @@ procedure seq_client(id c, cell x, int n)
  *      This aspect is missing from the current Voila encoding.
  */
 
-region CClient(id a, id c, cell x)
+region CClient(id a, int alvl, id c, int lvl, cell x)
   guards {
     /* TODO: Neither unique nor duplicable are an ideal choice for the two guards. See also issue #43. */
     duplicable INC(int k, frac p);
     duplicable TOTAL(int n);
   }
   interpretation {
-    Counter(c, x, ?n) && G@c && TOTAL(n)@a
+    Counter(c, lvl, x, ?n) && lvl < alvl && G@c && TOTAL(n)@a
   }
   state { n }
   actions {
@@ -107,18 +107,18 @@ region CClient(id a, id c, cell x)
 
 /* Macro single_client's contract for easy reuse when encoding fork/join via ex-/inhales */
 
-macro single_client_Pre(a, c, x, p)
-  CClient(a, c, x, ?v0) && INC( 0, p)@a && 0f < p && 0 <= v0;
+macro single_client_Pre(a, alvl, c, lvl, x, p)
+  CClient(a, alvl, c, lvl, x, ?v0) && INC( 0, p)@a && 0f < p && 0 <= v0;
 
-macro single_client_Post(a, c, x, p, n)
-  CClient(a, c, x,  _) && INC(n, p)@a && 0 <= n;
+macro single_client_Post(a, alvl, c, lvl, x, p, n)
+  CClient(a, alvl, c, lvl, x,  _) && INC(n, p)@a && 0 <= n;
 
 /*
  * The parallelly-composed code of Fig. 7.3
  */
-procedure single_client(id a, id c, cell x, frac p) returns (int n)
-  requires single_client_Pre(a, c, x, p);
-  ensures single_client_Post(a, c, x, p, n);
+procedure single_client(id a, int alvl, id c, int lvl, cell x, frac p) returns (int n)
+  requires single_client_Pre(a, alvl, c, lvl, x, p);
+  ensures single_client_Post(a, alvl, c, lvl, x, p, n);
 {
   int i;
 
@@ -130,15 +130,15 @@ procedure single_client(id a, id c, cell x, frac p) returns (int n)
 
   while (i < n)
     invariant 0 <= i && i <= n;
-    invariant CClient(a, c, x, ?vi) && i <= vi;
+    invariant CClient(a, alvl, c, lvl, x, ?vi) && i <= vi;
     invariant INC(i, p)@a;
   {
     use_atomic
-      using CClient(a, c, x) with INC(i, p)@a;
+      using CClient(a, alvl, c, lvl, x) with INC(i, p)@a;
     {
-      assert Counter(c, x, ?v);
-      incr(c, x);
-      assert Counter(c, x, v + 1); // [DEBUG]
+      assert Counter(c, lvl, x, ?v);
+      incr(c, lvl, x);
+      assert Counter(c, lvl, x, v + 1); // [DEBUG]
       assert TOTAL(v)@a && INC(i, p)@a; // [DEBUG]
       use TOTAL_INC_inc(a, v, i, p);
     }
@@ -152,44 +152,47 @@ procedure single_client(id a, id c, cell x, frac p) returns (int n)
  */
 procedure client() {
   id a, c;
+  int alvl, lvl;
   cell x;
   int k1;
   int k2;
 
+  assume alvl > lvl;
+
   // x := makeCounter();
-  inhale Counter(c, x, 0) && G@c;
+  inhale Counter(c, lvl, x, 0) && G@c;
   // Create a new CClient region
   inhale TOTAL(0)@a && INC(0, 1f)@a;
-  fold CClient(a, c, x, 0);
+  fold CClient(a, alvl, c, lvl, x, 0);
 
   // Duplicate region assertion
-  assert CClient(a, c, x);
-  inhale CClient(a, c, x);
+  assert CClient(a, alvl, c, lvl, x);
+  inhale CClient(a, alvl, c, lvl, x);
   // Split guard INC
   use INC_split(a, 0, 0, 1/2, 1/2);
 
-  // Fork two instances of single_client(a, c, x, 1/2)
-  exhale single_client_Pre(a, c, x, 1/2);
-  exhale single_client_Pre(a, c, x, 1/2);
+  // Fork two instances of single_client(a, alvl, c, lvl, x, 1/2)
+  exhale single_client_Pre(a, alvl, c, lvl, x, 1/2);
+  exhale single_client_Pre(a, alvl, c, lvl, x, 1/2);
 
   skip; // Account for possible interference between forking and joining
 
-  // Join the two forked instances of single_client(a, c, x)
+  // Join the two forked instances of single_client(a, alvl, c, lvl, x)
   havoc k1;
-  inhale single_client_Post(a, c, x, 1/2, k1);
+  inhale single_client_Post(a, alvl, c, lvl, x, 1/2, k1);
   havoc k2;
-  inhale single_client_Post(a, c, x, 1/2, k2);
+  inhale single_client_Post(a, alvl, c, lvl, x, 1/2, k2);
 
   // Join guard INC
   use INC_join(a, k1, k2, 1/2, 1/2);
   // Transform CClient assertion according to guard algebra (view shift?)
-  unfold CClient(a, c, x, _);
-  assert Counter(c, x, ?n);
+  unfold CClient(a, alvl, c, lvl, x, _);
+  assert Counter(c, lvl, x, ?n);
   use TOTAL_INC_equality(a, n, k1 + k2);
-  fold CClient(a, c, x, k1 + k2);
+  fold CClient(a, alvl, c, lvl, x, k1 + k2);
   // Dispose CClient region
-  unfold CClient(a, c, x, k1 + k2);
+  unfold CClient(a, alvl, c, lvl, x, k1 + k2);
 
   // Postcondition of Fig. 7.3
-  exhale Counter(c, x, k1 + k2);
+  exhale Counter(c, lvl, x, k1 + k2);
 }

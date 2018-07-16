@@ -1,13 +1,13 @@
-region Dummy(id a)
+region Dummy(id a, int lvl)
   guards { unique G; }
   interpretation { true }
   state { true }
   actions {}
 
-procedure test(id a)
-  requires true;
+procedure test(id a, int lvl)
+  requires lvl >= 0;
   ensures true;
 {
-  fold Dummy(a, true);
+  fold Dummy(a, lvl, true);
   inhale G@a;
 }

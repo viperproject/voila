@@ -2,7 +2,7 @@ struct memcell {
   int f;
 }
 
-region Lock(id a, memcell x)
+region Lock(id a, int lvl, memcell x)
   guards { unique G; }
   interpretation {
     x.f |-> ?v && v != 0
@@ -14,73 +14,73 @@ region Lock(id a, memcell x)
   }
 
 /*
-predicate U(id a, memcell x) {
-  Lock(a, x, 0) && G@a
+predicate U(id a, int lvl, memcell x) {
+  Lock(a, lvl, x, 0) && G@a
 }
 
-predicate L(id a, memcell x) {
-  Lock(a, x, 1) && G@a
+predicate L(id a, int lvl, memcell x) {
+  Lock(a, lvl, x, 1) && G@a
 }
 */
 
-abstract_atomic procedure unlock(id a, memcell x)
+abstract_atomic procedure unlock(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, x, s) && G@a; // L(a, x)
-  ensures Lock(a, x, 0) && G@a; // U(a, x)
+  requires Lock(a, lvl, x, s) && G@a; // L(a, lvl, x)
+  ensures Lock(a, lvl, x, 0) && G@a; // U(a, lvl, x)
 {
   int nonDetNeg;
 
-  // unfold L(a, x);
+  // unfold L(a, lvl, x);
 
   havoc nonDetNeg;
   inhale nonDetNeg < 0;
 
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     update_region
-      using Lock(a, x);
+      using Lock(a, lvl, x);
     {
       x.f := nonDetNeg;
     }
   }
 
-  // fold U(a, x);
+  // fold U(a, lvl, x);
 }
 
-abstract_atomic procedure lock(id a, memcell x)
+abstract_atomic procedure lock(id a, int lvl, memcell x)
   interference ?s in Set(0, 1) on a;
-  // requires s == 0 ? U(a, x) : L(a, x);
-  requires Lock(a, x, s) && G@a;
-  // ensures L(a, x) && s == 0;
-  ensures Lock(a, x, 1) && G@a && s == 0;
+  // requires s == 0 ? U(a, lvl, x) : L(a, lvl, x);
+  requires Lock(a, lvl, x, s) && G@a;
+  // ensures L(a, lvl, x) && s == 0;
+  ensures Lock(a, lvl, x, 1) && G@a && s == 0;
 {
   bool b;
   int nonDetPos;
 
-  // if (s == 0) { unfold U(a, x); }
-  // else { unfold L(a, x); }
+  // if (s == 0) { unfold U(a, lvl, x); }
+  // else { unfold L(a, lvl, x); }
 
   havoc nonDetPos;
   inhale 0 < nonDetPos;
 
   make_atomic
-    using Lock(a, x) with G@a;
+    using Lock(a, lvl, x) with G@a;
   {
     do
-      invariant Lock(a, x);
+      invariant Lock(a, lvl, x);
       invariant !b ==> a |=> <D>;
       invariant  b ==> a |=> (0, 1);
     {
       update_region
-        using Lock(a, x);
+        using Lock(a, lvl, x);
       {
         b := CASifNeg(x, nonDetPos);
       }
     } while (!b);
   }
 
-  // fold L(a, x);
+  // fold L(a, lvl, x);
 }
 
 primitive_atomic procedure CASifNeg(memcell x, int thn) returns (bool ret)

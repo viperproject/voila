@@ -1,35 +1,35 @@
-region Cell(id r, memcell x)
+region Cell(id r, int lvl, memcell x)
   guards { unique G; }
   interpretation { x.f |-> ?v }
   state { v }
   actions { G: ?n ~> ?m; }
 
-procedure test01(id r, memcell x)
-  requires Cell(r, x, 0) && G@r;
-  requires Cell(r, x, 0);
+procedure test01(id r, int lvl, memcell x)
+  requires Cell(r, lvl, x, 0) && G@r;
+  requires Cell(r, lvl, x, 0);
 {
-  set_to_one(r, x);
+  set_to_one(r, lvl, x);
   //:: ExpectedOutput(assert_error:assertion_error)
   assert false;
 }
 
-procedure test02(id r, memcell x)
-  requires Cell(r, x, 0) && G@r;
+procedure test02(id r, int lvl, memcell x)
+  requires Cell(r, lvl, x, 0) && G@r;
 {
-  inhale Cell(r, x, 0);
-  set_to_two(r, x);
+  inhale Cell(r, lvl, x, 0);
+  set_to_two(r, lvl, x);
   //:: ExpectedOutput(assert_error:assertion_error)
   assert false;
 }
 
-abstract_atomic procedure set_to_one(id r, memcell x)
+abstract_atomic procedure set_to_one(id r, int lvl, memcell x)
   interference ?v in Set[int](v) on r;
-  requires Cell(r, x, v) && G@r;
-  ensures  Cell(r, x, 1) && G@r;
+  requires Cell(r, lvl, x, v) && G@r;
+  ensures  Cell(r, lvl, x, 1) && G@r;
 
-procedure set_to_two(id r, memcell x)
-  requires Cell(r, x, _) && G@r;
-  ensures  Cell(r, x, 2) && G@r;
+procedure set_to_two(id r, int lvl, memcell x)
+  requires Cell(r, lvl, x, _) && G@r;
+  ensures  Cell(r, lvl, x, 2) && G@r;
 
 struct memcell {
   int f;

@@ -4,7 +4,7 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/BoundedCounter.t
 //
 
-region RWLock(id r, memcell x)
+region RWLock(id r, int lvl, memcell x)
   guards {
     duplicable WLOCK;
     unique WUNLOCK;
@@ -40,7 +40,7 @@ region RWLock(id r, memcell x)
 // TODO: encode makeLock()
 // function makeLock()
 //   requires true;
-//   ensures RWLock(r, ret, 0) &*& r@(RLOCK1 * RLOCK2 * WLOCK[1p]);
+//   ensures RWLock(r, lvl, ret, 0) &*& r@(RLOCK1 * RLOCK2 * WLOCK[1p]);
 // {
 //     v := alloc(1);
 //     [v] := 0;
@@ -48,9 +48,9 @@ region RWLock(id r, memcell x)
 // }
 
 
-procedure readerAcquire1(id r, memcell x)
-  requires RWLock(r, x, ?m) && RLOCK1@r && m != 1 && m != 3;
-  ensures  RWLock(r, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
+procedure readerAcquire1(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, ?m) && RLOCK1@r && m != 1 && m != 3;
+  ensures  RWLock(r, lvl, x, ?n) && RLOCK1@r && RUNLOCK1@r && n > 0;
 {
   int v;
   bool b;
@@ -58,11 +58,11 @@ procedure readerAcquire1(id r, memcell x)
   // RWLock state in {-1, 0, 2}
 
   do
-    invariant RWLock(r, x, ?mi) && RLOCK1@r;
+    invariant RWLock(r, lvl, x, ?mi) && RLOCK1@r;
     invariant !b ? mi != 1 && mi != 3 : mi > 0 && RUNLOCK1@r;
   {
     use_atomic
-      using RWLock(r, x) with RLOCK1@r;
+      using RWLock(r, lvl, x) with RLOCK1@r;
     {
       v := x.f;
       // RWLock state in {-1, 0, 2}
@@ -71,7 +71,7 @@ procedure readerAcquire1(id r, memcell x)
 
     if (v >= 0) {
       use_atomic
-        using RWLock(r, x) with RLOCK1@r;
+        using RWLock(r, lvl, x) with RLOCK1@r;
       {
         // Attempt physical state change 0/2 ~> 1/3
         b := CAS(x, v, v + 1);
@@ -81,32 +81,32 @@ procedure readerAcquire1(id r, memcell x)
     }
   } while (!b);
 
-  use_region_interpretation RWLock(r, x);
+  use_region_interpretation RWLock(r, lvl, x);
     // Learn that holding RUNLOCK1@r implies that RWLock's state is greater 0
 }
 
-procedure readerRelease1(id r, memcell x)
-  requires RWLock(r, x, ?n) && n > 0 && RUNLOCK1@r;
-  ensures  RWLock(r, x);
+procedure readerRelease1(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, ?n) && n > 0 && RUNLOCK1@r;
+  ensures  RWLock(r, lvl, x);
 {
   int v;
   bool b;
 
   do
-    invariant RWLock(r, x, ?ni);
+    invariant RWLock(r, lvl, x, ?ni);
     invariant !b ==> ni > 0 && RUNLOCK1@r;
   {
-    use_region_interpretation RWLock(r, x);
+    use_region_interpretation RWLock(r, lvl, x);
       // Learn that holding RUNLOCK1@r implies that RWLock's state is in {1, 3}
 
     open_region
-      using RWLock(r, x);
+      using RWLock(r, lvl, x);
     {
       v := x.f;
     }
 
     use_atomic
-      using RWLock(r, x) with RUNLOCK1@r;
+      using RWLock(r, lvl, x) with RUNLOCK1@r;
     {
       // Attempt physical state change 1/3 ~> 0/2
       b := CAS(x, v, v - 1);
@@ -114,9 +114,9 @@ procedure readerRelease1(id r, memcell x)
   } while (!b);
 }
 
-procedure readerAcquire2(id r, memcell x)
-  requires RWLock(r, x, ?m) && RLOCK2@r && m != 2 && m != 3;
-  ensures  RWLock(r, x, ?n) && RLOCK2@r && RUNLOCK2@r && n > 0;
+procedure readerAcquire2(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, ?m) && RLOCK2@r && m != 2 && m != 3;
+  ensures  RWLock(r, lvl, x, ?n) && RLOCK2@r && RUNLOCK2@r && n > 0;
 {
   int v;
   bool b;
@@ -124,11 +124,11 @@ procedure readerAcquire2(id r, memcell x)
   // RWLock state in {-1, 0, 1}
 
   do
-    invariant RWLock(r, x, ?mi) && RLOCK2@r;
+    invariant RWLock(r, lvl, x, ?mi) && RLOCK2@r;
     invariant !b ? mi != 2 && mi != 3 : mi > 0 && RUNLOCK2@r;
   {
     use_atomic
-      using RWLock(r, x) with RLOCK2@r;
+      using RWLock(r, lvl, x) with RLOCK2@r;
     {
       v := x.f;
       // RWLock state in {-1, 0, 1}
@@ -137,7 +137,7 @@ procedure readerAcquire2(id r, memcell x)
 
     if (v >= 0) {
       use_atomic
-        using RWLock(r, x) with RLOCK2@r;
+        using RWLock(r, lvl, x) with RLOCK2@r;
       {
         // Attempt physical state change 0/1 ~> 2/3
         // Not symmetric w.r.t. to readerAcquire1 (unlike in Caper)
@@ -148,32 +148,32 @@ procedure readerAcquire2(id r, memcell x)
     }
   } while (!b);
 
-  use_region_interpretation RWLock(r, x);
+  use_region_interpretation RWLock(r, lvl, x);
     // Learn that holding RUNLOCK2@r implies that RWLock's state is greater 0
 }
 
-procedure readerRelease2(id r, memcell x)
-  requires RWLock(r, x, ?n) && n > 0 && RUNLOCK2@r;
-  ensures  RWLock(r, x);
+procedure readerRelease2(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, ?n) && n > 0 && RUNLOCK2@r;
+  ensures  RWLock(r, lvl, x);
 {
   int v;
   bool b;
 
   do
-    invariant RWLock(r, x, ?ni);
+    invariant RWLock(r, lvl, x, ?ni);
     invariant !b ==> ni > 0 && RUNLOCK2@r;
   {
-    use_region_interpretation RWLock(r, x);
+    use_region_interpretation RWLock(r, lvl, x);
       // Learn that holding RUNLOCK2@r implies that RWLock's state is in {2, 3}
 
     open_region
-      using RWLock(r, x);
+      using RWLock(r, lvl, x);
     {
       v := x.f;
     }
 
     use_atomic
-      using RWLock(r, x) with RUNLOCK2@r;
+      using RWLock(r, lvl, x) with RUNLOCK2@r;
     {
       b := CAS(x, v, v - 2);
         // Attempt physical state change 2/3 ~> 0/1
@@ -182,30 +182,30 @@ procedure readerRelease2(id r, memcell x)
   } while (!b);
 }
 
-procedure writerAcquire(id r, memcell x)
-  requires RWLock(r, x) && WLOCK@r;
-  ensures  RWLock(r, x, -1) && WLOCK@r && WUNLOCK@r;
+procedure writerAcquire(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x) && WLOCK@r;
+  ensures  RWLock(r, lvl, x, -1) && WLOCK@r && WUNLOCK@r;
 {
   bool b;
 
   do
     invariant WLOCK@r;
-    invariant !b ? RWLock(r, x) : RWLock(r, x, -1) && WUNLOCK@r;
+    invariant !b ? RWLock(r, lvl, x) : RWLock(r, lvl, x, -1) && WUNLOCK@r;
   {
     use_atomic
-      using RWLock(r, x) with WLOCK@r;
+      using RWLock(r, lvl, x) with WLOCK@r;
     {
       b := CAS(x, 0, -1);
     }
   } while (!b);
 }
 
-procedure writerRelease(id r, memcell x)
-  requires RWLock(r, x, -1) && WUNLOCK@r;
-  ensures  RWLock(r, x);
+procedure writerRelease(id r, int lvl, memcell x)
+  requires RWLock(r, lvl, x, -1) && WUNLOCK@r;
+  ensures  RWLock(r, lvl, x);
 {
   use_atomic
-    using RWLock(r, x) with WUNLOCK@r;
+    using RWLock(r, lvl, x) with WUNLOCK@r;
   {
     x.f := 0;
   }
