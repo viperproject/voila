@@ -3,7 +3,7 @@
 toggleVisibility(proc) {
   static hidden := []
 
-  MsgBox, % hidden[proc]
+  ; MsgBox, % hidden[proc]
 
   if !hidden[proc] {
     WinHide %proc%
