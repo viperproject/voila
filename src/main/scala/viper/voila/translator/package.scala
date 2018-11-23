@@ -45,6 +45,7 @@ package object translator {
 
   case class SourceInfo(source: PAstNode) extends vpr.Info {
     def comment: Seq[String] = Vector.empty
+    lazy val isCached = false
   }
 
   implicit val prettyPrinter: PrettyPrinter = new DefaultPrettyPrinter
