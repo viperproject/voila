@@ -1,3 +1,5 @@
+//:: IgnoreFile(/voila/issue/76/)
+
 struct cell {
   int f;
 }

@@ -1,3 +1,5 @@
+//:: IgnoreFile(/voila/issue/74/)
+
 region FCounter(id r, int lvl, memcell x)
   guards { duplicable INCREMENT; }
   interpretation { x.f |-> ?v && 0 <= v <= 2 }

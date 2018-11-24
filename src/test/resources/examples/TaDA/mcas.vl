@@ -1,3 +1,5 @@
+//:: IgnoreFile(/voila/issue/75/)
+
 // TODO: It seems that the procedures are not forced to release the lock at Lock(a, l).
 //       Could that also happen in the paper proofs? I think so - maybe Pedro's thesis says sth. about that?
 //       Could we include the lock state in the abstract state of the MCAS region to prevent this?
