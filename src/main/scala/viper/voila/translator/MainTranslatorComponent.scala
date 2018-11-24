@@ -6,13 +6,13 @@
 
 package viper.voila.translator
 
-import scala.collection.breakOut
+import scala.collection.{breakOut, mutable}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{AbstractVerificationError, CalleeAtomicityContextError, CalleeLevelTooHighError, FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, MakeAtomicError, MethodPostconditionNotStableError, MethodPreconditionNotStableError, PreconditionError, RegionStateError, UnfoldError}
+import viper.voila.reporting._
 
 trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
@@ -37,9 +37,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   /*
    * Immutable state and utility methods
    */
-
-
-
 
   val diamondField: vpr.Field =
     vpr.Field("$diamond", vpr.Int)()
@@ -86,7 +83,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   private var freshVariableCounter = 0
 
   def declareFreshVariable(typ: vpr.Type, basename: String): vpr.LocalVarDecl = {
-    val decl = vpr.LocalVarDecl(s"$$${basename}_${freshVariableCounter}", typ)()
+    val decl = vpr.LocalVarDecl(s"$$${basename}_$freshVariableCounter", typ)()
 
     freshVariableCounter += 1
 
@@ -113,7 +110,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     vprTypes map (typ =>
       vpr.Method(
         name = havocMethodName(typ),
-        /* TODO: Name sanitisation must be done (more) systematically */
+        /* TODO: Name sanitation must be done (more) systematically */
         formalArgs = Vector.empty,
         formalReturns = Vector(vpr.LocalVarDecl("$r", typ)()),
         pres = Vector.empty,
@@ -199,19 +196,21 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translatePredicateBodyWith(predicateExp: PPredicateExp)
                                 (customTranslationScheme: PartialFunction[PExpression, vpr.Exp])
-  : Option[vpr.Exp] = {
+                                : Option[vpr.Exp] = {
 
     assert(extractablePredicateInstance(predicateExp))
 
     val (predicate, args) = getPredicateDetails(predicateExp)
 
-    val mapping: Map[String, PExpression] = predicate.formalArgs.zip(args).map{ case (f,a) =>
+    val mapping: Map[String, PExpression] = predicate.formalArgs.zip(args).map { case (f,a) =>
       f.id.name -> a
     }(breakOut)
 
     def combinedCustomTranslationScheme: PartialFunction[PExpression, vpr.Exp] = {
-      case exp@ PIdnExp(id) =>
-        val substitutedExp = if (mapping.contains(id.name)) mapping(id.name) else exp
+      case exp@PIdnExp(id) =>
+        val substitutedExp =
+          if (mapping.contains(id.name)) mapping(id.name)
+          else exp
         translateWith(substitutedExp)(customTranslationScheme)
       case exp: PExpression if customTranslationScheme.isDefinedAt(exp) =>
         customTranslationScheme(exp)
@@ -230,7 +229,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     analyseSetComprehensions(tree)
 
-    // TODO: tree.root appears to be a costly operation rather than a simple getter - investigate
+    /* TODO: tree.root appears to be a costly operation rather than a simple getter - investigate */
 
     _translatedProcedureStubs =
       tree.root.procedures.map(procedure =>
@@ -253,7 +252,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       ++ (tree.root.regions flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
-      ++ (tree.root.regions flatMap additionalRegionChecks) /* checks need to be done after region and procedure translation */
+      ++ (tree.root.regions flatMap additionalRegionChecks) /* Checks need to be done after region and procedure translation */
       ++ (tree.root.procedures flatMap additionalMethodChecks)
     )
 
@@ -308,6 +307,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case r: PRegion => translate(r)
       case p: PPredicate => translate(p)
       case p: PProcedure => translate(p)
+      case p: PMacro => sys.error(s"Unexpectedly found $p (${p.getClass.getSimpleName})")
     }
 
   def translate(struct: PStruct): Vector[vpr.Field] = {
@@ -426,10 +426,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def methodConditionStabilityCheck(procedure: PProcedure,
-                                         conditions: Vector[PExpression],
-                                         name: String,
-                                         error: AbstractVerificationError
-                                        ): vpr.Method = {
+                                    conditions: Vector[PExpression],
+                                    name: String,
+                                    error: AbstractVerificationError)
+                                   : vpr.Method = {
+
     assert(collectedVariableDeclarations.isEmpty)
     assert(AtomicityContextLevelManager.noRecordedRegions)
     assert(!procedure.atomicity.isInstanceOf[PPrimitiveAtomic])
@@ -471,9 +472,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             }).toMap
 
           val vprSaveInferenceSets: Vector[vpr.Stmt] =
-            regionInterferenceVariables.map { case (_, entry) => {
-
-
+            regionInterferenceVariables.map { case (_, entry) =>
               val translatedClauseSet = translate(entry.clause.set)
 
               vpr.Seqn(
@@ -492,16 +491,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   )()
                 ),
                 Vector.empty
-              )()}
+              )()
             }(breakOut)
 
           vpr.Seqn(vprSaveInferenceSets, Vector.empty)()
 
         case PNonAtomic() =>
-
           inferContextAllInstances("beginning of non atomic procedure")
 
-        case PPrimitiveAtomic() => ??? /* not required */
+        case other: PPrimitiveAtomic =>
+          sys.error(s"$other (${other.getClass.getSimpleName}) should never occur here")
       }
 
     val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
@@ -510,7 +509,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     // val inhaleCondition: vpr.Stmt = vpr.Inhale(condition)()
 
-    // TODO: could be optimized to only havocing regions that occur inside region interpretation
+    /* TODO: Could be optimized to only havocking regions that occur inside region interpretation */
     val stabilizationCode: vpr.Stmt = stabilizeAllInstances("check stability of method condition")
 
     val assertCondition: vpr.Stmt = vpr.Assert(viper.silicon.utils.ast.BigAnd(vprConditions))()
@@ -527,7 +526,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           tree.root.regions map (region =>
             actionSkolemizationFunctionFootprintAccess(region.id.name)))
       )()
-
 
     val bodyWithPreamble =
       vpr.Seqn(
@@ -610,14 +608,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprBody = {
       val vprSaveInferenceSets: Vector[vpr.Stmt] =
-        regionInterferenceVariables.map { case (_, entry) => {
-
-
+        regionInterferenceVariables.map { case (_, entry) =>
           val translatedClauseSet = translate(entry.clause.set)
 
           vpr.Seqn(
             Vector(
-              vpr.Inhale( // TODO add label
+              vpr.Inhale( /* TODO: Add label */
                 vpr.EqCmp(
                   entry.interferenceSet,
                   translatedClauseSet
@@ -631,7 +627,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               )()
             ),
             Vector.empty
-          )()}
+          )()
         }(breakOut)
 
       val vprMainBody =
@@ -678,7 +674,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(declaration: PVariableDeclaration): vpr.LocalVarDecl =
     translateAndRename(declaration, Predef.identity)
 
-  def translateAndRename(declaration: PVariableDeclaration, rename: String => String): vpr.LocalVarDecl = {
+  def translateAndRename(declaration: PVariableDeclaration, rename: String => String)
+                        : vpr.LocalVarDecl = {
+
     vpr.LocalVarDecl(rename(declaration.id.name), translate(declaration.typ))()
   }
 
@@ -772,19 +770,24 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "skip;", "")))
 
       case PIf(cond, thn, els) =>
-
         val previousLvlToken = LevelManager.getCurrentLevelToken
 
         val vprPureIfBody = translate(thn)
 
-        /* this assertion should never fail, because levels are always restored after an action that changes the level */
+        /* This assertion should never fail, because levels are always restored after an action
+         * that changes the level
+         */
         val ifLevelCheck = vpr.Assert(LevelManager.compareToOldLevel(previousLvlToken))()
 
         val vprThenBodies = els.toSeq map { s =>
           val assignOldLevelAtBeginning = LevelManager.assignOldLevel(previousLvlToken)
           val vprBody = translate(s)
-          /* this assertion should never fail, because levels are always restored after an action that changes the level */
+
+          /* This assertion should never fail, because levels are always restored after an action
+           * that changes the level
+           */
           val elseLevelCheck = vpr.Assert(LevelManager.compareToOldLevel(previousLvlToken))()
+
           vpr.Seqn(Vector(assignOldLevelAtBeginning, vprBody, elseLevelCheck), Vector.empty)()
         }
 
@@ -832,7 +835,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val vprPureBody = translate(body)
 
-        /* this assertion should never fail, because levels are always restored after an action that changes the level */
+        /* This assertion should never fail, because levels are always restored after an action
+         * that changes the level
+         */
         val levelCheck = vpr.Assert(LevelManager.compareToOldLevel(previousLvlToken))()
 
         val vprBody =
@@ -843,8 +848,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               Vector(inferContext, vprPureBody, levelCheck),
             Vector.empty
           )()
-
-
 
         var vprWhile =
           vpr.While(
@@ -917,14 +920,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
               val inferInterferenceContext = inferContextAllInstances("recompute interference context after unfold")
 
-              // TODO: generalize context inference after ghost statements
+              /* TODO: Generalize context inference after ghost statements */
               vpr.Seqn(
                 Vector(checkConstraints, inferInterferenceContext),
                 Vector.empty
               )()
           }
 
-        val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
+        val ebt = this.errorBacktranslator /* TODO: Should not be necessary!!!!! */
         optVprCheckConstraints.foreach(vprCheck =>
           errorBacktranslator.addErrorTransformer {
             case err: vprerr.AssertFailed if err causedBy vprCheck =>
@@ -1038,6 +1041,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               guardDecl.modifier match {
                 case PUniqueGuard() => Some(translateUseOf(guardExp, guardDecl, region))
                 case PDuplicableGuard() => None
+                case _: PDivisibleGuard => ???
             }}
         }
 
@@ -1051,11 +1055,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             )()
           }
 
-
-
         val vprFoldRegion = vpr.Fold(vprRegionPredicateAccess)()
 
-        // TODO: generalize interference context inference after ghost code
+        /* TODO: Generalize interference context inference after ghost code */
         val inferInterferenceContext = inferContextAllInstances("infer interference context after use-region interpretation")
 
         val result =
@@ -1101,9 +1103,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               vpr.Assert(vpr.TrueLit()())()
 
             case PAbstractAtomic() =>
-              // TODO: Inject code comments at various places
+              /* TODO: Inject code comments at various places */
 
-//              val vprPreHavocLabel = freshLabel("pre_havoc")
+              // val vprPreHavocLabel = freshLabel("pre_havoc")
 
               /* Code that havocks parent regions instead of the current region. See also issue #29. */
               // def generateParentRegionHavockingCode(childRegion: vpr.PredicateAccess): (vpr.Exp, vpr.Seqn) = {
@@ -1167,16 +1169,17 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     regionArguments map (translate(_).replace(vprFormalsToActuals))
 
                   val vprInterferenceSet = {
-                    translateWith(inter.set){
-                      case exp@ PIdnExp(id) => {
-
-                        evaluateInterferenceContext(id, exp)
-                      }
+                    translateWith(inter.set) {
+                      case exp@PIdnExp(id) => evaluateInterferenceContext(id, exp)
                     }.replace(vprFormalsToActuals)
                   }
 
-                  val varName = "$_m"
-                  val typ = vprInterferenceSet.typ match { case vpr.SetType(e) => e }
+                  val typ =
+                    vprInterferenceSet.typ match {
+                      case vpr.SetType(e) => e
+                      case other => sys.error(s"Unexpectedly found an interference set of type $other (${other.getClass.getSimpleName})")
+                    }
+
                   val decl = vpr.LocalVarDecl("$_m", typ)()
                   val variable = decl.localVar
 
@@ -1194,7 +1197,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                     vpr.Assert(
                       vpr.Forall(
                         variables = Vector(decl),
-                        triggers = Vector(vpr.Trigger(Vector(lhs))()), // TODO: investigate the requirements of a trigger in this position
+                        triggers = Vector(vpr.Trigger(Vector(lhs))()), /* TODO: investigate the requirements of a trigger in this position */
                         vpr.Implies(lhs, rhs)()
                       )()
                     )()
@@ -1205,7 +1208,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 //
 //                      PreconditionError(call, InsufficientRegionPermissionError(regionPredicate))
 
-                    case e @ vprerr.AssertFailed(node, reason, _)
+                    case e @ vprerr.AssertFailed(_, reason, _)
                          if (e causedBy vprCheckInterferenceContext) &&
                             (reason causedBy vprCheckInterferenceContext.exp) =>
 
@@ -1271,7 +1274,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val vprExhalePres = vpr.Exhale(vprPre)()
 
-          val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
+          val ebt = this.errorBacktranslator /* TODO: Should not be necessary!!!!! */
           errorBacktranslator.addErrorTransformer {
             case e: vprerr.ExhaleFailed if e causedBy vprExhalePres =>
               PreconditionError(call, ebt.translate(e.reason))
@@ -1283,7 +1286,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           val vprHavocTargets = vprReturns map havoc
 
           val vprInhalePosts = vpr.Inhale(vprPost)()
-
 
           vpr.Seqn(
             vprPreCallLabel +:
@@ -1317,9 +1319,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translateWith(expression: PExpression)
                    (customTranslationScheme: PartialFunction[PExpression, vpr.Exp])
-                    : vpr.Exp = {
+                   : vpr.Exp = {
 
-    def go(expression: PExpression) = translateWith(expression)(customTranslationScheme)
+    def go(expression: PExpression): vpr.Exp = translateWith(expression)(customTranslationScheme)
 
     type VprExpConstructor =
       (vpr.Exp, vpr.Exp) => (vpr.Position, vpr.Info, vpr.ErrorTrafo) => vpr.Exp
@@ -1413,7 +1415,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val name = s"$$$$subset_var"
         val typ = semanticAnalyser.typ(left) match {
           case PSetType(elementType) => translate(elementType)
-          case other => sys.error(s"expected set type for ${left}, but got ${other}")
+          case other => sys.error(s"expected set type for $left, but got $other")
         }
 
         val decl = vpr.LocalVarDecl(name, typ)()
@@ -1602,6 +1604,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       case PMapLookup(map, key) =>
         apply(map, preamble.maps.lookup, Vector(translate(map), translate(key)))
+
+      case _: PMapContains => ???
+      case _: PMapUpdate => ???
+      case _: PMapValues => ???
     }
   }
 
@@ -1714,18 +1720,17 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         preamble.maps.typeVarMap(translate(elementType1), translate(elementType2)))
 
     case PRefType(_) => vpr.Ref
+    case PNullType() => vpr.Ref
     case PRegionIdType() => vpr.Ref
 
     case unsupported@(_: PUnknownType) => sys.error(s"Cannot translate type '$unsupported'")
   }
 
   def frameRegions(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
-
-    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
-    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val preExhales: mutable.ListBuffer[vpr.Stmt] = mutable.ListBuffer.empty
+    val postInhales: mutable.ListBuffer[vpr.Stmt] = mutable.ListBuffer.empty
 
     tree.root.regions foreach { region =>
-
       val decls = region.formalInArgs map translate
       val vars = decls map (_.localVar)
 
@@ -1755,7 +1760,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           vprRegionAssertion
         )()
 
-      val vprSanitizedAllRegionAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionAssertions)
+      val vprSanitizedAllRegionAssertions =
+        ViperAstUtils.sanitizeBoundVariableNames(vprAllRegionAssertions)
 
       preExhales += vpr.Exhale(vprSanitizedAllRegionAssertions)()
       postInhales += vpr.Inhale(vprSanitizedAllRegionAssertions)()
@@ -1813,9 +1819,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def frameGuards(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
-
-    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
-    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val preExhales: mutable.ListBuffer[vpr.Stmt] = mutable.ListBuffer.empty
+    val postInhales: mutable.ListBuffer[vpr.Stmt] = mutable.ListBuffer.empty
 
     tree.root.regions foreach { region =>
       region.guards foreach { guard =>
@@ -1851,7 +1856,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             vprGuardAssertion
           )()
 
-        val vprSanitizedAllGuardAssertions = ViperAstUtils.sanitizeBoundVariableNames(vprAllGuardAssertions)
+        val vprSanitizedAllGuardAssertions =
+          ViperAstUtils.sanitizeBoundVariableNames(vprAllGuardAssertions)
 
         preExhales += vpr.Exhale(vprSanitizedAllGuardAssertions)()
         postInhales += vpr.Inhale(vprSanitizedAllGuardAssertions)()
@@ -1865,17 +1871,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def frameFields(preLabel: vpr.Label): (List[vpr.Stmt], List[vpr.Stmt]) = {
-
-    val preExhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
-    val postInhales: collection.mutable.ListBuffer[vpr.Stmt] = collection.mutable.ListBuffer.empty
+    val preExhales: mutable.ListBuffer[vpr.Stmt] = mutable.ListBuffer.empty
+    val postInhales: mutable.ListBuffer[vpr.Stmt] = mutable.ListBuffer.empty
 
     tree.root.structs foreach { struct =>
-
       val decl = vpr.LocalVarDecl("$$_r", vpr.Ref)()
       val variable = decl.localVar
 
       struct.fields foreach { field =>
-
         /* r.field */
         val fieldAccess =
           vpr.FieldAccess(
@@ -1912,8 +1915,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             vprPreHavocFieldPermissions
           )()
 
-
-
         /* r.field == old[preFrame](r.field) */
         val vprFieldValueStaysEqual =
           vpr.EqCmp(
@@ -1947,9 +1948,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def completeFrame: (vpr.Stmt, vpr.Stmt) = {
-
-    val framingFunctions: List[vpr.Label => (List[vpr.Stmt], List[vpr.Stmt])]
-    = List(frameFields, frameGuards, frameRegions)
+    val framingFunctions: List[vpr.Label => (List[vpr.Stmt], List[vpr.Stmt])] =
+      List(frameFields, frameGuards, frameRegions)
 
     val preFrame = freshLabel("preFrame")
 

@@ -6,19 +6,15 @@
 
 package viper.voila.translator
 
-
 import scala.collection.{breakOut, mutable}
 import viper.silver.{ast => vpr}
-import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
+import viper.silver.verifier.{reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{FoldError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, RegionStateError, UnfoldError}
-import viper.voila.translator.TranslatorUtils.QuantifierWrapper.WrapperExt
-import viper.voila.translator.TranslatorUtils.{QuantifierWrapper, Constraint}
+import viper.voila.reporting.InsufficientGuardPermissionError
 
 trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
-
-  var USE_GUARD_SETS: Boolean = true
+  val USE_GUARD_SETS: Boolean = true
 
   private val guardPredicateCache =
     mutable.Map.empty[(PGuardDecl, PRegion), vpr.Predicate]
@@ -50,7 +46,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def actionSkolemizationFunctionFootprintAccess(regionName: String)
-  : vpr.PredicateAccessPredicate = {
+                                                : vpr.PredicateAccessPredicate = {
 
     vpr.PredicateAccessPredicate(
       vpr.PredicateAccess(
@@ -121,7 +117,8 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def guardTriggerFunctionApplication(guardPredicateApplication: vpr.PredicateAccess)
-  : Option[vpr.DomainFuncApp] =
+                                     : Option[vpr.DomainFuncApp] = {
+
     guardTriggerFunction(guardPredicateApplication.predicateName) map {
       guardTriggerFunc =>
         vpr.DomainFuncApp(
@@ -130,9 +127,11 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           typVarMap = Map.empty
         )()
     }
+  }
 
   def guardTriggerFunctionApplication(guard: PGuardDecl, args: Vector[vpr.Exp], region: PRegion)
-  : Option[vpr.DomainFuncApp] =
+                                     : Option[vpr.DomainFuncApp] = {
+
     guardTriggerFunction(guard, region) map {
       guardTriggerFunc =>
         vpr.DomainFuncApp(
@@ -141,6 +140,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           typVarMap = Map.empty
         )()
     }
+  }
 
   def guardTriggerFunctionAxiom(guard: PGuardDecl, region: PRegion): Option[vpr.DomainAxiom] =
     guardTriggerFunction(guard, region) map { function =>
@@ -163,18 +163,15 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       )(domainName = regionStateTriggerFunctionsDomainName)
     }
 
-
-
-
   def guardPredicateName(guard: PGuardDecl, region: PRegion): String =
     s"${region.id.name}_${guard.id.name}"
 
   def extractGuardAndRegionNameFromGuardPredicateName(guardPredicateName: String)
-  : (String, String) = {
+                                                     : (String, String) = {
 
-    val splittedName = guardPredicateName.split("_")
+    val splitName = guardPredicateName.split("_")
 
-    (splittedName(0), splittedName(1))
+    (splitName(0), splitName(1))
   }
 
   def extractGuardDeclAndRegion(guardExp: PRegionedGuardExp): (PGuardDecl, PRegion) = {
@@ -198,7 +195,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
               body = None
             )()
 
-          case (_: PDivisibleGuard, perm +: args) =>
+          case (_: PDivisibleGuard, perm +: args) => /* TODO: Why isn't perm used?*/
             vpr.Predicate(
               name = guardPredicateName(guard, region),
               formalArgs = regionIdArgument +: args,
@@ -209,10 +206,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
     )
   }
 
-
-
   def translate(guardExp: PRegionedGuardExp): vpr.Exp = {
-
     val (guardDecl, region) = extractGuardDeclAndRegion(guardExp)
 
     val (guardPredicateAccess, guardPredicateAccessLoc) =
@@ -227,7 +221,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translateUseOf(guardExp: PRegionedGuardExp, guardDecl: PGuardDecl, region: PRegion)
-  : (vpr.Exp, vpr.PredicateAccess) = {
+                    : (vpr.Exp, vpr.PredicateAccess) = {
 
     val vprGuardPredicate = guardPredicate(guardDecl, region)
 
@@ -336,7 +330,6 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(pUseGuardUniqueness: PUseGuardUniqueness): vpr.Stmt = {
-
     val guardExp = pUseGuardUniqueness.guard
 
     val (guardDecl, region) = extractGuardDeclAndRegion(guardExp)
@@ -410,35 +403,42 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   sealed trait TranslatedPGuardArg
-  case class TranslatedPStandartGuardArg(arguments: Vector[vpr.Exp], preArgs: Option[Vector[PExpression]]) extends TranslatedPGuardArg
+
+  case class TranslatedPStandartGuardArg(arguments: Vector[vpr.Exp],
+                                         preArgs: Option[Vector[PExpression]])
+      extends TranslatedPGuardArg
+
   case class TranslatedPSetGuardArg(set: vpr.Exp) extends TranslatedPGuardArg
 
   def groupGuards[G <: PGuardExp](guards: Vector[G]): Map[String, TranslatedPGuardArg] = {
-
-    val (noArgGuards, argGuards) = guards.partition{g =>
+    val (noArgGuards, argGuards) = guards.partition { g =>
       val guardDecl = semanticAnalyser.entity(g.guard) match {
-        case GuardEntity(guardDecl, _) => guardDecl
+        case entity: GuardEntity => entity.declaration
       }
 
       guardDecl.formalArguments.isEmpty
     }
 
-    val (unionGuards, addGuards) = argGuards.partition{g =>
+    val (unionGuards, addGuards) = argGuards.partition { g =>
       val guardDecl = semanticAnalyser.entity(g.guard) match {
-        case GuardEntity(guardDecl, _) => guardDecl
+        case entity: GuardEntity => entity.declaration
       }
 
       !guardDecl.modifier.isInstanceOf[PDivisibleGuard]
     }
 
-    val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.map{ g =>
+    val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.map { g =>
       g.guard.name -> TranslatedPStandartGuardArg(Vector.empty, Some(Vector.empty))
     }(breakOut)
 
     val unionMap: Map[String, TranslatedPGuardArg] = {
+      val setArg =
+        new mutable.HashMap[String, mutable.Set[vpr.Exp]]
+            with mutable.MultiMap[String, vpr.Exp]
 
-      val setArg = new mutable.HashMap[String, mutable.Set[vpr.Exp]] with mutable.MultiMap[String, vpr.Exp]
-      val singleArg = new mutable.HashMap[String, mutable.Set[Vector[PExpression]]] with mutable.MultiMap[String, Vector[PExpression]]
+      val singleArg =
+        new mutable.HashMap[String, mutable.Set[Vector[PExpression]]]
+            with mutable.MultiMap[String, Vector[PExpression]]
 
       val occurringGuards = unionGuards.map(_.guard.name).distinct
 
@@ -459,7 +459,6 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       val uniqueSingleArg: mutable.Map[String, Vector[PExpression]] = mutable.Map.empty
 
       val combinedSingleArg: Map[String, vpr.Exp] = singleArg.map { case (name, argss) =>
-
         if (argss.size == 1) {
           uniqueSingleArg += name -> argss.head
         }
@@ -473,16 +472,15 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           case (false, true, false) => name -> TranslatedPSetGuardArg(combinedSingleArg(name))
           case (true, true, false) => name -> TranslatedPStandartGuardArg(uniqueSingleArg(name) map translate, Some(uniqueSingleArg(name)))
           case (_, true, true) => name -> TranslatedPSetGuardArg(vpr.AnySetUnion(combinedSetArg(name), combinedSingleArg(name))())
+          case other => sys.error(s"Found unexpected case $other")
         }
       }(breakOut)
     }
 
     val addMap: Map[String, TranslatedPGuardArg] = {
-
       val accMap: mutable.Map[String, vpr.Exp] = mutable.Map.empty
 
       addGuards foreach { g =>
-
         val name = g.guard.name
         val perm = translate(g.argument.asInstanceOf[PStandartGuardArg].arguments.head)
 
@@ -493,7 +491,8 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         }
       }
 
-      accMap.toVector.map{case(name,perm) => name -> TranslatedPStandartGuardArg(Vector(perm), None)}(breakOut)
+      accMap.toVector.map { case(name,perm) =>
+        name -> TranslatedPStandartGuardArg(Vector(perm), None)}(breakOut)
     }
 
     noArgMap ++ unionMap ++ addMap
@@ -505,7 +504,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                                       vprFrom: vpr.Exp,
                                       vprTo: vpr.Exp,
                                       guardArgEvaluationLabel: vpr.Label)
-  : vpr.Assert = {
+                                     : vpr.Assert = {
 
     def guardArgEval(arg: vpr.Exp): vpr.Exp =
       vpr.LabelledOld(arg, guardArgEvaluationLabel.name)()
@@ -517,13 +516,14 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val usedGuardDeclMap: Map[String, PGuardDecl] = usedGuards.map{ g =>
       val guardDecl = semanticAnalyser.entity(g.guard) match {
-        case GuardEntity(guardDecl, `region`) => guardDecl
+        case GuardEntity(_guardDecl, `region`) => _guardDecl
       }
+
       g.guard.name -> guardDecl
     }(breakOut)
 
     def isRelevantAction(action: PAction): Boolean = {
-      // assumes globally unique guard name
+      /* Assumes globally unique guard name */
       val actionKinds = action.guards map (_.guard.name)
 
       actionKinds forall usedGuardsMap.isDefinedAt
@@ -533,7 +533,6 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprActionConstraints: Vector[vpr.Exp] =
       relevantActions.map(action => {
-
         val vprExistentialConstraint = stateConstraintsFromAction(
           action,
           vprFrom,
@@ -543,16 +542,13 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         val actionGuardMap = groupGuards(action.guards)
 
         val constraints: Vector[vpr.Exp] = actionGuardMap.toVector map { case (actionGuardName, actionGuardArg) =>
-
           val guardDecl = usedGuardDeclMap(actionGuardName)
 
           val relevantUsedGuardArg = usedGuardsMap(actionGuardName)
 
           (relevantUsedGuardArg, actionGuardArg) match {
-
             case (TranslatedPStandartGuardArg(heldGuardArgs, _), TranslatedPStandartGuardArg(requiredGuardArgs, _)) =>
               (guardDecl.modifier, heldGuardArgs, requiredGuardArgs) match {
-
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs, sollArgs) =>
                   /* used_guard_args == action_guard_args */
                   viper.silicon.utils.ast.BigAnd(
@@ -561,7 +557,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                     }
                   )
 
-                case (_: PDivisibleGuard, r +: heldPerm +: haveArgs, requiredPerm +: sollArgs) =>
+                case (_: PDivisibleGuard, r +: heldPerm +: haveArgs, requiredPerm +: sollArgs) => /* TODO: Why isn't r used? */
                   /* perm_required <= perm_held && used_guard_args == action_guard_args */
                   viper.silicon.utils.ast.BigAnd(
                     vpr.PermLeCmp(requiredPerm, heldPerm)() +:
@@ -573,7 +569,6 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
             case (TranslatedPStandartGuardArg(heldGuardArgs, _), TranslatedPSetGuardArg(requiredGuardSet)) =>
               (guardDecl.modifier, heldGuardArgs) match {
-
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs) =>
                   /* \/xs :: tuple(xs) in action_guard_set ==>  tuple(xs) = tuple(used_guard_args) */
 
@@ -594,11 +589,13 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                       )()
                     )()
                   )()
+
+                case other @ (_: PDivisibleGuard, _) =>
+                  sys.error(s"Divisible guards not yet supported here: $other")
               }
 
             case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPStandartGuardArg(requiredGuardArgs, _)) =>
               (guardDecl.modifier, requiredGuardArgs) match {
-
                 case (_: PUniqueGuard | _: PDuplicableGuard, sollArgs) =>
                   /* tuple(action_guard_args) in used_guard_set */
                   val sollArgsTuple = tupleWrap(sollArgs)
@@ -607,15 +604,16 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                     sollArgsTuple,
                     guardArgEval(heldGuardSet)
                   )()
+
+                case other @ (_: PDivisibleGuard, _) =>
+                  sys.error(s"Divisible guards not yet supported here: $other")
               }
 
             case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPSetGuardArg(actionGuardSet)) =>
-
               val (actionGuardconditional, actionGuardDecls) =
                 extractGuardSetArgConditionalFromVprSet(actionGuardSet, guardDecl)
 
               guardDecl.modifier match {
-
                 case _: PUniqueGuard | _: PDuplicableGuard =>
                   /* \/xs :: tuple(xs) in action_guard_set ==>  tuple(xs) in used_guard_set */
                   val actionGuardElem = tupleWrap(actionGuardDecls map (_.localVar))
@@ -631,18 +629,20 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                       )()
                     )()
                   )()
+
+                case other: PDivisibleGuard =>
+                  sys.error(s"Divisible guards not yet supported here: $other")
               }
           }
         }
 
         val binderInstantiations: Map[String, vpr.Exp] =
           action.binders.map { binder =>
-
             val maybeExtractedExp = extractBoundExpFromAction(binder, action, vprFrom, vprTo, actionGuardMap, usedGuardsMap)
 
             if (maybeExtractedExp.isEmpty) {
-              sys.error( s"The action at ${action.lineColumnPosition} does not belong to the class of "+
-                          "currently supported actions. See issue #51 for further details.")
+              sys.error(s"The action at ${action.lineColumnPosition} does not belong to the " +
+                         "class of currently supported actions. See issue #51 for further details.")
             }
 
             binder.id.name -> maybeExtractedExp.get
@@ -682,7 +682,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                                  vprFrom: vpr.Exp,
                                  vprTo: vpr.Exp,
                                  vprGuardCheck: vpr.Exp)
-  : vpr.Exists = {
+                                : vpr.Exists = {
 
     /* Let action be defined as follows:
      *   ?xs | c(xs) | G(g(xs)): e(xs) ~> e'(xs)
@@ -724,98 +724,103 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   def assembleCheckIfEnvironmentMayHoldActionGuard(region: PRegion,
                                                    vprRegionId: vpr.Exp,
                                                    action: PAction)
-  : vpr.Exp = viper.silicon.utils.ast.BigAnd(
-    action.guards.map{case PBaseGuardExp(gid, gargs) =>
-      assembleCheckIfEnvironmentMayHoldBaseActionGuard(region, vprRegionId, gid, gargs)
-    }
-  )
+                                                  : vpr.Exp = {
+
+    viper.silicon.utils.ast.BigAnd(
+      action.guards.map{case PBaseGuardExp(gid, gargs) =>
+        assembleCheckIfEnvironmentMayHoldBaseActionGuard(region, vprRegionId, gid, gargs)
+      }
+    )
+  }
 
   private def assembleCheckIfEnvironmentMayHoldBaseActionGuard(region: PRegion,
                                                                vprRegionId: vpr.Exp,
                                                                guardId: PIdnUse,
                                                                guardArgument: PGuardArg)
-  : vpr.Exp = semanticAnalyser.entity(guardId) match {
-    case GuardEntity(guardDecl, `region`) =>
+                                                              : vpr.Exp = {
 
-      /* acc(G(r,args), perm) */
-      def currentPerm(args: Vector[vpr.Exp]): vpr.CurrentPerm =
-        vpr.CurrentPerm(
-          vpr.PredicateAccess(
-            vprRegionId +: args,
-            guardPredicate(guardDecl, region).name
+    semanticAnalyser.entity(guardId) match {
+      case GuardEntity(guardDecl, `region`) =>
+        /* acc(G(r,args), perm) */
+        def currentPerm(args: Vector[vpr.Exp]): vpr.CurrentPerm =
+          vpr.CurrentPerm(
+            vpr.PredicateAccess(
+              vprRegionId +: args,
+              guardPredicate(guardDecl, region).name
+            )()
           )()
-        )()
 
-      guardArgument match {
-        case PStandartGuardArg(guardArguments) =>
+        guardArgument match {
+          case PStandartGuardArg(guardArguments) =>
+            (guardDecl.modifier, guardArguments) match {
+              case (_: PDuplicableGuard, _) =>
+                /* true */
+                vpr.TrueLit () ()
 
-          (guardDecl.modifier, guardArguments) match {
-            case (_: PDuplicableGuard, args) =>
-              /* true */
-              vpr.TrueLit () ()
+              case (_: PUniqueGuard, args) =>
+                /* perm(G(r,args)) == none */
+                vpr.EqCmp(currentPerm(args map translate), vpr.NoPerm ()())()
 
-            case (_: PUniqueGuard, args) =>
-              /* perm(G(r,args)) == none */
-              vpr.EqCmp(currentPerm(args map translate), vpr.NoPerm ()())()
-
-            case (_: PDivisibleGuard, requiredPerm +: args) =>
-              /* perm(G(r,args)) <= 1 - perm_required */
-              vpr.PermLeCmp(
-                currentPerm(args map translate),
-                vpr.PermSub(
-                  vpr.FullPerm()(),
-                  translate(requiredPerm)
+              case (_: PDivisibleGuard, requiredPerm +: args) =>
+                /* perm(G(r,args)) <= 1 - perm_required */
+                vpr.PermLeCmp(
+                  currentPerm(args map translate),
+                  vpr.PermSub(
+                    vpr.FullPerm()(),
+                    translate(requiredPerm)
+                  )()
                 )()
-              )()
-          }
+            }
 
-        case PSetGuardArg(set) =>
-          val (conditional, decls) = extractGuardSetArgConditional(set, guardDecl)
+          case PSetGuardArg(set) =>
+            val (conditional, decls) = extractGuardSetArgConditional(set, guardDecl)
 
-          (guardDecl.modifier, decls map (_.localVar)) match {
+            (guardDecl.modifier, decls map (_.localVar)) match {
+              case (_: PDuplicableGuard, _) =>
+                /* true */
+                vpr.TrueLit()()
 
-            case (_: PDuplicableGuard, _) =>
-              /* true */
-              vpr.TrueLit()()
+              case (_: PUniqueGuard, translatedArgs) =>
+                /* perm(G(r,xs)) == none */
+                val body = vpr.EqCmp(currentPerm(translatedArgs), vpr.NoPerm()())()
 
-            case (_: PUniqueGuard, translatedArgs) =>
-              /* perm(G(r,xs)) == none */
-              val body = vpr.EqCmp(currentPerm(translatedArgs), vpr.NoPerm()())()
+                /* {G_T(r,xs)}{tuple(xs) in G_set} */
+                val triggers = Vector(
+                  vpr.Trigger(
+                    Vector(
+                      guardTriggerFunctionApplication(
+                        guardDecl,
+                        vprRegionId +: translatedArgs,
+                        region
+                      ).get
+                    )
+                  )(),
+                  vpr.Trigger(
+                    Vector(
+                      conditional
+                    )
+                  )()
+                )
 
-              /* {G_T(r,xs)}{tuple(xs) in G_set} */
-              val triggers = Vector(
-                vpr.Trigger(
-                  Vector(
-                    guardTriggerFunctionApplication(
-                      guardDecl,
-                      vprRegionId +: translatedArgs,
-                      region
-                    ).get
-                  )
-                )(),
-                vpr.Trigger(
-                  Vector(
-                    conditional
-                  )
+                /* forall xs :: {G_T(r,xs)}{tuple(xs) in G_set} tuple(xs) in set ==> perm(guard(r,xs)) = none */
+                vpr.Forall(
+                  decls,
+                  triggers,
+                  vpr.Implies(
+                    conditional,
+                    body
+                  )()
                 )()
-              )
 
-              /* forall xs :: {G_T(r,xs)}{tuple(xs) in G_set} tuple(xs) in set ==> perm(guard(r,xs)) = none */
-              vpr.Forall(
-                decls,
-                triggers,
-                vpr.Implies(
-                  conditional,
-                  body
-                )()
-              )()
-          }
-      }
+              case (PDivisibleGuard(), _) => ???
+            }
+        }
 
-    case _ =>
-      sys.error(
-        s"Unexpectedly failed to find a declaration for the guard denoted by " +
-          s"${guardId} (${guardId.position})")
+      case _ =>
+        sys.error(
+          s"Unexpectedly failed to find a declaration for the guard denoted by " +
+            s"$guardId (${guardId.position})")
+    }
   }
 
   def tupleWrap(args: Vector[vpr.Exp]): vpr.Exp =
@@ -830,13 +835,12 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       )()
     }
 
-
-  private def extractGuardSetArgConditional(set: PExpression, guardDecl: PGuardDecl): (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
+  private def extractGuardSetArgConditional(set: PExpression, guardDecl: PGuardDecl)
+                                           : (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
 
     val expectedNumOfArguments = guardDecl.formalArguments.length
 
     semanticAnalyser.typ(set) match {
-
       case PSetType(elementType) if expectedNumOfArguments == 1 =>
         val vipElemTypes = translate(elementType)
         val decl = vpr.LocalVarDecl(s"$$a", vipElemTypes)()
@@ -869,16 +873,16 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         (conditional, decls)
 
       case other =>
-        sys.error(s"${set.pretty} should be of type Tuple but is ${other}")
+        sys.error(s"${set.pretty} should be of type Tuple but is $other")
     }
   }
 
-  private def extractGuardSetArgConditionalFromVprSet(set: vpr.Exp, guardDecl: PGuardDecl): (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
+  private def extractGuardSetArgConditionalFromVprSet(set: vpr.Exp, guardDecl: PGuardDecl)
+                                                     : (vpr.Exp, Vector[vpr.LocalVarDecl]) = {
 
     val expectedNumOfArguments = guardDecl.formalArguments.length
 
     set.typ match {
-
       case vpr.SetType(elementType) if expectedNumOfArguments == 1 =>
         val vipElemTypes = elementType
         val decl = vpr.LocalVarDecl(s"$$a", vipElemTypes)()
@@ -911,14 +915,15 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         (conditional, decls)
 
       case other =>
-        sys.error(s"${set} should be of type Tuple but is ${other}")
+        sys.error(s"$set should be of type Tuple but is $other")
     }
   }
 
   private def constructFromModifier[A](modifier: PModifier,
                                        expArgs: Vector[vpr.Exp],
                                        dfltPerm: vpr.Exp = vpr.FullPerm()())
-                                      (constructor: (Vector[vpr.Exp], vpr.Exp) => A): A = {
+                                      (constructor: (Vector[vpr.Exp], vpr.Exp) => A)
+                                      : A = {
 
     (modifier, expArgs) match {
       case (_: PUniqueGuard | _:PDuplicableGuard, args) =>
@@ -931,8 +936,9 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def extractBoundExpFromPoint(binder: PNamedBinder,
                                formal: PExpression,
-                               actual: vpr.Exp
-                              ): Option[vpr.Exp] = {
+                               actual: vpr.Exp)
+                              : Option[vpr.Exp] = {
+
     if (AstUtils.isBoundVariable(formal, binder)) {
       Some(actual)
     } else {
@@ -941,25 +947,32 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def isBoundExpExtractableFromPoint(binder: PNamedBinder,
-                                     formal: PExpression
-                                    ): Boolean = {
+                                     formal: PExpression)
+                                    : Boolean = {
+
     AstUtils.isBoundVariable(formal, binder)
   }
 
   def extractBoundExpFromGuard(binder: PNamedBinder,
                                actionGuardArg: Map[String, TranslatedPGuardArg],
-                               usedGuardArg: Map[String, TranslatedPGuardArg]
-                               ): Option[vpr.Exp] = {
+                               usedGuardArg: Map[String, TranslatedPGuardArg])
+                              : Option[vpr.Exp] = {
 
-    actionGuardArg.toVector foreach { case (guardName, guardArg) => (guardArg, usedGuardArg(guardName)) match {
-      case (actionArg: TranslatedPStandartGuardArg, usedArg: TranslatedPStandartGuardArg) if actionArg.preArgs.isDefined =>
-        actionArg.preArgs.get.zip(usedArg.arguments) foreach { case (formal, actual) =>
+    actionGuardArg.toVector foreach { case (guardName, guardArg) =>
+      (guardArg, usedGuardArg(guardName)) match {
+        case (actionArg: TranslatedPStandartGuardArg, usedArg: TranslatedPStandartGuardArg)
+             if actionArg.preArgs.isDefined =>
+
+          actionArg.preArgs.get.zip(usedArg.arguments) foreach { case (formal, actual) =>
             val maybeExtractedExp = extractBoundExpFromPoint(binder, formal, actual)
-            if (maybeExtractedExp.isDefined) return maybeExtractedExp
-        }
 
-      case _ =>
-    }}
+            if (maybeExtractedExp.isDefined)
+              return maybeExtractedExp
+          }
+
+        case _ => /* Nothing to do here */
+      }
+    }
 
     None
   }
@@ -969,10 +982,11 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                                 from: vpr.Exp,
                                 to: vpr.Exp,
                                 actionGuardArg: Map[String, TranslatedPGuardArg],
-                                usedGuardArg: Map[String, TranslatedPGuardArg]
-                               ): Option[vpr.Exp] = {
+                                usedGuardArg: Map[String, TranslatedPGuardArg])
+                               : Option[vpr.Exp] = {
 
-    def ifNotAvailable(option: Option[vpr.Exp])(oth: => Option[vpr.Exp]) = option.fold(oth)(Some(_))
+    def ifNotAvailable(option: Option[vpr.Exp])(oth: => Option[vpr.Exp]): Option[vpr.Exp] =
+      option.fold(oth)(Some(_))
 
     ifNotAvailable(extractBoundExpFromPoint(binder, action.from, from)){
       ifNotAvailable(extractBoundExpFromPoint(binder, action.to, to)){

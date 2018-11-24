@@ -38,15 +38,15 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
     val freeVariables: ListSet[PIdnUse] = semanticAnalyser.freeVariables(comprehension)
     val decls: ListSet[vpr.LocalVarDecl] =
       freeVariables.zipWithIndex
-        .map{ case (fv,ix)  => {
+        .map { case (_, ix)  =>
           val vprDecl =
             vpr.LocalVarDecl(
-              s"$$s_$ix",// fv.name,
+              s"$$s_$ix",
               vprElementType
             )()
 
           vprDecl
-        }}(breakOut)
+        }(breakOut)
 
     val freeVariablesToDecls: ListMap[PIdnUse, vpr.LocalVarDecl] =
       freeVariables.zip(decls)(breakOut)

@@ -72,6 +72,7 @@ class DefaultPrettyPrinter
       case clause: PSpecificationClause => toDoc(clause)
       case action: PAction => toDoc(action)
       case location: PLocation => toDoc(location)
+      case arg: PGuardArg => toDoc(arg)
     }
 
   def toDoc(action: PAction): Doc = {
@@ -215,7 +216,7 @@ class DefaultPrettyPrinter
         })
 
       case PExpressionMacro(id, formalArguments, body) =>
-        "macro" <+> (
+        "macro" <+> toDoc(id) <+> (
         formalArguments match {
           case Some(args) => parens(ssep(args map toDoc, comma))
           case None => emptyDoc
@@ -223,8 +224,16 @@ class DefaultPrettyPrinter
         toDoc(body) <> semi
 
       case PStatementMacro(id, formalArguments, locals, body) =>
-        "macro" <+> parens(ssep(formalArguments map toDoc, comma)) <+>
+        "macro" <+> toDoc(id) <+> parens(ssep(formalArguments map toDoc, comma)) <+>
         braces(nest(ssep(locals map toDoc, semi) <> line <> toDoc(body)))
+
+      case PTypeMacro(id, formalArguments, body) =>
+        "macro" <+> toDoc(id) <+> (
+        formalArguments match {
+          case Some(args) => parens(ssep(args map toDoc, comma))
+          case None => emptyDoc
+        }) <+>
+        toDoc(body) <> semi
     }
   }
 
@@ -262,6 +271,7 @@ class DefaultPrettyPrinter
       case PAssert(assertion) => "assert" <+> toDoc(assertion) <> semi
       case PHavocVariable(variable) => "havoc" <+> toDoc(variable) <> semi
       case PHavocLocation(location) => "havoc" <+> toDoc(location) <> semi
+      case _: PLemmaApplication | _: PUseGuardUniqueness | _: PUseRegionInterpretation => ???
     }
   }
 
@@ -306,6 +316,7 @@ class DefaultPrettyPrinter
       case PIdnExp(id) => toDoc(id)
       case binder: PNamedBinder => toDoc(binder: PDeclaration)
       case PAnonymousBinder() => "_"
+      case PFracLiteral(_, _) => ???
 
       case PUnfolding(predicate, body) =>
         "unfolding" <+> toDoc(predicate) <+> "in" <+> toDoc(body)
@@ -324,14 +335,7 @@ class DefaultPrettyPrinter
 
       case PExplicitTuple(elements, typeAnnotation) =>
         s"Tuple${elements.length}" <>
-        typeAnnotation.fold(emptyDoc)(ta =>
-          "[" <> ssep(ta map toDoc, comma <> space) <> "]") <>
-        "(" <> ssep(elements map toDoc, comma <> space) <> ")"
-
-      case PExplicitTuple(elements, typeAnnotation) =>
-        s"Pair${elements.length}" <>
-        typeAnnotation.fold(emptyDoc)(ta =>
-          "[" <> ssep(ta map toDoc, comma <> space) <> "]") <>
+        typeAnnotation.fold(emptyDoc)(ta => "[" <> ssep(ta map toDoc, comma <> space) <> "]") <>
         "(" <> ssep(elements map toDoc, comma <> space) <> ")"
 
       case PExplicitMap(elements, typeAnnotation) =>
@@ -369,15 +373,18 @@ class DefaultPrettyPrinter
       case PDiv(left, right) => parens(toDoc(left) <+> "div" <+> toDoc(right))
       case PSetContains(element, set) => parens(toDoc(element) <+> "in" <+> toDoc(set))
       case PSetSubset(left, right) => parens(toDoc(left) <+> "subset" <+> toDoc(right))
-      case PSetUnion(left, right) => parens(toDoc(left) <+> "union" <+> toDoc(left))
+      case PSetUnion(left, right) => parens(toDoc(left) <+> "union" <+> toDoc(right))
       case PSeqSize(seq) => "size" <> parens(toDoc(seq))
       case PSeqHead(seq) => "head" <> parens(toDoc(seq))
       case PSeqTail(seq) => "tail" <> parens(toDoc(seq))
-      case PTupleGet(tuple,index) => s"get${index}" <> parens(toDoc(tuple))
+      case PTupleGet(tuple,index) => s"get$index" <> parens(toDoc(tuple))
       case PMapUnion(left, right) => "uni" <> parens(toDoc(left) <> comma <+> toDoc(right))
       case PMapDisjoint(left, right) => "disj" <> parens(toDoc(left) <> comma <+> toDoc(right))
       case PMapKeys(map) => "keys" <> parens(toDoc(map))
       case PMapLookup(map, key) => "lkup" <> parens(toDoc(map) <> comma <+> toDoc(key))
+      case PMapContains(_, _) => ???
+      case PMapUpdate(_, _, _) => ???
+      case PMapValues(_)  => ???
 
       case PConditional(cond, thn, els) =>
         parens(toDoc(cond) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
@@ -407,8 +414,6 @@ class DefaultPrettyPrinter
       case PSeqType(elementType) => "seq" <> angles(toDoc(elementType))
       case PTupleType(elementTypes) =>
         s"tuple${elementTypes.length}" <> angles(ssep(elementTypes map toDoc, comma <> space))
-      case PTupleType(elementTypes) =>
-        s"pair${elementTypes.length}" <> angles(ssep(elementTypes map toDoc, comma <> space))
       case PMapType(elementType1, elementType2) =>
         "map" <> angles(toDoc(elementType1) <> "," <+> toDoc(elementType2))
       case PRefType(referencedType) => toDoc(referencedType)

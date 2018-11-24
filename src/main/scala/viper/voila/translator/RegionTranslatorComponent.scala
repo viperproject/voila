@@ -9,14 +9,10 @@ package viper.voila.translator
 import scala.collection.breakOut
 import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
-import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{ActionNotTransitiveError, InsufficientGuardPermissionError, InsufficientRegionPermissionError, MakeAtomicError, RegionActionsNotTransitiveError, RegionInterpretationNotStableError}
-import viper.silver.ast.utility.Rewriter.Traverse
-import viper.silver.ast.utility.Simplifier
+import viper.voila.reporting._
 import viper.silver.{ast => vpr}
-import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.silver.verifier.{reasons => vprrea}
+import viper.silver.verifier.{errors => vprerr}
 import viper.voila.translator.TranslatorUtils.{BaseSelector, BasicManagerWithSimpleApplication}
 
 trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
@@ -28,8 +24,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def regionPredicateAccess(region: PRegion,
                             arguments: Vector[vpr.Exp],
                             permissions: vpr.Exp = vpr.FullPerm()())
-                           : vpr.PredicateAccessPredicate =
-  {
+                           : vpr.PredicateAccessPredicate = {
+
     vpr.PredicateAccessPredicate(
       loc = vpr.PredicateAccess(
                 args = arguments,
@@ -249,13 +245,11 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def regionInterpretationStabilityCheck(region: PRegion): vpr.Method = {
-
     val methodName = s"$$_${region.id.name}_interpretation_stability_check"
 
     val formalArgs = region.formalInArgs map translate
 
     val body = {
-
       val inhaleSkolemizationFunctionFootprints =
         vpr.Inhale(
           viper.silicon.utils.ast.BigAnd(
@@ -270,7 +264,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
       val inhaleInterpretation = vpr.Inhale(interpretation)().withSource(region.interpretation)
 
-      // TODO: could be optimized to only havocing regions that occur inside region interpretation
+      /* TODO: Could be optimized to only havocking regions that occur inside region interpretation */
       val stabilizationCode = stabilizeAllInstances("check stability of region interpretation")
 
       val assertInterpretation = vpr.Assert(interpretation)().withSource(region.interpretation)
@@ -304,7 +298,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def maybeRegionActionIndividualTransitivityCheck(region: PRegion): Vector[vpr.Method] = {
     if(config.transitiveActionsCheck()) {
-      region.actions.zipWithIndex.map{case (a,i) => regionActionIndividualTransitivityCheck(region,a,i.toString)}
+      region.actions.zipWithIndex.map { case (a,i) =>
+        regionActionIndividualTransitivityCheck(region,a,i.toString)
+      }
     } else {
       Vector.empty
     }
@@ -319,7 +315,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def regionActionTransitivityCheck(region: PRegion): vpr.Method = {
-
     val methodName = s"$$_${region.id.name}_action_transitivity_check"
 
     val guards = region.guards
@@ -353,7 +348,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val guardModifierMap = guardIds.zip(guards map (_.modifier)).toMap
 
     val actionMaps: Map[Int, Map[String, TranslatedPGuardArg]] =
-      region.actions.zipWithIndex.map{ case (a,i) =>
+      region.actions.zipWithIndex.map { case (a,i) =>
         i -> groupGuards(a.guards)
       }(breakOut)
 
@@ -377,11 +372,10 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       val guards = actionMaps(index).toVector
 
       val guardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
-
         case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
           args.length match {
             case 0 => guardVarMap(name)
-            case n => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
+            case _ => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
           }
 
         case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
@@ -390,21 +384,27 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
           vpr.GeCmp(args.head, guardVarMap(name))()
 
+        case other @ (_: PDivisibleGuard, _: TranslatedPSetGuardArg) =>
+          sys.error(s"Unexpectedly found $other")
       }}
 
       (formalDecls, condition, from, to, viper.silicon.utils.ast.BigAnd(guardConstraints).replace(renaming))
     }
 
-    def allActionApplication(from: vpr.Exp, to: vpr.Exp, postfix: String): (Vector[vpr.LocalVarDecl], vpr.Exp) = {
+    def allActionApplication(from: vpr.Exp, to: vpr.Exp, postfix: String)
+                            : (Vector[vpr.LocalVarDecl], vpr.Exp) = {
 
-      val (declss, constraints) = region.actions.zipWithIndex.map{ case (a,i) =>
+      val (declss, constraints) = region.actions.zipWithIndex.map { case (a,i) =>
         val (decls, aCondition, aFrom, aTo, aGuardConstraint) = actionApplication(a, i, postfix)
-        val constraint = viper.silicon.utils.ast.BigAnd(Vector(
-          vpr.EqCmp(aFrom, from)(),
-          vpr.EqCmp(aTo, to)(),
-          aCondition,
-          aGuardConstraint
-        ))
+
+        val constraint = viper.silicon.utils.ast.BigAnd(
+          Vector(
+            vpr.EqCmp(aFrom, from)(),
+            vpr.EqCmp(aTo, to)(),
+            aCondition,
+            aGuardConstraint
+          )
+        )
 
         (decls, constraint)
       }.unzip
@@ -413,9 +413,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     def allActionApplication2(from: vpr.Exp, to: vpr.Exp, postfix: String): vpr.Exp = {
-
-      val constraints = region.actions.zipWithIndex.map{ case (a,i) =>
-
+      val constraints = region.actions.zipWithIndex.map { case (a,i) =>
         val (fromBound, notFromBound) = a.binders.partition(isBoundExpExtractableFromPoint(_, a.from))
         val (toBound, restBinders) = notFromBound.partition(isBoundExpExtractableFromPoint(_, a.to))
 
@@ -441,30 +439,34 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
         val guards = actionMaps(i).toVector
 
-        val aGuardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
+        val aGuardConstraints = guards map { case (name, arg) =>
+          (guardModifierMap(name), arg) match {
+            case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
+              args.length match {
+                case 0 => guardVarMap(name)
+                case _ => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
+              }
 
-          case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
-            args.length match {
-              case 0 => guardVarMap(name)
-              case n => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
-            }
+            case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
+              vpr.AnySetSubset(set, guardVarMap(name))()
 
-          case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
-            vpr.AnySetSubset(set, guardVarMap(name))()
+            case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
+              vpr.GeCmp(args.head, guardVarMap(name))()
 
-          case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
-            vpr.GeCmp(args.head, guardVarMap(name))()
-
-        }}
+            case (_: PDivisibleGuard, TranslatedPSetGuardArg(_)) => ???
+          }
+        }
 
         val aGuardConstraint = viper.silicon.utils.ast.BigAnd(aGuardConstraints).replace(renaming)
 
-        val constraint = viper.silicon.utils.ast.BigAnd(Vector(
-          vpr.EqCmp(aFrom, from)(),
-          vpr.EqCmp(aTo, to)(),
-          aCondition,
-          aGuardConstraint
-        ))
+        val constraint = viper.silicon.utils.ast.BigAnd(
+          Vector(
+            vpr.EqCmp(aFrom, from)(),
+            vpr.EqCmp(aTo, to)(),
+            aCondition,
+            aGuardConstraint
+          )
+        )
 
         if (formalDecls.isEmpty) {
           constraint
@@ -489,7 +491,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val zConstraint = allActionApplication2(aStateDecl.localVar, cStateDecl.localVar, "z")
 
     val body = {
-
       val xInhale = vpr.Inhale(xConstraint)()
       val yInhale = vpr.Inhale(yConstraint)()
 
@@ -520,7 +521,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def regionActionIndividualTransitivityCheck(region: PRegion, action: PAction, actionName: String): vpr.Method = {
+  def regionActionIndividualTransitivityCheck(region: PRegion, action: PAction, actionName: String)
+                                             : vpr.Method = {
 
     val methodName = s"$$_${region.id.name}_${actionName}_action_transitivity_check"
 
@@ -548,8 +550,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       val from = translate(action.from).replace(renaming)
       val to = translate(action.to).replace(renaming)
 
-      val guardArgs = action.guards
-
       (formalArgs, condition, from, to)
     }
 
@@ -558,7 +558,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val (cDecls, cCond, cFrom, cTo) = actionApplication("c")
 
     val body = {
-
       val assumptions =
         viper.silicon.utils.ast.BigAnd(Vector(
           aCond, bCond, vpr.EqCmp(aTo, bFrom)(), vpr.EqCmp(aFrom, cFrom)(), vpr.EqCmp(bTo, cTo)()
@@ -590,7 +589,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  def extractBoundRegionInstance(id: PIdnUse): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
+  def extractBoundRegionInstance(id: PIdnUse)
+                                : Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
 
     semanticAnalyser.entity(id) match {
       case entity: LogicalVariableEntity =>
@@ -609,10 +609,10 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
       case _ => None
     }
-
   }
 
-  def extractRegionInstance(pred: PPredicateExp): Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
+  def extractRegionInstance(pred: PPredicateExp)
+                           : Option[(PRegion, Vector[PExpression], Vector[PExpression])] = {
 
     if (extractableRegionInstance(pred)) {
       Some(getRegionPredicateDetails(pred))
@@ -623,7 +623,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def extractableRegionInstance(pred: PPredicateExp): Boolean =
     semanticAnalyser.entity(pred.predicate).isInstanceOf[RegionEntity]
-
 
   def getRegionPredicateDetails(predicateExp: PPredicateExp)
                                : (PRegion, Vector[PExpression], Vector[PExpression]) = {
@@ -690,9 +689,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       vprRegionArguments)()
   }
 
-  trait RegionManager[M <: vpr.Declaration, A <: vpr.Exp] extends BasicManagerWithSimpleApplication[PRegion, M, A] {
-
-    this: BaseSelector[PRegion] =>
+  trait RegionManager[M <: vpr.Declaration, A <: vpr.Exp]
+      extends BasicManagerWithSimpleApplication[PRegion, M, A] { this: BaseSelector[PRegion] =>
 
     override def idToName(id: PRegion): String = id.id.name
 
@@ -703,11 +701,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       collectMember(TranslatorUtils.ManagedObject(obj, obj.formalInArgs map translate))
 
     if (this.isInstanceOf[TranslatorUtils.FrontSelector[PRegion]]) {
-      collectingFunctions ::= (collectMember(_: PRegion)) // TODO: not sure if this is safe
+      collectingFunctions ::= (collectMember(_: PRegion)) /* TODO: not sure if this is safe */
     }
 
-    if (this.isInstanceOf[TranslatorUtils.FootprintManager[PRegion]]) {
-      initializingFunctions ::= (this.asInstanceOf[TranslatorUtils.FootprintManager[PRegion]].initialize(_: PRegion))
+    this match {
+      case self: RegionManager[M, A] with TranslatorUtils.FootprintManager[PRegion] =>
+        initializingFunctions ::= (self.initialize(_: PRegion))
+      case _ => /* Nothing to do */
     }
   }
 }

@@ -6,7 +6,7 @@
 
 package viper.voila.frontend
 
-import scala.annotation.switch
+import java.util.regex.Pattern
 import scala.collection.breakOut
 import scala.language.implicitConversions
 import org.bitbucket.inkytonik.kiama.parsing.Parsers
@@ -29,7 +29,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       //   - https://stackoverflow.com/a/31691056
       //
 
-  val reservedWords = Set(
+  val reservedWords: Set[String] = Set(
     "true", "false",
     "int", "bool", "id", "set", "frac", "seq", "pair", "map",
     "region", "guards", "unique", "duplicable", "divisible", "interpretation", "abstraction", "actions",
@@ -49,7 +49,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "unfolding"
   )
 
-  val reservedPatterns = Set(
+  val reservedPatterns: Set[Pattern] = Set(
     """get\d+""".r.pattern
   )
 
@@ -101,9 +101,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
      */
     guardModifier ~ idndef ~ ("(" ~> formalArgs <~ ")") <~ ";" ^^ {
       case mod ~ id ~ args => mod match {
-        case _: PUniqueGuard | _: PDuplicableGuard => PGuardDecl(id, args, mod)
-        // TODO: divisible guards with formal arguments are currently not supported
-        // case _: PDivisibleGuard => PGuardDecl(id, PFormalArgumentDecl(PIdnDef("perm").at(id),PFracType().at(id)).at(id) +: args, mod)
+        case _: PUniqueGuard | _: PDuplicableGuard =>
+          PGuardDecl(id, args, mod)
+        case _: PDivisibleGuard => ???
+          /* TODO: divisible guards with formal arguments are currently not supported */
+//          PGuardDecl(id, PFormalArgumentDecl(PIdnDef("perm").at(id),PFracType().at(id)).at(id) +: args, mod)
       }
     } |
     guardModifier ~ idndef <~ ";" ^^ {
@@ -419,11 +421,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
             case ((left, result), sym ~ right) =>
               val op =
                 /* TODO: Avoid duplicating operators from rule ineqOps above */
-                (sym: @switch) match {
-                  case "<" => PLess
+                sym match {
                   case "<=" => PAtMost
-                  case ">" => PGreater
+                  case "<" => PLess
                   case ">=" => PAtLeast
+                  case ">" => PGreater
                 }
 
               (positionedRewriter.deepclone(right),
@@ -614,9 +616,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   }
 
   private def sanitizeAction(action: PAction): PAction = {
-
-    val renamings = (action.binders map { case PNamedBinder(id, typeAnnotation) =>
-      id.name -> s"$$_action_${id.name}" // TODO naming convention
+    val renamings = (action.binders map { case PNamedBinder(id, _) =>
+      id.name -> s"$$_action_${id.name}" /* TODO: Naming convention */
     }).toMap
 
     positionedRewriter.deepcloneAndRename(action, renamings)

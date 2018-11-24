@@ -2,7 +2,7 @@ package viper.voila.frontend
 
 import java.nio.file.Path
 import com.typesafe.scalalogging.StrictLogging
-import org.bitbucket.inkytonik.kiama.parsing.{Failure, Success}
+import org.bitbucket.inkytonik.kiama.parsing.{NoSuccess, Success}
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, message}
 import org.bitbucket.inkytonik.kiama.util._
 import viper.voila.reporting.{ParserError, VoilaError}
@@ -33,11 +33,11 @@ class Frontend extends PositionStore with Messaging with StrictLogging {
     syntaxAnalyser.parse(parser, source) match {
       case Success(ast, _) =>
         Right(ast)
-      case f @ Failure(label, next) =>
+      case ns @ NoSuccess(label, next) =>
         val pos = next.position
-        positions.setStart(f, pos)
-        positions.setFinish(f, pos)
-        val messages = message(f, label)
+        positions.setStart(ns, pos)
+        positions.setFinish(ns, pos)
+        val messages = message(ns, label)
         Left(messages)
     }
   }

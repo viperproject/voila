@@ -6,62 +6,59 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{Declaration, Exp, Stmt, Trigger}
-
 import scala.collection.mutable
+import viper.silver.ast.{Declaration, Exp, Stmt}
 import viper.silver.{ast => vpr}
 import viper.voila.backends.ViperAstUtils
-import viper.voila.frontend.{PMember, PRegion}
-import viper.voila.translator.TranslatorUtils.QuantifierWrapper
 
 object TranslatorUtils {
 
-  // observer pattern adapted from https://stackoverflow.com/questions/13435151/implementing-observer-pattern
+  /* Observer pattern adapted from
+   * https://stackoverflow.com/questions/13435151/implementing-observer-pattern
+   */
 
   trait Observer[S] {
     def receiveUpdate(subject: S)
   }
 
   trait Subject[S] {
-
     private var observers: List[Observer[S]] = Nil
     def addObserver(observer: Observer[S]): Unit = observers ::= observer
 
     def notifyObservers(subject: S): Unit = observers foreach (_.receiveUpdate(subject))
   }
 
-  /**
-    * Wrapper for Voila element, i.e. interference-context, with explicit Viper argument declarations.
+  /** Wrapper for Voila element, i.e. interference-context, with explicit Viper argument declarations.
     * id is the Voila instance the Voila element is associated with, i.e. region instance for an interference-context.
     */
   case class ManagedObject[T](id: T, decls: Vector[vpr.LocalVarDecl])
 
-  /**
-    * Mapping strategy from Voila element arguments to actual arguments of Viper member used in the encoding.
+  /** Mapping strategy from Voila element arguments to actual arguments of Viper member used in the encoding.
     * Example: Interference-context heap-function for Region Cell with arguments (id: Ref, x: Ref)
     *          uses extra versions, resulting in the actual arguments (id: Ref, x: Ref, version: Int)
     */
   trait BaseSelector[T] {
-
     /** object arguments to actual arguments. */
     def selectArgs(id: T, args: Vector[vpr.Exp]): Vector[vpr.Exp]
 
-    /** object to actual arguemnts declarations. */
+    /** object to actual arguments declarations. */
     def formalArgSelection(obj: ManagedObject[T]): Vector[vpr.LocalVarDecl] = {
-
       val vars = obj.decls map (_.localVar)
       val selectedVars = selectArgs(obj.id, vars)
 
       selectedVars.zipWithIndex map {
         case (v: vpr.LocalVar, _) => vpr.LocalVarDecl(v.name, v.typ)()
-        case (e, i)                   => vpr.LocalVarDecl(s"$$p$i", e.typ)()
+        case (e, i) => vpr.LocalVarDecl(s"$$p$i", e.typ)()
       }
     }
   }
 
   /** Argument selector for Voila element, i.e. interference-context with versions. */
   trait FrontSelector[R] extends BaseSelector[R]
-  /** Argument selector for sub-parts of an element encoding, i.e. selector for footprint predicate of interference-context. */
+
+  /** Argument selector for sub-parts of an element encoding, i.e. selector for footprint predicate
+    * of interference-context.
+    */
   trait SubSelector[R] extends BaseSelector[R]
 
   trait EmptySelector[R] extends BaseSelector[R] {
@@ -92,11 +89,10 @@ object TranslatorUtils {
     override def selectArgs(id: R, args: Vector[vpr.Exp]): Vector[vpr.Exp] = args.tail
   }
 
-  /** Manager for Viper member associated to a Voila element, i.e. footprint predicates for interference-contexts. */
-  trait BasicManager[T, M <: vpr.Declaration, A <: vpr.Exp] {
-
-    this: BaseSelector[T] =>
-
+  /** Manager for Viper member associated to a Voila element, i.e. footprint predicates for
+    * interference-contexts.
+    */
+  trait BasicManager[T, M <: vpr.Declaration, A <: vpr.Exp] { this: BaseSelector[T] =>
     val name: String
 
     protected def idToName(id: T): String
@@ -110,21 +106,22 @@ object TranslatorUtils {
     protected val collectedMember = mutable.Map.empty[String, M]
 
     def collectMember(obj: ManagedObject[T]): Vector[vpr.Declaration] = {
-      val (m,ds) = toMember(obj)
+      val (m, ds) = toMember(obj)
       collectedMember += idToName(obj.id) -> m
       m +: ds
     }
 
-    /** Additional Viper declarations required for the encoding, i.e. domain declaration for triggers. */
+    /** Additional Viper declarations required for the encoding, i.e. domain declaration for
+      * triggers.
+      */
     def collectGlobalDeclarations: Vector[vpr.Declaration] = Vector.empty
 
     /** Application of the Viper member. */
     def application(id: T, args: Vector[vpr.Exp]): A
   }
 
-  trait BasicManagerWithSimpleApplication[T, M <: vpr.Declaration, A <: vpr.Exp] extends BasicManager[T, M, A] {
-
-    this: BaseSelector[T] =>
+  trait BasicManagerWithSimpleApplication[T, M <: vpr.Declaration, A <: vpr.Exp]
+      extends BasicManager[T, M, A] { this: BaseSelector[T] =>
 
     def getID(objName: String): T
 
@@ -133,13 +130,14 @@ object TranslatorUtils {
   }
 
   /** Specialized manager for footprint predicates. */
-  trait FootprintManager[T] extends BasicManager[T, vpr.Predicate, vpr.PredicateAccessPredicate] {
-
-    this: BaseSelector[T] =>
+  trait FootprintManager[T]
+      extends BasicManager[T, vpr.Predicate, vpr.PredicateAccessPredicate] { this: BaseSelector[T] =>
 
     override protected def memberName(objName: String): String = s"${objName}_${name}_fp"
 
-    override protected def toMember(obj: ManagedObject[T]): (vpr.Predicate, Vector[vpr.Declaration]) =
+    override protected def toMember(obj: ManagedObject[T])
+                                   : (vpr.Predicate, Vector[vpr.Declaration]) = {
+
       (vpr.Predicate(
           name = memberName(idToName(obj.id)),
           formalArgs = formalArgSelection(obj),
@@ -147,24 +145,32 @@ object TranslatorUtils {
         )(),
         Vector.empty
       )
+    }
 
     override def application(id: T, args: Vector[vpr.Exp]): vpr.PredicateAccessPredicate =
       accessWithPermission(id, args, vpr.FullPerm()())
 
-    protected def application(id: T, args: Vector[vpr.Exp], label: vpr.Label): vpr.PredicateAccessPredicate =
-      accessWithPermission(id, args, oldPerm(id, args, label))
+    protected def application(id: T, args: Vector[vpr.Exp], label: vpr.Label)
+                             : vpr.PredicateAccessPredicate = {
 
-    protected def access(id: T, args: Vector[vpr.Exp]): vpr.PredicateAccess =
+      accessWithPermission(id, args, oldPerm(id, args, label))
+    }
+
+    protected def access(id: T, args: Vector[vpr.Exp]): vpr.PredicateAccess = {
       vpr.PredicateAccess(
         predicateName = memberName(idToName(id)),
         args = selectArgs(id, args)
       )()
+    }
 
-    protected def accessWithPermission(id: T, args: Vector[vpr.Exp], perm: vpr.Exp): vpr.PredicateAccessPredicate =
+    protected def accessWithPermission(id: T, args: Vector[vpr.Exp], perm: vpr.Exp)
+                                      : vpr.PredicateAccessPredicate = {
+
       vpr.PredicateAccessPredicate(
         access(id, args),
         perm
       )()
+    }
 
     def oldPerm(id: T, args: Vector[vpr.Exp], label: vpr.Label): vpr.Exp =
       vpr.LabelledOld(currentPerm(id, args), label.name)()
@@ -231,7 +237,6 @@ object TranslatorUtils {
 
   /** Specialized footprint manager for predicates where permission is always held. */
   trait LavishFootprintManager[T] extends FootprintManager[T] {
-
     this: BaseSelector[T] =>
 
     override def initialize(id: T): vpr.Stmt = {
@@ -243,7 +248,7 @@ object TranslatorUtils {
         vpr.PredicateAccessPredicate(
           vpr.PredicateAccess(
             predicateName = memberName(idToName(id)),
-            args = vars // no selector
+            args = vars /* No selector */
           )(),
           vpr.FullPerm()()
         )()
@@ -265,13 +270,10 @@ object TranslatorUtils {
         Vector.empty
       )()
     }
-
   }
 
   /** Specialized footprint manager for predicates where permission is held only when necessary. */
-  trait FrugalFootprintManager[T] extends FootprintManager[T] {
-    this: BaseSelector[T] =>
-
+  trait FrugalFootprintManager[T] extends FootprintManager[T] { this: BaseSelector[T] =>
     override def initialize(id: T): Stmt =
       ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no init required", "")))
 
@@ -284,16 +286,14 @@ object TranslatorUtils {
   }
 
   /** Specialized manager for Viper functions (heap-depended and domain). */
-  trait FunctionManager[T, M <: vpr.Declaration, A <: vpr.Exp] extends BasicManager[T, M, A] {
-
-    this: BaseSelector[T] =>
+  trait FunctionManager[T, M <: vpr.Declaration, A <: vpr.Exp]
+      extends BasicManager[T, M, A] { this: BaseSelector[T] =>
 
     def functionTyp(obj: T): vpr.Type
   }
 
-  trait DomainFunctionManager[T] extends FunctionManager[T, vpr.DomainFunc, vpr.DomainFuncApp] {
-
-    this: BaseSelector[T] =>
+  trait DomainFunctionManager[T]
+      extends FunctionManager[T, vpr.DomainFunc, vpr.DomainFuncApp] { this: BaseSelector[T] =>
 
     override protected def memberName(objName: String): String = s"${objName}_${name}_df"
 
@@ -311,31 +311,34 @@ object TranslatorUtils {
 
     override def collectGlobalDeclarations: Vector[Declaration] = Vector(domain)
 
-    override protected def toMember(obj: ManagedObject[T]): (vpr.DomainFunc, Vector[vpr.Declaration]) =
-      (
-        vpr.DomainFunc(
+    override protected def toMember(obj: ManagedObject[T])
+                                   : (vpr.DomainFunc, Vector[vpr.Declaration]) = {
+
+      (vpr.DomainFunc(
           name = memberName(idToName(obj.id)),
           formalArgs = formalArgSelection(obj),
           typ = functionTyp(obj.id)
         )(domainName = domainName),
-        Vector.empty
-      )
+       Vector.empty)
+    }
 
-    override def application(id: T, args: Vector[vpr.Exp]): vpr.DomainFuncApp =
+    override def application(id: T, args: Vector[vpr.Exp]): vpr.DomainFuncApp = {
       vpr.DomainFuncApp(
         func = collectedMember(idToName(id)),
         args = selectArgs(id, args),
         typVarMap = Map.empty
       )()
+    }
   }
 
   /** Constraining strategy for Voila resources, i.e. next-possible-states for region states. */
   case class Constraint(constrain: Vector[Exp] => vpr.Exp => TranslatorUtils.QuantifierWrapper.WrapperExt,
                         skolemization: Option[Vector[Exp] => vpr.Stmt => vpr.Stmt] = None)
 
-  /** Wrapper for Viper encodings associated to a Voila element, i.e. encoding for interference-contexts. */
+  /** Wrapper for Viper encodings associated to a Voila element, i.e. encoding for
+    * interference-contexts.
+    */
   trait FrontResource[T] {
-
     def application(id: T, args: Vector[vpr.Exp]): vpr.Exp
 
     def applyTrigger(id: T, args: Vector[vpr.Exp]): Vector[vpr.Trigger]
@@ -345,7 +348,9 @@ object TranslatorUtils {
     def inhaleFootprint(id: T, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt
 
     /** Havocs resource and then constrains it according to the supplied constraint. */
-    def select(id: T, constraint: Constraint, label: vpr.Label)(wrapper: TranslatorUtils.QuantifierWrapper.Wrapper): vpr.Stmt = {
+    def select(id: T, constraint: Constraint, label: vpr.Label)
+              (wrapper: TranslatorUtils.QuantifierWrapper.Wrapper)
+              : vpr.Stmt = {
 
       val args = wrapper.args
 
@@ -370,11 +375,13 @@ object TranslatorUtils {
       ViperAstUtils.sanitizeBoundVariableNames(result)
     }
 
-    /**
-      * Havocs resource and then constrains it according to the supplied constraint relative to a reference point.
-      * Is used inside while loops, for example to constrain the new state respective to the state before the loop.
+    /** Havocs resource and then constrains it according to the supplied constraint relative to a
+      * reference point. Is used inside while loops, for example to constrain the new state
+      * respective to the state before the loop.
       */
-    def refSelect(id: T, constraint: Constraint, label: vpr.Label)(wrapper: TranslatorUtils.QuantifierWrapper.Wrapper): vpr.Stmt = {
+    def refSelect(id: T, constraint: Constraint, label: vpr.Label)
+                 (wrapper: TranslatorUtils.QuantifierWrapper.Wrapper)
+                 : vpr.Stmt = {
 
       val args = wrapper.args
 
@@ -402,13 +409,14 @@ object TranslatorUtils {
 
   /** Specialized front resource where permission is only held when necessary.  */
   trait FrugalFrontResource[T] extends FrontResource[T] {
-
     def inhaleFootprint(t: T)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt
 
     def exhaleFootprint(t: T)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt
 
     /** Inhales resource and then constrains it according to the supplied constraint. */
-    def freshSelect(id: T, constraint: Constraint)(wrapper: TranslatorUtils.QuantifierWrapper.Wrapper): vpr.Stmt = {
+    def freshSelect(id: T, constraint: Constraint)
+                   (wrapper: TranslatorUtils.QuantifierWrapper.Wrapper)
+                   : vpr.Stmt = {
 
       val args = wrapper.args
 
@@ -435,9 +443,9 @@ object TranslatorUtils {
   }
 
   /** Specialized manager for heap-dependent functions. */
-  trait HeapFunctionManager[T] extends FunctionManager[T, vpr.Function, vpr.FuncApp] with FrugalFrontResource[T] {
-
-    this: BaseSelector[T] =>
+  trait HeapFunctionManager[T]
+      extends FunctionManager[T, vpr.Function, vpr.FuncApp]
+         with FrugalFrontResource[T] { this: BaseSelector[T] =>
 
     override protected def memberName(objName: String): String = s"${objName}_${name}_hf"
 
@@ -450,7 +458,9 @@ object TranslatorUtils {
     protected def body(obj: ManagedObject[T]): (Option[vpr.Exp], Option[vpr.DecClause]) =
       (None, None)
 
-    override protected def toMember(obj: ManagedObject[T]): (vpr.Function, Vector[vpr.Declaration]) = {
+    override protected def toMember(obj: ManagedObject[T])
+                                   : (vpr.Function, Vector[vpr.Declaration]) = {
+
       val decls = formalArgSelection(obj)
       val vars = decls map (_.localVar)
 
@@ -475,11 +485,12 @@ object TranslatorUtils {
       )
     }
 
-    override def application(id: T, args: Vector[vpr.Exp]): vpr.FuncApp =
+    override def application(id: T, args: Vector[vpr.Exp]): vpr.FuncApp = {
       vpr.FuncApp(
         func = collectedMember(idToName(id)),
         args = selectArgs(id, args)
       )()
+    }
 
     def triggerApplication(id: T, args: Vector[vpr.Exp]): vpr.Exp =
       triggerManager.application(id, selectArgs(id, args))
@@ -515,9 +526,7 @@ object TranslatorUtils {
       footprintManager.assertNoFootprint(id)(wrapper.transform(selectArgs(id,_)))
   }
 
-
   object QuantifierWrapper {
-
     /** Wrapper for quantified expression bodies. Can contain additional quantified variables. */
     sealed trait WrapperExt {
       def combine(func: vpr.Exp => WrapperExt): WrapperExt
@@ -536,20 +545,31 @@ object TranslatorUtils {
 
     /** Wrapper for quantified expressions. */
     sealed trait Wrapper {
-
       /** Quantified variables. */
       def args: Vector[vpr.Exp]
 
       /** Combines wrapper with a wrapper extension. */
-      def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp
+      def wrapExt(ext: WrapperExt,
+                  triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = _ => Vector.empty)
+                 : vpr.Exp
 
-      def wrap(exp: vpr.Exp, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp =
+      def wrap(exp: vpr.Exp,
+               triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = _ => Vector.empty)
+              : vpr.Exp = {
+
         wrapExt(UnitWrapperExt(exp), triggers)
+      }
 
-      def wrapExtWithoutCondition(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp
+      def wrapExtWithoutCondition(ext: WrapperExt,
+                                  triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = _ => Vector.empty)
+                                 : vpr.Exp
 
-      def wrapWithoutCondition(exp: vpr.Exp, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = xs => Vector.empty): vpr.Exp =
+      def wrapWithoutCondition(exp: vpr.Exp,
+                               triggers: Vector[vpr.Exp] => Vector[vpr.Trigger] = _ => Vector.empty)
+                              : vpr.Exp = {
+
         wrapExtWithoutCondition(UnitWrapperExt(exp), triggers)
+      }
 
       /** Transforms quantified variables. */
       def transform(trans: Vector[vpr.Exp] => Vector[vpr.Exp]): Wrapper
@@ -557,31 +577,44 @@ object TranslatorUtils {
 
     /** Quantified expression with no quantified variables. */
     case class UnitWrapper(args: Vector[vpr.Exp]) extends Wrapper {
-      override def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = ext match {
-        case UnitWrapperExt(e) => e
-        case QuantWrapperExt(ds, e) => vpr.Forall(ds, triggers(args ++: (ds map (_.localVar))), e)(e.pos, e.info, e.errT)
+      override def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = {
+        ext match {
+          case UnitWrapperExt(e) => e
+          case QuantWrapperExt(ds, e) =>
+            vpr.Forall(ds, triggers(args ++: (ds map (_.localVar))), e)(e.pos, e.info, e.errT)
+        }
       }
 
       override def transform(trans: Vector[Exp] => Vector[Exp]): Wrapper =
         UnitWrapper(trans(args))
 
-      override def wrapExtWithoutCondition(exp: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = wrapExt(exp, triggers)
+      override def wrapExtWithoutCondition(exp: WrapperExt,
+                                           triggers: Vector[vpr.Exp] => Vector[vpr.Trigger])
+                                          : Exp = wrapExt(exp, triggers)
     }
 
-    case class QuantWrapper(decls: Vector[vpr.LocalVarDecl], args: Vector[vpr.Exp], condition: vpr.Exp) extends Wrapper {
-      override def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = ext match {
-        case UnitWrapperExt(e) => vpr.Forall(decls, triggers(decls map (_.localVar)), vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
-        case QuantWrapperExt(ds, e) => vpr.Forall(decls ++: ds, triggers((decls ++: ds) map (_.localVar)), vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
+    case class QuantWrapper(decls: Vector[vpr.LocalVarDecl],
+                            args: Vector[vpr.Exp],
+                            condition: vpr.Exp)
+        extends Wrapper {
+
+      override def wrapExt(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger])
+                          : Exp = {
+        ext match {
+          case UnitWrapperExt(e) =>
+            vpr.Forall(decls, triggers(decls map (_.localVar)), vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
+          case QuantWrapperExt(ds, e) =>
+            vpr.Forall(decls ++: ds, triggers((decls ++: ds) map (_.localVar)), vpr.Implies(condition, e)())(e.pos, e.info, e.errT)
+        }
       }
 
       override def transform(trans: Vector[Exp] => Vector[Exp]): Wrapper = {
-
         val declVars = decls map (_.localVar)
         val transedDeclVars = trans(declVars)
 
         val transedDecls = transedDeclVars.zipWithIndex map {
           case (v: vpr.LocalVar, _) => vpr.LocalVarDecl(v.name, v.typ)()
-          case (e, i)                   => vpr.LocalVarDecl(s"$$p$i", e.typ)()
+          case (e, i) => vpr.LocalVarDecl(s"$$p$i", e.typ)()
         }
 
         if (transedDecls.nonEmpty) {
@@ -591,11 +624,15 @@ object TranslatorUtils {
         }
       }
 
-      override def wrapExtWithoutCondition(ext: WrapperExt, triggers: Vector[vpr.Exp] => Vector[vpr.Trigger]): Exp = ext match {
-        case UnitWrapperExt(e) => vpr.Forall(decls, triggers(decls map (_.localVar)), e)(e.pos, e.info, e.errT)
-        case QuantWrapperExt(ds, e) => vpr.Forall(decls ++: ds, triggers((decls ++: ds) map (_.localVar)), e)(e.pos, e.info, e.errT)
+      override def wrapExtWithoutCondition(ext: WrapperExt,
+                                           triggers: Vector[vpr.Exp] => Vector[vpr.Trigger])
+                                          : Exp = ext match {
+
+        case UnitWrapperExt(e) =>
+          vpr.Forall(decls, triggers(decls map (_.localVar)), e)(e.pos, e.info, e.errT)
+        case QuantWrapperExt(ds, e) =>
+          vpr.Forall(decls ++: ds, triggers((decls ++: ds) map (_.localVar)), e)(e.pos, e.info, e.errT)
       }
     }
-
   }
 }

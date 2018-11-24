@@ -7,24 +7,17 @@
 package viper.voila.translator
 
 import viper.silver.ast.{Exp, Label, Stmt, Trigger}
-import viper.silver.ast.utility.Rewriter.Traverse
-
-import scala.collection.breakOut
 import viper.silver.{ast => vpr}
-import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, RegionStateError, UnfoldError}
 import viper.voila.translator.TranslatorUtils.QuantifierWrapper.WrapperExt
 import viper.voila.translator.TranslatorUtils.{QuantifierWrapper, Constraint}
 
-
 trait StabilizationComponent { this: PProgramToViperTranslator =>
-
   object sequenceStabilizeSubject extends TranslatorUtils.Subject[Int] {
     private var version = 0
 
-    def nextVersion: Unit = {
+    def nextVersion(): Unit = {
       version += 1
       notifyObservers(version)
     }
@@ -81,14 +74,14 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   private def beforeNonAtomic(): Unit = {
-    sequenceStabilizeSubject.nextVersion
+    sequenceStabilizeSubject.nextVersion()
   }
 
-  private def afterNonAtomic(preHavocLabel: vpr.Label): Unit = {
+  private def afterNonAtomic(preHavocLabel: vpr.Label): Unit = {} /* TODO: Remove? */
 
-  }
+  def nonAtomicStabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*)
+                                       : vpr.Stmt = {
 
-  def nonAtomicStabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
     val stabilizationMessage =
       s"Stabilising regions ${regions.map(_._1.id.name).mkString(",")} ($reason)"
 
@@ -146,11 +139,13 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     surroundWithSectionComments(stabilizationMessage, result)
   }
 
-  def inferContextSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
+  def inferContextSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*)
+                                 : vpr.Stmt = {
+
     val stabilizationMessage =
       s"Inferring interference Context ${regions.map(_._1.id.name).mkString(",")} ($reason)"
 
-    sequenceStabilizeSubject.nextVersion
+    sequenceStabilizeSubject.nextVersion()
 
     outputDebugInfo(stabilizationMessage)
 
@@ -179,7 +174,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     val stabilizationMessage =
       s"Inferring interference context ${regions.map(_.id.name).mkString(",")} ($reason)"
 
-    sequenceStabilizeSubject.nextVersion
+    sequenceStabilizeSubject.nextVersion()
 
     outputDebugInfo(stabilizationMessage)
 
@@ -203,21 +198,29 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   private def stabilizeSingleInstance(region: PRegion,
                                        args: Vector[vpr.Exp],
                                        preHavocLabel: vpr.Label)
-  : vpr.Stmt =
+                                     : vpr.Stmt = {
+
     stabilizeSingleRegion(region, singleWrapper(args), preHavocLabel)
+  }
 
   private def stabilizeAllInstances(region: PRegion,
                                     preHavocLabel: vpr.Label)
-  : vpr.Stmt =
-    stabilizeSingleRegion(region, regionAllWrapper(region, dfltPrePermissions(preHavocLabel)), preHavocLabel)
+                                   : vpr.Stmt = {
+
+    stabilizeSingleRegion(
+      region,
+      regionAllWrapper(region, dfltPrePermissions(preHavocLabel)),
+      preHavocLabel)
+  }
 
   private def stabilizeSingleRegion(region: PRegion,
                                     wrapper: TranslatorUtils.QuantifierWrapper.Wrapper,
                                     preHavocLabel: vpr.Label)
-  : vpr.Stmt = {
-    val prePermissions = dfltPrePermissions(preHavocLabel)(_)
+                                   : vpr.Stmt = {
+
+//    val prePermissions = dfltPrePermissions(preHavocLabel)(_)
     val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
-    val postRegionState = dfltPostRegionState(region)(_)
+//    val postRegionState = dfltPostRegionState(region)(_)
     val actionFilter = dfltActionFilter(region)(_)
 
     val resource = RegionStateFrontResourceWrapper
@@ -229,21 +232,29 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   private def stabilizeAndInferContextSingleInstance(region: PRegion,
                                                      args: Vector[vpr.Exp],
                                                      preHavocLabel: vpr.Label)
-  : vpr.Stmt =
+                                                    : vpr.Stmt = {
+
     stabilizeAndInferContextSingleRegion(region, singleWrapper(args), preHavocLabel)
+  }
 
   private def stabilizeAndInferContextAllInstances(region: PRegion,
                                                    preHavocLabel: vpr.Label)
-  : vpr.Stmt =
-    stabilizeAndInferContextSingleRegion(region, regionAllWrapper(region, dfltPrePermissions(preHavocLabel)), preHavocLabel)
+                                                  : vpr.Stmt = {
+
+    stabilizeAndInferContextSingleRegion(
+      region,
+      regionAllWrapper(region, dfltPrePermissions(preHavocLabel)),
+      preHavocLabel)
+  }
 
   private def stabilizeAndInferContextSingleRegion(region: PRegion,
                                                    wrapper: TranslatorUtils.QuantifierWrapper.Wrapper,
                                                    preHavocLabel: vpr.Label)
-  : vpr.Stmt = {
+                                                  : vpr.Stmt = {
+
     val prePermissions = dfltPrePermissions(preHavocLabel)(_)
     val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
-    val postRegionState = dfltPostRegionState(region)(_)
+//    val postRegionState = dfltPostRegionState(region)(_)
     val actionFilter = dfltActionFilter(region)(_)
 
     val resource1 = interferenceSetFunctions
@@ -266,20 +277,27 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   private def inferContextSingleInstance(region: PRegion,
-                                                     args: Vector[vpr.Exp],
-                                                     preHavocLabel: vpr.Label)
-  : vpr.Stmt =
-    inferContextSingleRegion(region, singleWrapper(args), preHavocLabel)
+                                         args: Vector[vpr.Exp],
+                                         preHavocLabel: vpr.Label)
+                                        : vpr.Stmt = {
 
-  private def inferContextAllInstances(region: PRegion,
-                                                   preHavocLabel: vpr.Label)
-  : vpr.Stmt =
-    inferContextSingleRegion(region, regionAllWrapper(region, dfltPrePermissions(preHavocLabel)), preHavocLabel)
+    inferContextSingleRegion(region, singleWrapper(args), preHavocLabel)
+  }
+
+  private def inferContextAllInstances(region: PRegion, preHavocLabel: vpr.Label)
+                                       : vpr.Stmt = {
+
+    inferContextSingleRegion(
+      region,
+      regionAllWrapper(region, dfltPrePermissions(preHavocLabel)),
+      preHavocLabel)
+  }
 
   private def inferContextSingleRegion(region: PRegion,
                                        wrapper: TranslatorUtils.QuantifierWrapper.Wrapper,
                                        preHavocLabel: vpr.Label)
-  : vpr.Stmt = {
+                                      : vpr.Stmt = {
+
     val prePermissions = dfltPrePermissions(preHavocLabel)(_)
     val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
     val actionFilter = dfltActionFilter(region)(_)
@@ -302,21 +320,22 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
   private def dfltActionFilter(region: PRegion)(action: PAction): Boolean = true
 
-  private def dfltPostRegionState(region: PRegion)(args: Vector[vpr.Exp]): vpr.Exp =
-    vpr.FuncApp(regionStateFunction(region), args)()
+//  private def dfltPostRegionState(region: PRegion)(args: Vector[vpr.Exp]): vpr.Exp =
+//    vpr.FuncApp(regionStateFunction(region), args)()
 
-  private def dfltPreRegionState(region: PRegion, preLabel: vpr.Label)(args: Vector[vpr.Exp]): vpr.Exp =
+  private def dfltPreRegionState(region: PRegion, preLabel: vpr.Label)(args: Vector[vpr.Exp])
+                                : vpr.Exp = {
+
     vpr.LabelledOld(vpr.FuncApp(regionStateFunction(region), args)(), preLabel.name)()
+  }
 
   private def dfltPrePermissions(preLabel: vpr.Label)(exp: vpr.Exp): vpr.Exp =
     vpr.LabelledOld(exp, preLabel.name)()
 
-
-
   private def skolemizeCodeForRegionTransition(region: PRegion,
                                                skolemArgs: Vector[vpr.Exp],
                                                codeForRegionTransition: vpr.Stmt)
-  : vpr.Stmt = {
+                                              : vpr.Stmt = {
 
     val vprPreliminaryResult = codeForRegionTransition
 
@@ -375,7 +394,6 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
             )()
           ))())
 
-
     override def havoc(id: PRegion, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): Stmt = {
       val vprRegionArguments = wrapper.args
 
@@ -385,7 +403,6 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
           args = vprRegionArguments,
           predicateName = id.id.name
         )()
-
 
       /* π */
       val vprPreHavocRegionPermissions =
@@ -420,7 +437,9 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
       )()
     }
 
-    override def inhaleFootprint(id: PRegion, label: Label)(wrapper: QuantifierWrapper.Wrapper): Stmt = {
+    override def inhaleFootprint(id: PRegion, label: Label)(wrapper: QuantifierWrapper.Wrapper)
+                                : Stmt = {
+
       val vprRegionArguments = wrapper.args
 
       /* R(as) */
@@ -429,7 +448,6 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
           args = vprRegionArguments,
           predicateName = id.id.name
         )()
-
 
       /* π */
       val vprPreHavocRegionPermissions =
@@ -454,11 +472,11 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     }
   }
 
-
   def singleWrapper(args: Vector[vpr.Exp]): TranslatorUtils.QuantifierWrapper.Wrapper =
     TranslatorUtils.QuantifierWrapper.UnitWrapper(args)
 
-  def regionAllWrapper(region: PRegion, prePermissions: vpr.Exp => vpr.Exp): TranslatorUtils.QuantifierWrapper.Wrapper = {
+  def regionAllWrapper(region: PRegion, prePermissions: vpr.Exp => vpr.Exp)
+                      : TranslatorUtils.QuantifierWrapper.Wrapper = {
 
     /* Arguments as for region R */
     val vprRegionArgumentDecls: Vector[vpr.LocalVarDecl] = region.formalInArgs.map(translate)
@@ -484,21 +502,16 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
         vprPreHavocRegionPermissions
       )()
 
-    TranslatorUtils.QuantifierWrapper.QuantWrapper(vprRegionArgumentDecls, vprRegionArguments, vprIsRegionAccessible)
+    TranslatorUtils.QuantifierWrapper.QuantWrapper(
+      vprRegionArgumentDecls, vprRegionArguments, vprIsRegionAccessible)
   }
-
-
-
-
-
 
   def possibleNextStateConstraint(region: PRegion,
                                   actionFilter: PAction => Boolean,
                                   preRegionState: Vector[vpr.Exp] => vpr.Exp)
-  : Constraint = {
+                                 : Constraint = {
 
     def constrain(args: Vector[Exp])(target: Exp): WrapperExt = {
-
       val vprRegionArguments = args
 
       /* First element a_0 of region arguments as */
@@ -568,8 +581,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     Constraint(constrain, Some(args => s => skolemizeCodeForRegionTransition(region, args, s)))
   }
 
-
   trait SequenceStabelizeVersionedSelector[T] extends TranslatorUtils.VersionedSelector[T] {
-    sequenceStabilizeSubject.addObserver(this) // TODO: probably a very bad idea -> data races
+    sequenceStabilizeSubject.addObserver(this) /* TODO: Probably a very bad idea -> data races */
   }
 }

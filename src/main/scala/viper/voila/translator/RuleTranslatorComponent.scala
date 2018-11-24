@@ -6,13 +6,10 @@
 
 package viper.voila.translator
 
-import viper.silver.ast.{DomainFuncApp, Exp, Type}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.voila.backends.ViperAstUtils
-import viper.voila.translator.TranslatorUtils._
 
 trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
   protected var currentlyOpenRegions: List[(PRegion, Vector[PExpression], vpr.Label)] = List.empty
@@ -22,7 +19,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = makeAtomic.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, regionInArgs, regionIntArgsConstraints, regionOutArgsConstraints) =
+    val (region, regionInArgs, _, regionOutArgsConstraints) =
       getAndTranslateRegionPredicateDetails(makeAtomic.regionPredicate)
 
     assert(
@@ -235,7 +232,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionArgs = updateRegion.regionPredicate.arguments
     val regionId = regionArgs.head.asInstanceOf[PIdnExp].id
 
-    val (region, vprInArgs, vprInArgsConstraints, vprOutArgsConstraints) =
+    val (region, vprInArgs, _, vprOutArgsConstraints) =
       getAndTranslateRegionPredicateDetails(updateRegion.regionPredicate)
 
       assert(

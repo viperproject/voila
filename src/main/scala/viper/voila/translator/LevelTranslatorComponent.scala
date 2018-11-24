@@ -7,16 +7,8 @@
 package viper.voila.translator
 
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
-
-import scala.collection.breakOut
 import viper.silver.{ast => vpr}
-import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
-import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
-import viper.voila.reporting.{FoldError, InsufficientRegionPermissionError, InterferenceError, PreconditionError, RegionStateError, UnfoldError}
-import viper.voila.translator.TranslatorUtils.QuantifierWrapper.WrapperExt
-import viper.voila.translator.TranslatorUtils.{QuantifierWrapper, Constraint}
-
 
 trait LevelTranslatorComponent { this: PProgramToViperTranslator =>
 

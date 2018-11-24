@@ -7,11 +7,9 @@
 package viper.voila.backends
 
 import viper.silver.ast._
-
 import scala.collection.mutable
 
 class ViperPreamble(preamble: Program) {
-
   def generatedDomains: Seq[Domain] =
     tuples.generatedDomains
 
@@ -19,6 +17,8 @@ class ViperPreamble(preamble: Program) {
     val int: FuncApp = FuncApp(preamble.findFunction("IntSet"), Vector.empty)()
     val nat: FuncApp = FuncApp(preamble.findFunction("NatSet"), Vector.empty)()
   }
+
+  /* TODO: Consolidate terminology: prefer "n-tuples" over "n-pairs" */
 
   object tuples {
     private var _generatedDomains: List[Domain] = List.empty
@@ -37,17 +37,15 @@ class ViperPreamble(preamble: Program) {
       val typVarMap = typeVars.zip(typeVars).toMap
 
       val domainTyp = DomainType(domainName, typVarMap)(typeVars)
-      val domainTypVar = TypeVar("p1")
       val domainDecl = LocalVarDecl("p", domainTyp)()
       val domainVar = domainDecl.localVar
 
       val tupleFunc = DomainFunc(s"tuple$arity",decls, domainTyp)(domainName = domainName)
       val getFuncs = 0.until(arity) map (ix =>
-        DomainFunc(s"get${ix}of${arity}", Seq(domainDecl), typeVars(ix))(domainName = domainName)
+        DomainFunc(s"get${ix}of$arity", Seq(domainDecl), typeVars(ix))(domainName = domainName)
       )
 
       val getOverTupleAxiom = {
-
         val nPairApp = DomainFuncApp(tupleFunc, vars, typVarMap)()
         val eqs = 0.until(arity) map {ix =>
           EqCmp(
@@ -71,7 +69,6 @@ class ViperPreamble(preamble: Program) {
       }
 
       val tupleOverGetAxiom = {
-
         val nGetApp = getFuncs map (f =>
           DomainFuncApp(f, Seq(domainVar), typVarMap)()
         )
@@ -114,7 +111,8 @@ class ViperPreamble(preamble: Program) {
     def get(index: Int, arity: Int): DomainFunc =
       getters.getOrElse((index, arity), {addNPairDomain(arity); getters((index, arity))})
 
-    def typeVarMap(ts: Vector[Type]) = domain(ts.length).typVars.zip(ts).toMap
+    def typeVarMap(ts: Vector[Type]): Map[TypeVar, Type] =
+      domain(ts.length).typVars.zip(ts).toMap
   }
 
   object maps {
@@ -130,6 +128,7 @@ class ViperPreamble(preamble: Program) {
     val disjoint: DomainFunc = preamble.findDomainFunction("Map_disjoint")
     val union: DomainFunc = preamble.findDomainFunction("Map_union")
 
-    def typeVarMap(t1: Type, t2: Type) = Map(domain.typVars(0) -> t1, domain.typVars(1) -> t2)
+    def typeVarMap(t1: Type, t2: Type): Map[TypeVar, Type] =
+      Map(domain.typVars.head -> t1, domain.typVars(1) -> t2)
   }
 }

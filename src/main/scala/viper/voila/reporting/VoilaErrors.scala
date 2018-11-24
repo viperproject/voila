@@ -54,7 +54,7 @@ sealed trait VerificationError extends VoilaError {
 //  }
 }
 
-// TODO: Remove dependency on global state (for positions)
+/* TODO: Remove dependency on global state (for positions) */
 sealed abstract class AbstractVerificationError extends VerificationError {
   lazy val position: Position = VoilaGlobalState.positions.getStart(offendingNode).get
 
@@ -457,11 +457,11 @@ case class MissingRegionStateChangeError(offendingNode: PPredicateExp, detail: O
 /** Do not use this error as the main error, only append it to one of the proper errors
   * defined above.
   *
-  * TODO: 1. Don't make AdditionalErrorClarification extend AbstractVerificationError
+  * TODO: 1. Don't make [[AdditionalErrorClarification]] extend [[AbstractVerificationError]]
   *       2. Change proper errors above s.t. field detail is of type
-  *          Option[Either[VerificationError, AdditionalErrorClarification]]
+  *          `Option[Either[VerificationError,AdditionalErrorClarification]]`
   *       3. Change AdditionalErrorClarification.detail to be of type
-  *          Option[AdditionalErrorClarification]
+  *          `Option[AdditionalErrorClarification]`
   */
 case class AdditionalErrorClarification(localMessage: String,
                                         offendingNode: PAstNode,
