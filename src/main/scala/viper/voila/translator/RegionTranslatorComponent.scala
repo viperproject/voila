@@ -237,7 +237,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def maybeRegionInterpretationStabilityCheck(region: PRegion): Option[vpr.Method] = {
-    if (config.stableConditionsCheck()) {
+    if (config.enableStabilityChecks()) {
       Some(regionInterpretationStabilityCheck(region))
     } else {
       None
@@ -297,7 +297,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def maybeRegionActionIndividualTransitivityCheck(region: PRegion): Vector[vpr.Method] = {
-    if(config.transitiveActionsCheck()) {
+    if(config.enableTransitivityChecks()) {
       region.actions.zipWithIndex.map { case (a,i) =>
         regionActionIndividualTransitivityCheck(region,a,i.toString)
       }
@@ -307,7 +307,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def maybeRegionActionsTransitivityCheck(region: PRegion): Vector[vpr.Method] = {
-    if(config.transitiveActionsCheck()) {
+    if(config.enableTransitivityChecks()) {
       Vector(regionActionTransitivityCheck(region))
     } else {
       Vector.empty

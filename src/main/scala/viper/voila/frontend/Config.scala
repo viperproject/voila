@@ -61,21 +61,17 @@ class Config(arguments: Seq[String])
     descr = "A space-separated list of procedures to verify",
     noshort = true)
 
-  val stableConditionsCheck: ScallopOption[Boolean] = toggle(
-    name = "stabilityCheck",
-    descrYes = "Enables stability checks of pre-/postconditions, region interpretations, and invariants",
-    descrNo = "Disables stability checks of pre-/postconditions, region interpretations, and invariants",
+  val enableStabilityChecks: ScallopOption[Boolean] = opt[Boolean](
+    name = "enableStabilityChecks",
+    descr = "Enables stability checks of pre-/postconditions, region interpretations and invariants",
     default = Some(false),
-    noshort = true
-  )
+    noshort = true)
 
-  val transitiveActionsCheck: ScallopOption[Boolean] = toggle(
-    name = "transitivityCheck",
-    descrYes = "Enables transitivity checks of actions",
-    descrNo = "Disables transitivity checks of actions",
+  val enableTransitivityChecks: ScallopOption[Boolean] = opt[Boolean](
+    name = "enableTransitivityChecks",
+    descr = "Enables transitivity checks of actions",
     default = Some(false),
-    noshort = true
-  )
+    noshort = true)
 
   /*
    * Exception handling
