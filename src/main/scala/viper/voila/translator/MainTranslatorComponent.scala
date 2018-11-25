@@ -120,6 +120,36 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )
   }
 
+  def havocAllInstancesMethods(tree: VoilaTree): Vector[vpr.Method] = {
+    val method: String => vpr.Method =
+      suffix =>
+        vpr.Method(
+          name = s"havoc_all_$suffix",
+          formalArgs = Vector.empty,
+          formalReturns = Vector.empty,
+          pres = Vector.empty,
+          posts = Vector.empty,
+          body = None
+        )()
+
+    /* TODO: [2018-11-25 Malte] Using interferenceReferenceFunctions.footprintManager.application
+     *       feels like an unnecessary compliated way of getting to the name of a region's
+     *       interference context footprint predicate.
+     */
+
+    val fpm = interferenceReferenceFunctions.footprintManager
+
+    tree.root.regions flatMap (region => {
+      val vprFormalArguments = region.formalInArgs map translate map (_.localVar)
+      val interferenceContextFootprint = fpm.application(region, vprFormalArguments).loc.predicateName
+
+      Vector(
+        method(region.id.name), /* Suffix = R */
+        method(interferenceContextFootprint), /* Suffix = R_interferenceContext_fp */
+      )
+    })
+  }
+
   def havoc(variable: PIdnUse): vpr.Stmt = {
     havoc(translateUseOf(variable).asInstanceOf[vpr.LocalVar])
   }
@@ -242,6 +272,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             regionStateTriggerFunctionDomain)
       ++ collectedDeclarations
       ++ usedVariableHavocs(tree)
+      ++ havocAllInstancesMethods(tree)
       ++ recordedSetComprehensionFunctions
       ++ tree.root.regions.flatMap(region => {
             val typ = semanticAnalyser.typ(region.state)

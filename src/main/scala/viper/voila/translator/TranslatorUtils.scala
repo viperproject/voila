@@ -265,11 +265,19 @@ object TranslatorUtils {
     }
 
     override def havoc(id: T, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt = {
-      vpr.Seqn(
-        Vector(exhaleFootprint(id)(wrapper), inhaleFootprint(id)(wrapper)),
-        Vector.empty
-      )()
+      vpr.MethodCall(
+        methodName = s"havoc_all_${memberName(idToName(id))}",
+        args = Vector.empty,
+        targets = Vector.empty
+      )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
     }
+
+//    override def havoc(id: T, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt = {
+//      vpr.Seqn(
+//        Vector(exhaleFootprint(id)(wrapper), inhaleFootprint(id)(wrapper)),
+//        Vector.empty
+//      )()
+//    }
   }
 
   /** Specialized footprint manager for predicates where permission is held only when necessary. */
