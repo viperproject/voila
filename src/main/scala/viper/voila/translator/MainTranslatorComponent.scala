@@ -115,7 +115,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         formalReturns = Vector(vpr.LocalVarDecl("$r", typ)()),
         pres = Vector.empty,
         posts = Vector.empty,
-        body = Some(vpr.Seqn(Vector.empty, Vector.empty)())
+        body = None
       )()
     )
   }
