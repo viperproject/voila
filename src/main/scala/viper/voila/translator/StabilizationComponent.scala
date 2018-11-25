@@ -143,7 +143,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
                                  : vpr.Stmt = {
 
     val stabilizationMessage =
-      s"Inferring interference Context ${regions.map(_._1.id.name).mkString(",")} ($reason)"
+      s"Inferring interference context ${regions.map(_._1.id.name).mkString(",")} ($reason)"
 
     sequenceStabilizeSubject.nextVersion()
 
