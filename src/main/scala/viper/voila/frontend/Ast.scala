@@ -119,12 +119,16 @@ sealed trait PBindingContext extends PAstNode
 
 sealed trait PSpecificationClause extends PAstNode
 
-case class PInterferenceClause(variable: PNamedBinder, set: PExpression, region: PIdnUse)
+case class PInterferenceClause(variable: PNamedBinder, set: PExpression, region: Option[PIdnUse])
     extends PSpecificationClause with PBindingContext
 
-case class PPreconditionClause(assertion: PExpression) extends PSpecificationClause
-case class PPostconditionClause(assertion: PExpression) extends PSpecificationClause
-case class PInvariantClause(assertion: PExpression) extends PSpecificationClause
+sealed trait PAssertionClause extends PSpecificationClause {
+  def assertion: PExpression
+}
+
+case class PPreconditionClause(assertion: PExpression) extends PAssertionClause
+case class PPostconditionClause(assertion: PExpression) extends PAssertionClause
+case class PInvariantClause(assertion: PExpression) extends PAssertionClause
 
 /*
  * Actions
@@ -156,6 +160,8 @@ case class PRegion(id: PIdnDef,
     extends PMember {
 
   val regionId: PFormalArgumentDecl = formalInArgs.head
+
+  val explicitArgumentCount: Int = formalInArgs.length + formalOutArgs.length
 }
 
 case class PProcedure(id: PIdnDef,

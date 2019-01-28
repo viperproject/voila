@@ -625,6 +625,55 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ => false
     }
 
+  /** Given an interference clause '?s in X on r', where the trailing 'on r' is optional,
+    * interferenceOnRegionId returns the identifier 'r' of the region to which the interference
+    * variable 's' belongs.
+    * If 'on r' is provided, 'r' is returned.
+    * Otherwise, the enclosing procedure's pre- and postconditions are searched for region
+    * assertions 'R(r, ..., s)': if exactly one exists, 'r' is returned, otherwise an exception
+    * is thrown.
+    */
+  lazy val interferenceOnRegionId: PInterferenceClause => PIdnUse =
+    attr[PInterferenceClause, PIdnUse] {
+      case PInterferenceClause(_, _, Some(regionId)) =>
+        regionId
+      case interferenceClause =>
+        val stateVariableName = interferenceClause.variable.id.name
+        val procedure = enclosingMember(interferenceClause).asInstanceOf[Option[PProcedure]].get
+
+        var regionPredicateExpressions = Set.empty[PPredicateExp]
+
+        everywhere(query[PPredicateExp] {
+          case predicateExp: PPredicateExp => entity(predicateExp.predicate) match {
+            case RegionEntity(region) =>
+              if (predicateExp.arguments.length == region.explicitArgumentCount + 1) {
+                predicateExp.arguments.last match {
+                  case PIdnExp(PIdnUse(`stateVariableName`)) =>
+                    regionPredicateExpressions = regionPredicateExpressions + predicateExp
+                  case _ =>
+                    /* Do nothing */
+                }
+              }
+          }
+        })(procedure.pres ++ procedure.posts)
+
+        if (regionPredicateExpressions.isEmpty) {
+          sys.error(
+            s"Could not relate interference variable $stateVariableName to a region identifier. " +
+                "Please add 'on r' (for the desired region identifier 'r') to the interference " +
+                s"clause on line ${interferenceClause.lineColumnPosition}.")
+        } else if (regionPredicateExpressions.size == 1) {
+          regionPredicateExpressions.head.arguments.head.asInstanceOf[PIdnExp].id
+        } else {
+          val candidates = regionPredicateExpressions.map(_.arguments.head).mkString(",")
+
+          sys.error(
+            s"Could not uniquely relate interference variable $stateVariableName to a region " +
+            s"identifier: found candidates $candidates. Please add 'on r' (for the desired region " +
+            s"identifier 'r') to the interference clause on line ${interferenceClause.lineColumnPosition}.")
+        }
+    }
+
   lazy val typeOfLocation: PLocation => PType =
     attr[PLocation, PType] { case PLocation(receiver, field) =>
       typeOfIdn(receiver) match {

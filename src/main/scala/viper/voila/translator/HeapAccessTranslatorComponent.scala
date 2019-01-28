@@ -88,7 +88,8 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
             inArgs map translate
           )().withSource(id)
 
-        case PInterferenceClause(`declaration`, _, regionId) =>
+        case inter @ PInterferenceClause(`declaration`, _, _) =>
+          val regionId = semanticAnalyser.interferenceOnRegionId(inter)
           regionState(semanticAnalyser.usedWithRegionPredicate(regionId)).withSource(id)
 
         case other =>

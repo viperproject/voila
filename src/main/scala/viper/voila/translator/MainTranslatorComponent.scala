@@ -488,7 +488,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val regionInterferenceVariables: Map[PIdnUse, Entry] =
             procedure.inters.map(inter => {
-              val regionId = inter.region
+              val regionId = semanticAnalyser.interferenceOnRegionId(inter)
               val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
 
               val (reg, regionArguments, _, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
@@ -621,7 +621,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val regionInterferenceVariables: Map[PIdnUse, Entry] =
       procedure.inters.map(inter => {
-        val regionId = inter.region
+        val regionId = semanticAnalyser.interferenceOnRegionId(inter)
         val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
 
         val (reg, regionArguments, _, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
@@ -712,8 +712,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(interference: PInterferenceClause): vpr.AnySetContains = {
+    val regionId = semanticAnalyser.interferenceOnRegionId(interference)
     val vprSet = translate(interference.set)
-    val predicateExp = semanticAnalyser.usedWithRegionPredicate(interference.region)
+    val predicateExp = semanticAnalyser.usedWithRegionPredicate(regionId)
     val vprRegionState = regionState(predicateExp)
 
     val vprRegionConstraint =
@@ -1186,7 +1187,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
               val vprCheckInterferences =
                 callee.inters.map (inter => {
-                  val regionPredicate = semanticAnalyser.usedWithRegionPredicate(inter.region)
+                  val regionId = semanticAnalyser.interferenceOnRegionId(inter)
+                  val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
                   val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
 
                   /* TODO: We should have a more systematic - and also easily reusable - way of

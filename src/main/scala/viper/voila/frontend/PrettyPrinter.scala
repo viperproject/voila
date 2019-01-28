@@ -99,10 +99,15 @@ class DefaultPrettyPrinter
       case PPostconditionClause(assertion) => "ensures" <+> toDoc(assertion)
       case PInvariantClause(assertion) => "invariant" <+> toDoc(assertion)
 
-      case PInterferenceClause(variable, set, region) =>
+      case PInterferenceClause(variable, set, optRegion) =>
+        val onDoc = optRegion match {
+          case None => emptyDoc
+          case Some(region) => " on" <+> toDoc(region)
+        }
+
         (  "interference" <+> toDoc(variable)
          <+> "in" <+> toDoc(set)
-         <+> "on" <+> toDoc(region))
+         <> onDoc)
     }
   }
 

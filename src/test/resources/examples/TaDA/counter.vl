@@ -14,7 +14,7 @@ region Counter(id c, int lvl, memcell x)
 
 
 abstract_atomic procedure read(id c, int lvl, memcell x) returns (int ret)
-  interference ?n in Int on c;
+  interference ?n in Int;
   requires Counter(c, lvl, x, n) && G@c;
   ensures Counter(c, lvl, x, n) && G@c;
   ensures ret == n;
@@ -32,7 +32,7 @@ abstract_atomic procedure read(id c, int lvl, memcell x) returns (int ret)
 }
 
 abstract_atomic procedure read2(id c, int lvl, memcell x) returns (int ret)
-  interference ?n in Int on c;
+  interference ?n in Int;
   requires Counter(c, lvl, x, n) && G@c;
   ensures Counter(c, lvl, x, n) && G@c;
   ensures ret == n;
@@ -51,7 +51,7 @@ primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
               : !ret && x.f |-> v;
 
 abstract_atomic procedure incr(id c, int lvl, memcell x)
-  interference ?n in Int on c;
+  interference ?n in Int;
   requires Counter(c, lvl, x, n) && G@c;
   ensures Counter(c, lvl, x, n + 1) && G@c;
 {
@@ -81,7 +81,7 @@ abstract_atomic procedure incr(id c, int lvl, memcell x)
 }
 
 abstract_atomic procedure wkincr(id c, int lvl, memcell x)
-  interference ?n in Set[int](n) on c;
+  interference ?n in Set[int](n);
   requires Counter(c, lvl, x, n) && G@c;
   ensures Counter(c, lvl, x, n + 1) && G@c;
 {

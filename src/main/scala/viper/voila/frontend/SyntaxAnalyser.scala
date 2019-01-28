@@ -243,7 +243,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val interference: Parser[PInterferenceClause] =
     "interference" ~> binder ~
     ("in" ~> expression) ~
-    ("on" ~> idnuse <~ ";") ^^ PInterferenceClause
+    (("on" ~> idnuse).? <~ ";") ^^ PInterferenceClause
 
   lazy val requires: Parser[PPreconditionClause] =
     "requires" ~> expression <~ ";" ^^ PPreconditionClause
