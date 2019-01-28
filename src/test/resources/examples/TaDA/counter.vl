@@ -69,7 +69,7 @@ abstract_atomic procedure incr(id c, int lvl, memcell x)
 }
 
 abstract_atomic procedure wkincr(id c, int lvl, memcell x)
-  interference ?n in Set[int](n);
+  interference ?n in Set<int>(n);
   requires Counter(c, lvl, x, n) && G@c;
   ensures Counter(c, lvl, x, n + 1) && G@c;
 {

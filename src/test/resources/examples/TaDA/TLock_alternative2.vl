@@ -74,7 +74,7 @@ procedure release(id r, int lvl, memcell x)
 /* // does not work
 
 abstract_atomic procedure release2(id r, int lvl, memcell x)
-  interference ?n in Set[int](n) on r;
+  interference ?n in Set<int>(n) on r;
   requires TLock(r,lvl,x,_,n) && TICKET(n)@r;
   ensures TLock(r,lvl,x,_,n+1);
   // ensures false;

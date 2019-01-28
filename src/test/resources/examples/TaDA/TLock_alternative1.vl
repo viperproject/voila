@@ -22,7 +22,7 @@ abstract_atomic procedure incr(id c, int lvl, cell x) returns (int ret)
   ensures Counter(c, lvl, x, n + 1) && G@c && ret == n;
 
 abstract_atomic procedure wkincr(id c, int lvl, cell x)
-  interference ?n in Set[int](n) on c;
+  interference ?n in Set<int>(n) on c;
   requires Counter(c, lvl, x, n) && G@c;
   ensures Counter(c, lvl, x, n + 1) && G@c;
 
@@ -104,7 +104,7 @@ procedure acquire2(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cel
 
 
 abstract_atomic procedure release(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y)
-  interference ?n in Set[int](n) on r;
+  interference ?n in Set<int>(n) on r;
   requires TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n) && TICKET(n)@r;
   ensures  TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n+1);
   // ensures false;
