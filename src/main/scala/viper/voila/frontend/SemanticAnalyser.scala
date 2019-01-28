@@ -54,6 +54,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case exp: PExpression if typ(exp) == PUnknownType() =>
         message(exp, s"$exp could not be typed")
 
+      case predicateDecl @ PPredicate(predicate, _, body) =>
+        val collectRegionPredicateExpressions =
+          collect[Vector, PPredicateExp] {
+            case exp: PPredicateExp if entity(exp.predicate).isInstanceOf[RegionEntity] => exp
+          }
+
+        val regionPredicateExpressions = collectRegionPredicateExpressions(body)
+
+        message(
+          predicateDecl,
+          s"Regular predicates may currently not contain region predicates, but predicate " +
+              s"${predicate.name} contains the following: " +
+              s"${regionPredicateExpressions.map(_.predicate.name).mkString(", ")}",
+          regionPredicateExpressions.nonEmpty)
+
       case PProcedure(_, _, _, _, pres, posts, _, optBody, atom) =>
         val contractMessages =
           (pres.map(_.assertion) ++ posts.map(_.assertion))
@@ -75,7 +90,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         contractMessages ++ atomicityMessages
 
       case action: PAction => // TODO: add guard type check and it seems that condition type check is missing
-
         reportTypeMismatch(action.to, typ(action.from)) ++
         action.guards.flatMap { case PBaseGuardExp(guardId, guardArgument) =>
           checkUse(entity(guardId)) {
