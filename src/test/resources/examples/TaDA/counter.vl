@@ -20,12 +20,8 @@ abstract_atomic procedure read(id c, int lvl, memcell x) returns (int ret)
   ensures ret == n;
 {
   //:: UnexpectedOutput(make-atomic_error:tracking_permission_error, /voila/issue/8/)
-  make_atomic
-    using Counter(c, lvl, x) with G@c;
-  {
-    update_region
-      using Counter(c, lvl, x);
-    {
+  make_atomic using Counter(c, lvl, x) with G@c {
+    update_region using Counter(c, lvl, x) {
       ret := x.f;
     }
   }
@@ -37,9 +33,7 @@ abstract_atomic procedure read2(id c, int lvl, memcell x) returns (int ret)
   ensures Counter(c, lvl, x, n) && G@c;
   ensures ret == n;
 {
-  open_region
-    using Counter(c, lvl, x);
-  {
+  open_region using Counter(c, lvl, x) {
     ret := x.f;
   }
 }
@@ -58,22 +52,16 @@ abstract_atomic procedure incr(id c, int lvl, memcell x)
   int r;
   bool b;
 
-  make_atomic
-    using Counter(c, lvl, x) with G@c;
-  {
+  make_atomic using Counter(c, lvl, x) with G@c {
     do
       invariant Counter(c, lvl, x);
       invariant !b ==> c |=> <D>;
       invariant  b ==> c |=> (r, r + 1);
     {
-      open_region
-        using Counter(c, lvl, x);
-      {
+      open_region using Counter(c, lvl, x) {
         r := x.f;
       }
-      update_region
-        using Counter(c, lvl, x);
-      {
+      update_region using Counter(c, lvl, x) {
         b := CAS(x, r, r + 1);
       }
     } while (!b);
@@ -87,18 +75,12 @@ abstract_atomic procedure wkincr(id c, int lvl, memcell x)
 {
   int r;
 
-  make_atomic
-    using Counter(c, lvl, x) with G@c;
-  {
-    open_region
-      using Counter(c, lvl, x);
-    {
+  make_atomic using Counter(c, lvl, x) with G@c {
+    open_region using Counter(c, lvl, x) {
       r := x.f;
     }
 
-    update_region
-      using Counter(c, lvl, x);
-    {
+    update_region using Counter(c, lvl, x) {
       x.f := r + 1;
     }
   }

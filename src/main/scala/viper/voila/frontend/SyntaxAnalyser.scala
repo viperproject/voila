@@ -330,22 +330,22 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ PMakeAtomic
 
   lazy val updateRegion: Parser[PUpdateRegion] =
     "update_region" ~>
-    ("using" ~> predicateExp <~ ";") ~
+    ("using" ~> predicateExp <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ PUpdateRegion
 
   lazy val useAtomic: Parser[PUseAtomic] =
     "use_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ PUseAtomic
 
   lazy val openRegion: Parser[POpenRegion] =
     "open_region" ~>
-    ("using" ~> predicateExp <~ ";") ~
+    ("using" ~> predicateExp <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ POpenRegion
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
