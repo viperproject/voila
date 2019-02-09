@@ -23,7 +23,7 @@ procedure test02(id r, int lvl, memcell x)
 }
 
 abstract_atomic procedure set_to_one(id r, int lvl, memcell x)
-  interference ?v in Set[int](v) on r;
+  interference ?v in Set<int>(v) on r;
   requires Cell(r, lvl, x, v) && G@r;
   ensures  Cell(r, lvl, x, 1) && G@r;
 

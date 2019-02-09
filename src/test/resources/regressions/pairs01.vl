@@ -1,7 +1,7 @@
 procedure test01() {
   pair<int, bool> p;
 
-  p := Pair[int, bool](1, true);
+  p := Pair<int, bool>(1, true);
   assert fst(p) == 1;
 
   assert fst(Pair(1, true)) == 1;

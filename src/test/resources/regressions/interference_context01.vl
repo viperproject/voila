@@ -26,7 +26,7 @@ abstract_atomic procedure incr(id c, int lvl, memcell x)
   ensures Counter(c, lvl, x, n + 1) && INCREMENT@c;
 
 abstract_atomic procedure wkincr(id c, int lvl, memcell x)
-  interference ?n in Set[int](n) on c;
+  interference ?n in Set<int>(n) on c;
   requires Counter(c, lvl, x, n) && INCREMENT@c;
   ensures Counter(c, lvl, x, n + 1) && INCREMENT@c;
 
@@ -58,12 +58,12 @@ procedure error(id r, int alvl, id c, int lvl, memcell x)
  }
 
 abstract_atomic procedure errorCallee(id r, int alvl, id c, int lvl, memcell x)
-  interference ?n in Set[int](n) on r;
+  interference ?n in Set<int>(n) on r;
   requires Client(r,alvl,c,lvl,x,n);
   ensures Client(r,alvl,c,lvl,x,n);
 
 abstract_atomic procedure error2(id r, int alvl, id c, int lvl, memcell x)
-  interference ?n in Set[int](n) on r;
+  interference ?n in Set<int>(n) on r;
   requires Client(r,alvl,c,lvl,x,n) && Z@r;
 {
   make_atomic using Client(r,alvl,c,lvl,x)  with Z@r;

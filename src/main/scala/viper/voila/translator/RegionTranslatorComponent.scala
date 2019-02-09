@@ -601,8 +601,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           case predicateExp@PPredicateExp(_, innerArgs) if innerArgs.last eq binder =>
             Some(getRegionPredicateDetails(predicateExp))
 
-          case PInterferenceClause(`binder`, _, regId) =>
-            Some(getRegionPredicateDetails(semanticAnalyser.usedWithRegionPredicate(regId)))
+          case inter @ PInterferenceClause(`binder`, _, _) =>
+            val regionId = semanticAnalyser.interferenceOnRegionId(inter)
+            Some(getRegionPredicateDetails(semanticAnalyser.usedWithRegionPredicate(regionId)))
 
           case _ => None
         }

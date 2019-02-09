@@ -28,7 +28,7 @@ abstract_atomic procedure read01(id c, int lvl, memcell x) returns (int ret)
 }
 
 abstract_atomic procedure read02(id c, int lvl, memcell x) returns (int ret)
-  interference ?n in Set[int](n) on c;
+  interference ?n in Set<int>(n) on c;
   requires Counter(c, lvl, x, n) && G@c;
   ensures Counter(c, lvl, x, n) && G@c;
   ensures ret == n;
@@ -81,7 +81,7 @@ procedure read02_client01(id c, int lvl, memcell x) returns (int ret)
 }
 
 procedure read02_client02(id c, int lvl, memcell x) returns (int ret)
-  // interference ?n in Set[int](n) on c; // TODO: See Voila issue #14
+  // interference ?n in Set<int>(n) on c; // TODO: See Voila issue #14
   requires Counter(c, lvl, x, ?n) && G@c;      // TODO: Unstable, see Voila issue #15
   ensures ret == n;
   ensures Counter(c, lvl, x, n) && G@c;

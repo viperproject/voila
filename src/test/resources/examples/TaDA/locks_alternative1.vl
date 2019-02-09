@@ -13,24 +13,14 @@ region Lock(id a, int lvl, memcell x)
     G: 1 ~> 0;
   }
 
-/*
-predicate U(id a, int lvl, memcell x) {
-  Lock(a, lvl, x, 0) && G@a
-}
 
-predicate L(id a, int lvl, memcell x) {
-  Lock(a, lvl, x, 1) && G@a
-}
-*/
 
 abstract_atomic procedure unlock(id a, int lvl, memcell x)
   interference ?s in Set(1) on a;
-  requires Lock(a, lvl, x, s) && G@a; // L(a, lvl, x)
-  ensures Lock(a, lvl, x, 0) && G@a; // U(a, lvl, x)
+  requires Lock(a, lvl, x, s) && G@a;
+  ensures Lock(a, lvl, x, 0) && G@a;
 {
   int nonDetNeg;
-
-  // unfold L(a, lvl, x);
 
   havoc nonDetNeg;
   inhale nonDetNeg < 0;
@@ -44,22 +34,15 @@ abstract_atomic procedure unlock(id a, int lvl, memcell x)
       x.f := nonDetNeg;
     }
   }
-
-  // fold U(a, lvl, x);
 }
 
 abstract_atomic procedure lock(id a, int lvl, memcell x)
   interference ?s in Set(0, 1) on a;
-  // requires s == 0 ? U(a, lvl, x) : L(a, lvl, x);
   requires Lock(a, lvl, x, s) && G@a;
-  // ensures L(a, lvl, x) && s == 0;
   ensures Lock(a, lvl, x, 1) && G@a && s == 0;
 {
   bool b;
   int nonDetPos;
-
-  // if (s == 0) { unfold U(a, lvl, x); }
-  // else { unfold L(a, lvl, x); }
 
   havoc nonDetPos;
   inhale 0 < nonDetPos;
@@ -79,8 +62,6 @@ abstract_atomic procedure lock(id a, int lvl, memcell x)
       }
     } while (!b);
   }
-
-  // fold L(a, lvl, x);
 }
 
 primitive_atomic procedure CASifNeg(memcell x, int thn) returns (bool ret)

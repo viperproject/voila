@@ -96,7 +96,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val guard: Parser[PGuardDecl] =
-    /* The mandatory region id argument is not explicitly declared; e.g. G(int n) actually
+    /* The mandatory region id argument is not Setly declared; e.g. G(int n) actually
      * declares a guard G(id r, int n). Not sure if we want that in the long run.
      */
     guardModifier ~ idndef ~ ("(" ~> formalArgs <~ ")") <~ ";" ^^ {
@@ -243,7 +243,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val interference: Parser[PInterferenceClause] =
     "interference" ~> binder ~
     ("in" ~> expression) ~
-    ("on" ~> idnuse <~ ";") ^^ PInterferenceClause
+    (("on" ~> idnuse).? <~ ";") ^^ PInterferenceClause
 
   lazy val requires: Parser[PPreconditionClause] =
     "requires" ~> expression <~ ";" ^^ PPreconditionClause
@@ -330,22 +330,22 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ PMakeAtomic
 
   lazy val updateRegion: Parser[PUpdateRegion] =
     "update_region" ~>
-    ("using" ~> predicateExp <~ ";") ~
+    ("using" ~> predicateExp <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ PUpdateRegion
 
   lazy val useAtomic: Parser[PUseAtomic] =
     "use_atomic" ~>
-    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";") ~
+    ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ PUseAtomic
 
   lazy val openRegion: Parser[POpenRegion] =
     "open_region" ~>
-    ("using" ~> predicateExp <~ ";") ~
+    ("using" ~> predicateExp <~ ";".?) ~
     ("{" ~> statements <~ "}") ^^ POpenRegion
 
   lazy val varDeclStmt: Parser[PLocalVariableDecl] =
@@ -499,14 +499,14 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     setLiteral | setComprehension
 
   lazy val setLiteral: Parser[PSetExp with PLiteral] =
-    "Set" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
+    "Set" ~> ("<" ~> typ <~ ">").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
       case typeAnnotation ~ elements => PExplicitSet(elements, typeAnnotation)
     } |
     "Int" ^^^ PIntSet() |
     "Nat" ^^^ PNatSet()
 
   lazy val setComprehension: Parser[PSetComprehension] =
-    "Set" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> binder) ~ ("|" ~> expression) <~ ")" ^^ {
+    "Set" ~> ("<" ~> typ <~ ">").? ~ ("(" ~> binder) ~ ("|" ~> expression) <~ ")" ^^ {
       case typeAnnotation ~ qvar ~ filter => PSetComprehension(qvar, filter, typeAnnotation)
     }
 
@@ -517,7 +517,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "tail" ~> "(" ~> expression <~ ")" ^^ PSeqTail
 
   lazy val seqLiteral: Parser[PExplicitSeq] =
-    "Seq" ~> ("[" ~> typ <~ "]").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
+    "Seq" ~> ("<" ~> typ <~ ">").? ~ ("(" ~> listOfExpressions <~ ")") ^^ {
       case typeAnnotation ~ elements => PExplicitSeq(elements, typeAnnotation)
     }
 
@@ -528,7 +528,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val pairLiteral: Parser[PExplicitTuple] =
     "Pair" ~>
-    ("[" ~> (typ <~ ",") ~ typ <~ "]").? ~
+    ("<" ~> (typ <~ ",") ~ typ <~ ">").? ~
     ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ {
       case typeAnnotation ~ (element1 ~ element2) =>
         PExplicitTuple(Vector(element1, element2), typeAnnotation map { case t1 ~ t2 => Vector(t1, t2) })
@@ -542,7 +542,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val tupleLiteral: Parser[PExplicitTuple] =
     "Tuple" ~>
-    ("[" ~> rep1sep(typ, ",") <~ "]").? ~
+    ("<" ~> rep1sep(typ, ",") <~ ">").? ~
     ("(" ~> rep1sep(expression, ",") <~ ")") ^^ {
       case typeAnnotations ~ elements =>
         PExplicitTuple(elements, typeAnnotations)
@@ -559,7 +559,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val mapLiteral: Parser[PExplicitMap] =
     "Map" ~>
-    ("[" ~> (typ <~ ",") ~ typ <~ "]").? ~
+    ("<" ~> (typ <~ ",") ~ typ <~ ">").? ~
     ("(" ~> repsep((expression <~ ":=") ~ expression, ",") <~ ")") ^^ {
       case typeAnnotation ~ elements => PExplicitMap(elements, typeAnnotation)
     }

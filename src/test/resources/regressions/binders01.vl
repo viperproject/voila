@@ -7,7 +7,7 @@ region R(id s, int lvl)
 procedure test01() {
   set<bool> bs;
 
-  bs := Set[bool](?c | c);
+  bs := Set<bool>(?c | c);
 }
 
 procedure test02() {
@@ -21,7 +21,7 @@ procedure test03(id s, int lvl)
 {
   set<bool> bs;
 
-  bs := Set[bool](?c | c == b);
+  bs := Set<bool>(?c | c == b);
 }
 
 procedure test04(id s, int lvl)
@@ -45,7 +45,7 @@ procedure callee01(set<int> xs)
 procedure test05(id s, int lvl)
   requires RR(s, lvl, ?v);
 {
-  callee01(Set[int](?w | w <= v));
+  callee01(Set<int>(?w | w <= v));
 }
 
 procedure test06(id s, int lvl)

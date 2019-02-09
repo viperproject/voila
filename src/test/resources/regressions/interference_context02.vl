@@ -44,16 +44,16 @@ abstract_atomic procedure foo2(id a, int alvl, cell x)
   ensures AA(a, alvl, x);
 
 abstract_atomic procedure foo3(id a, int alvl, cell x)
-  interference ?n in Set[int](n) on a;
+  interference ?n in Set<int>(n) on a;
   requires AA(a, alvl, x, n);
   ensures AA(a, alvl, x);
 
 
 abstract_atomic procedure test1(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
-  interference ?n in Set[int](0) on c;
+  interference ?n in Set<int>(0) on c;
   requires CC1(c,clvl,b,blvl,a,alvl,x,n) && GC1@c;
 {
-  assert CC1(c,clvl,b,blvl,a,alvl,x,?cz) && cz in Set[int](0);
+  assert CC1(c,clvl,b,blvl,a,alvl,x,?cz) && cz in Set<int>(0);
   use_atomic using CC1(c,clvl,b,blvl,a,alvl,x) with GC1@c;
   {
     assert BB(b,blvl,a,alvl,x,?bz) && bz in Set(?bk | bk < 5 );
@@ -66,10 +66,10 @@ abstract_atomic procedure test1(id c, int clvl, id b, int blvl, id a, int alvl, 
 }
 
 abstract_atomic procedure test2(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
-  interference ?n in Set[int](0) on c;
+  interference ?n in Set<int>(0) on c;
   requires CC1(c,clvl,b,blvl,a,alvl,x,n) && GC1@c;
 {
-  assert CC1(c,clvl,b,blvl,a,alvl,x,?cz) && cz in Set[int](0);
+  assert CC1(c,clvl,b,blvl,a,alvl,x,?cz) && cz in Set<int>(0);
   use_atomic using CC1(c,clvl,b,blvl,a,alvl,x) with GC1@c;
   {
     assert BB(b,blvl,a,alvl,x,?bz) && bz in Set(?bk | bk < 5 );
@@ -83,7 +83,7 @@ abstract_atomic procedure test2(id c, int clvl, id b, int blvl, id a, int alvl, 
 }
 
 abstract_atomic procedure test3(id c, int clvl, id b, int blvl, id a, int alvl, cell x)
-  interference ?n in Set[int](n) on c;
+  interference ?n in Set<int>(n) on c;
   requires CC2(c,clvl,b,blvl,a,alvl,x,n) && GC2@c;
 {
   use_atomic using CC2(c,clvl,b,blvl,a,alvl,x) with GC2@c;
