@@ -38,6 +38,9 @@
     Registering library for caper-0.2.0.0..
     Completed 14 action(s).
 
-  Afterwards, Caper.exe could be found in
+  Note: I couldn't get Caper to compile against any Z3 higher than 4.5.0 (and
+  some 4.5.1.nightly).
+
+4. Afterwards, Caper.exe could be found in
 
     .\.stack-work\install\bf1113dd\bin\
