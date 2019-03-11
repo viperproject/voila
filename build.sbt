@@ -12,7 +12,7 @@ lazy val voila = (project in file("."))
     name := "Voila",
     organization := "viper",
     version := "0.1-SNAPSHOT",
-    homepage := Some(url("https://bitbucket.org/mschwerhoff/voila")),
+    homepage := Some(url("https://bitbucket.org/viperproject/voila")),
     licenses := Seq("MPL-2.0 License" -> url("https://opensource.org/licenses/MPL-2.0")),
 
     /* Compilation settings */
