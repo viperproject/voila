@@ -29,7 +29,7 @@ object VoilaConstants {
 
   val versionMessage = s"${VoilaConstants.toolName} ${VoilaConstants.toolVersion} ${VoilaConstants.toolCopyright}"
 
-  val preambleFile = "/preamble.vpr"
+  val preambleFile = "preamble.vpr"
 }
 
 object VoilaGlobalState {
@@ -38,7 +38,7 @@ object VoilaGlobalState {
 
 class Voila extends StrictLogging {
   val defaultPreambleFile: Path = {
-    val resource = getClass.getResource(VoilaConstants.preambleFile)
+    val resource = getClass.getClassLoader.getResource(VoilaConstants.preambleFile)
 
     if (resource == null)
       exitWithError(s"Cannot access resource ${VoilaConstants.preambleFile}")

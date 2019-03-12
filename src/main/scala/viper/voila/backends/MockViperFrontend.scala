@@ -8,7 +8,7 @@ package viper.voila.backends
 
 import java.nio.file.Path
 import viper.silver.ast.Program
-import viper.silver.frontend.{SilFrontend, SilFrontendConfig, DefaultStates}
+import viper.silver.frontend.{DefaultStates, SilFrontend, SilFrontendConfig}
 import viper.silver.verifier.{AbstractError, Verifier}
 
 class MockViperFrontend extends SilFrontend {
@@ -21,7 +21,7 @@ class MockViperFrontend extends SilFrontend {
     _state = DefaultStates.Initialized
 
     reset(viperFile)
-    translation()
+    runTo("Translation")
 
     (_program, _errors)
   }
