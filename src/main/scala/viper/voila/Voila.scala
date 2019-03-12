@@ -214,6 +214,7 @@ class Voila extends StrictLogging {
 //        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
         siliconOptions ++= Vector("--logLevel", "ERROR")
         siliconOptions ++= Vector("--disableCatchingExceptions")
+        siliconOptions ++= Vector("--enableMoreCompleteExhale") /* Fewer permission-related incompletenesses */
 
         logger.info("Encoded Voila program in Viper")
         logger.info("Verifying encoding using Silicon ...")
