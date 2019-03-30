@@ -23,13 +23,21 @@ import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
 
 object VoilaConstants {
-  val toolName = "Voila"
-  val toolVersion = "0.1"
-  val toolCopyright = "(c) Copyright ETH Zurich 2016 - 2018"
+  val toolName: String  = "Voila"
+  val toolCopyright: String  = "(c) Copyright ETH Zurich 2016 - 2019"
 
-  val versionMessage = s"${VoilaConstants.toolName} ${VoilaConstants.toolVersion} ${VoilaConstants.toolCopyright}"
+  val toolVersion: String = {
+    val buildRevision = BuildInfo.hg("revision")
+    val buildBranch = BuildInfo.hg("branch")
+    val buildVersion = s"$buildRevision${if (buildBranch == "default") "" else s"@$buildBranch"}"
 
-  val preambleFile = "preamble.vpr"
+    s"${BuildInfo.projectVersion} ($buildVersion)"
+  }
+
+  val versionMessage: String  =
+    s"${VoilaConstants.toolName} ${VoilaConstants.toolVersion}"
+
+  val preambleFile: String  = "preamble.vpr"
 }
 
 object VoilaGlobalState {

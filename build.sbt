@@ -1,3 +1,6 @@
+import scala.sys.process.Process
+import scala.util.Try
+
 // Import general settings from Silver
 lazy val silver = project in file("silver")
 
@@ -42,7 +45,22 @@ lazy val voila = (project in file("."))
       case LogbackConfigurationFilePattern() => MergeStrategy.discard
       case x => (assemblyMergeStrategy in assembly).value(x)
     },
-    assembly / test := {},
-  )
+    assembly / test := {})
+  .enablePlugins(BuildInfoPlugin)
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](
+      "projectName" -> name.value,
+      "projectVersion" -> version.value,
+      scalaVersion,
+      sbtVersion,
+      BuildInfoKey.action("hg") {
+        val Seq(revision, branch) =
+          Try(
+            Process("hg id -ib").!!.trim.split(' ').toSeq
+          ).getOrElse(Seq("<revision>", "<branch>"))
+        Map("revision" -> revision, "branch" -> branch)
+      }
+    ),
+    buildInfoPackage := "viper.voila")
 
 val LogbackConfigurationFilePattern = """logback.*?\.xml""".r
