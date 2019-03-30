@@ -85,7 +85,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         typ = outType,
         pres = Vector(predicateAccess),
         posts = Vector.empty,
-        decs = None,
         body = Some(body)
       )()
     }
@@ -147,7 +146,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
           typ = regionStateType,
           pres = Vector(predicateAccess),
           posts = Vector(mentionTriggerFunction),
-          decs = None,
           body = Some(body)
         )()
       })

@@ -75,7 +75,6 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
             typ = translate(semanticAnalyser.typeOfLogicalVariable(binder)),
             pres = Vector(vprFootprint),
             posts = Vector.empty,
-            decs = None,
             body = None
           )()
 

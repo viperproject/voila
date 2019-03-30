@@ -89,7 +89,6 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
         typ = vprSetType,
         pres = Vector.empty,
         posts = Vector(vprBody),
-        decs = None,
         body = None
       )()
 

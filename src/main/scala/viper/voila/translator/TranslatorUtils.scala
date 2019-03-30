@@ -463,8 +463,7 @@ object TranslatorUtils {
     protected def post(trigger: vpr.DomainFuncApp): Vector[vpr.Exp] =
       Vector(vpr.InhaleExhaleExp(trigger, vpr.TrueLit()())())
 
-    protected def body(obj: ManagedObject[T]): (Option[vpr.Exp], Option[vpr.DecClause]) =
-      (None, None)
+    protected def body(obj: ManagedObject[T]): Option[vpr.Exp] = None
 
     override protected def toMember(obj: ManagedObject[T])
                                    : (vpr.Function, Vector[vpr.Declaration]) = {
@@ -477,7 +476,7 @@ object TranslatorUtils {
       val footprintDecls = footprintManager.collectMember(subObj)
       val triggerDecls = triggerManager.collectMember(subObj)
 
-      val (bodyExp, decs) = body(subObj)
+      val bodyExp = body(subObj)
 
       (
         vpr.Function(
@@ -486,7 +485,6 @@ object TranslatorUtils {
           typ = functionTyp(obj.id),
           pres = Vector(footprintManager.application(obj.id,vars)),
           posts = post(triggerManager.application(obj.id, vars)),
-          decs = decs,
           body = bodyExp
         )(),
         footprintDecls ++: triggerDecls
