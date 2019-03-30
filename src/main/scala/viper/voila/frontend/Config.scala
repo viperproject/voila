@@ -81,6 +81,7 @@ class Config(arguments: Seq[String])
     e match {
       case exceptions.Version =>
         logger.info(builder.vers.get)
+        sys.exit(0)
       case exceptions.Help("") =>
         printHelp(builder)
         sys.exit(0)
