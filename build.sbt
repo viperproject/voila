@@ -21,7 +21,9 @@ lazy val voila = (project in file("."))
     /* Compilation settings */
     silicon / excludeFilter := "logback.xml", /* Ignore Silicon's Logback configuration */
     Compile / unmanagedResourceDirectories += baseDirectory.value / "conf",
-    libraryDependencies += "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.2.0", // Parsing
+    libraryDependencies += 
+      ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.2.0") // Parsing
+        .exclude("com.google.guava", "guava"),
     libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0", // Logging Frontend
     libraryDependencies += "org.fusesource.jansi" % "jansi" % "1.17.1", // For colouring Logback output
 
