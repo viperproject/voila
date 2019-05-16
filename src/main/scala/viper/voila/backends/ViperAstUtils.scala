@@ -7,7 +7,7 @@
 package viper.voila.backends
 
 import viper.silver.{ast => vpr}
-import viper.silver.ast.utility.Rewriter.Traverse
+import viper.silver.ast.utility.rewriter.Traverse
 import viper.silver.ast.utility.ViperStrategy
 
 object ViperAstUtils {

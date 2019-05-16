@@ -1289,7 +1289,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 case old: vpr.Old =>
                   vpr.LabelledOld(old.exp, vprPreCallLabel.name)(old.pos, old.info, old.errT)
               },
-              vpr.utility.Rewriter.Traverse.TopDown)
+              vpr.utility.rewriter.Traverse.TopDown)
 
           val vprAssertLvlConstraint = vpr.Assert(vprLvlConstraint)()
 
