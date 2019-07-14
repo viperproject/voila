@@ -134,7 +134,6 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             )(pos = vpr.NoPosition,
               info = vpr.NoInfo,
               typPassed = vpr.Bool,
-              formalArgsPassed = formalRegionArgs,
               domainName = regionStateTriggerFunctionsDomainName,
               errT = vpr.NoTrafos),
             vpr.TrueLit()()
