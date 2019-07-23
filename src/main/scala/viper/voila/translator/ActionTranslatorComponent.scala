@@ -673,7 +673,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def isBoundVprVariable(exp: vpr.Exp, binder: PLogicalVariableBinder): Boolean =
     (exp, binder) match {
-      case (vpr.LocalVar(name), namedBinder: PNamedBinder) => name == namedBinder.id.name
+      case (vpr.LocalVar(name, _), namedBinder: PNamedBinder) => name == namedBinder.id.name
       case _ => false
     }
 

@@ -30,7 +30,7 @@ object ViperAstUtils {
             q.withVariables(
               q.variables map (v => v.copy(name = rename(v.name))(v.pos, v.info, v.errT)))
           case (v: vpr.LocalVar, ctx) if ctx.c.contains(v.name) =>
-            v.copy(name = rename(v.name))(v.typ, v.pos, v.info, v.errT)
+            v.copy(name = rename(v.name), v.typ)(v.pos, v.info, v.errT)
         },
         Seq.empty,
         {

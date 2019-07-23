@@ -902,7 +902,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PAssign(lhs, rhs) =>
         var vprAssign =
           vpr.LocalVarAssign(
-            vpr.LocalVar(lhs.name)(typ = translate(semanticAnalyser.typeOfIdn(lhs))),
+            vpr.LocalVar(lhs.name, translate(semanticAnalyser.typeOfIdn(lhs)))(),
             translate(rhs)
           )()
 
@@ -1649,11 +1649,11 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case entity: LogicalVariableEntity =>
         translateUseOf(id, entity.declaration)
       case FormalArgumentEntity(decl) =>
-        vpr.LocalVar(id.name)(typ = translate(decl.typ)).withSource(id)
+        vpr.LocalVar(id.name, translate(decl.typ))().withSource(id)
       case FormalReturnEntity(decl) =>
-        vpr.LocalVar(id.name)(typ = translate(decl.typ)).withSource(id)
+        vpr.LocalVar(id.name, translate(decl.typ))().withSource(id)
       case LocalVariableEntity(decl) =>
-        vpr.LocalVar(id.name)(typ = translate(decl.typ)).withSource(id)
+        vpr.LocalVar(id.name, translate(decl.typ))().withSource(id)
     }
   }
 
@@ -1665,12 +1665,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSetComprehension(`binder`, _, _) =>
         val vprType = translate(semanticAnalyser.typeOfLogicalVariable(binder))
 
-        vpr.LocalVar(id.name)(typ = vprType)
+        vpr.LocalVar(id.name, vprType)()
 
       case action: PAction if action.binds(binder) =>
         val vprType = translate(semanticAnalyser.typeOfLogicalVariable(binder))
 
-        vpr.LocalVar(id.name)(typ = vprType).withSource(id)
+        vpr.LocalVar(id.name, vprType)().withSource(id)
 
       case PPointsTo(_, `binder`) => translateAsHeapAccess(id, binder)
       case PPredicateExp(_, args) if args.exists(_ eq binder) => translateAsHeapAccess(id, binder)

@@ -99,7 +99,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
         val varInResult =
           vpr.AnySetContains(
             variable,
-            vpr.Result()(typ = trigger.typ)
+            vpr.Result(trigger.typ)()
           )()
 
         val varInTrigger =

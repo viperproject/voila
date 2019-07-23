@@ -34,7 +34,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translate(read: PHeapRead): vpr.Stmt = {
     val vprLocalVarType = translate(semanticAnalyser.typeOfIdn(read.lhs))
-    val vprLocalVar = vpr.LocalVar(read.lhs.name)(typ = vprLocalVarType).withSource(read.lhs)
+    val vprLocalVar = vpr.LocalVar(read.lhs.name, vprLocalVarType)().withSource(read.lhs)
     val vprFieldAccess = translate(read.location)
 
     vpr.LocalVarAssign(
@@ -121,7 +121,7 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
         } else {
           val vprType = translate(semanticAnalyser.typeOfIdn(declaration.id))
 
-          vpr.LocalVar(declaration.id.name)(vprType).withSource(id)
+          vpr.LocalVar(declaration.id.name, vprType)().withSource(id)
         }
 
       case _ =>

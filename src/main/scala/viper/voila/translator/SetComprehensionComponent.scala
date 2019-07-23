@@ -62,7 +62,7 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
         vpr.EqCmp(
           vpr.AnySetContains(
             vprQVarDecl.localVar,
-            vpr.Result()(typ = vprSetType)
+            vpr.Result(vprSetType)()
           )(),
           translateWith(comprehension.filter) {
             case PIdnExp(id) if id.name == comprehension.qvar.id.name =>
