@@ -470,6 +470,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         } else {
           vpr.Exists(
             formalDecls,
+            Vector.empty, /* TODO: Add triggers */
             constraint
           )()
         }

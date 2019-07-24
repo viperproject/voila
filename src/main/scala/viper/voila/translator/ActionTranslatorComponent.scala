@@ -716,6 +716,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
     /* ∃ xs · body(xs) */
     vpr.Exists(
       action.binders map localVariableDeclaration,
+      Vector.empty, /* TODO: Add triggers */
       vprExistentialBody
     )()
   }
