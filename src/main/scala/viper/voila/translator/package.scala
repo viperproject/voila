@@ -39,7 +39,7 @@ package object translator {
       val newInfo = SourceInfo(source)
       val newPos = vpr.TranslatedPosition(source.position)
 
-      node.duplicateMeta((newPos, newInfo, errT)).asInstanceOf[N]
+      (node.meta = (newPos, newInfo, errT)).asInstanceOf[N]
     }
   }
 
