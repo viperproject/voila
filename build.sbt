@@ -8,12 +8,12 @@ lazy val silver = project in file("silver")
 lazy val silicon = project in file("silicon")
 
 // Import general settings from Silicon
-lazy val carbon = project in file("carbon")
+// lazy val carbon = project in file("carbon")
 
 lazy val voila = (project in file("."))
-  .dependsOn(silver % "compile->compile;test->test") 
+  .dependsOn(silver % "compile->compile;test->test")
   .dependsOn(silicon % "compile->compile;test->test")
-  .dependsOn(carbon % "compile->compile;test->test")
+  // .dependsOn(carbon % "compile->compile;test->test")
   .settings(
     /* General settings */
     name := "Voila",
@@ -24,9 +24,9 @@ lazy val voila = (project in file("."))
 
     /* Compilation settings */
     silicon / excludeFilter := "logback.xml", /* Ignore Silicon's Logback configuration */
-    carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */
+    // carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */
     Compile / unmanagedResourceDirectories += baseDirectory.value / "conf",
-    libraryDependencies += 
+    libraryDependencies +=
       ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.2.0") // Parsing
         .exclude("com.google.guava", "guava"),
     libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0", // Logging Frontend
@@ -34,7 +34,7 @@ lazy val voila = (project in file("."))
 
     /* Run settings */
     run / javaOptions += "-Xss128m",
-    
+
     fork := true,
       /* Serves two purposes:
        *  - http://stackoverflow.com/questions/21464673
