@@ -1263,27 +1263,32 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             vpr.utility.Expressions.instantiateVariables(
               LevelManager.levelHigherOrEqualToProcedureLevel(callee),
               vprStub.formalArgs,
-              vprArguments
+              vprArguments,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
             )
 
           val vprAtomicityContextConstraint =
             vpr.utility.Expressions.instantiateVariables(
               AtomicityContextLevelManager.callIsPossible(callee),
               vprStub.formalArgs,
-              vprArguments
+              vprArguments,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
             )
 
           val vprPre =
             vpr.utility.Expressions.instantiateVariables(
               viper.silicon.utils.ast.BigAnd(vprStub.pres),
               vprStub.formalArgs,
-              vprArguments)
+              vprArguments,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            )
 
           val vprPost =
             vpr.utility.Expressions.instantiateVariables(
               viper.silicon.utils.ast.BigAnd(vprStub.posts),
               vprStub.formalArgs ++ vprStub.formalReturns,
-              vprArguments ++ vprReturns
+              vprArguments ++ vprReturns,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
             ).transform(
               {
                 case old: vpr.Old =>

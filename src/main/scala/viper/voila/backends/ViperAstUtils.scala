@@ -26,16 +26,21 @@ object ViperAstUtils {
     val sanitizer =
       ViperStrategy.Context[Seq[String]](
         {
-          case (q: vpr.QuantifiedExp, _) =>
-            q.withVariables(
-              q.variables map (v => v.copy(name = rename(v.name))(v.pos, v.info, v.errT)))
+          case (q: vpr.QuantifiedExp, ctx) =>
+            val sanitizedQuantExp =
+              q.withVariables(
+                q.variables map (v => v.copy(name = rename(v.name))(v.pos, v.info, v.errT)))
+
+            val updatedCtx = ctx.updateContext(ctx.c ++ q.variables.map(_.name))
+
+            (sanitizedQuantExp, updatedCtx)
           case (v: vpr.LocalVar, ctx) if ctx.c.contains(v.name) =>
-            v.copy(name = rename(v.name), v.typ)(v.pos, v.info, v.errT)
+            val sanitizedVar =
+              v.copy(name = rename(v.name), v.typ)(v.pos, v.info, v.errT)
+
+            (sanitizedVar, ctx)
         },
         Seq.empty,
-        {
-          case (q: vpr.QuantifiedExp, c) => c ++ q.variables.map(_.name)
-        },
         Traverse.TopDown)
 
     sanitizer.execute[N](node)
@@ -56,14 +61,22 @@ object ViperAstUtils {
     val skolemizer =
       ViperStrategy.Context[Collector](
         {
-          case (q: vpr.Exists, _) => q.exp
-          case (v: vpr.LocalVar, ctx) if ctx.c._2.exists(_.name == v.name) => substitute(v, ctx.c._1)
+          case (q: vpr.Exists, ctx) =>
+            val (ubvs, ebvs) = ctx.c
+            val updatedCtx = ctx.updateContext((ubvs, ebvs ++ q.variables.map(_.localVar)))
+
+            (q.exp, updatedCtx)
+
+          case (q: vpr.QuantifiedExp, ctx) => /* All quantified expressions except existentials */
+            val (ubvs, ebvs) = ctx.c
+            val updatedCtx = ctx.updateContext((ubvs ++ q.variables.map(_.localVar), ebvs))
+
+            (q, updatedCtx)
+
+          case (v: vpr.LocalVar, ctx) if ctx.c._2.exists(_.name == v.name) =>
+            (substitute(v, ctx.c._1), ctx)
         },
         emptyCollector,
-        {
-          case (q: vpr.Exists, (ubvs, ebvs)) => (ubvs, ebvs ++ q.variables.map(_.localVar))
-          case (q: vpr.QuantifiedExp, (ubvs, ebvs)) => (ubvs ++ q.variables.map(_.localVar), ebvs)
-        },
         Traverse.TopDown)
 
     skolemizer.execute[N](node)
