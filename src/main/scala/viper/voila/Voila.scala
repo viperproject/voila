@@ -17,7 +17,7 @@ import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
-import viper.voila.backends.{MockViperFrontend, Silicon, ViperNameSanitizer, ViperPreamble}
+import viper.voila.backends.{MockViperFrontend, Silicon, /*Carbon,*/ ViperNameSanitizer, ViperPreamble}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
@@ -225,12 +225,15 @@ class Voila extends StrictLogging {
         siliconOptions ++= Vector("--enableMoreCompleteExhale") /* Fewer permission-related incompletenesses */
 
         logger.info("Encoded Voila program in Viper")
-        logger.info("Verifying encoding using Silicon ...")
-        val silicon = new Silicon(siliconOptions)
 
-        silicon.start()
-        val verificationResult = silicon.handle(programToVerify)
-        silicon.stop()
+        logger.info("Verifying encoding using Silicon ...")
+        val backend = new Silicon(siliconOptions)
+//        logger.info("Verifying encoding using Carbon ...")
+//        val backend = new Carbon(Vector.empty)
+
+        backend.start()
+        val verificationResult = backend.handle(programToVerify)
+        backend.stop()
         logger.info(s"... done (with ${getNumberOfErrors(verificationResult)} Viper error(s))")
 
         backtranslateOrReportErrors(verificationResult, errorBacktranslator)
