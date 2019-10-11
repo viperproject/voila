@@ -8,12 +8,12 @@ lazy val silver = project in file("silver")
 lazy val silicon = project in file("silicon")
 
 // Import general settings from Silicon
-// lazy val carbon = project in file("carbon")
+lazy val carbon = project in file("carbon")
 
 lazy val voila = (project in file("."))
   .dependsOn(silver % "compile->compile;test->test")
   .dependsOn(silicon % "compile->compile;test->test")
-  // .dependsOn(carbon % "compile->compile;test->test")
+  .dependsOn(carbon % "compile->compile;test->test")
   .settings(
     /* General settings */
     name := "Voila",
@@ -24,7 +24,7 @@ lazy val voila = (project in file("."))
 
     /* Compilation settings */
     silicon / excludeFilter := "logback.xml", /* Ignore Silicon's Logback configuration */
-    // carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */
+    carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */
     Compile / unmanagedResourceDirectories += baseDirectory.value / "conf",
     libraryDependencies +=
       ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.2.0") // Parsing
@@ -49,8 +49,24 @@ lazy val voila = (project in file("."))
     assembly / assemblyJarName := "voila.jar",
     assembly / mainClass := Some("viper.voila.VoilaRunner"),
     assembly / assemblyMergeStrategy := {
-      case LogbackConfigurationFilePattern() => MergeStrategy.discard
-      case x => (assemblyMergeStrategy in assembly).value(x)
+      case LogbackConfigurationFilePattern() =>
+        MergeStrategy.discard
+      case PathList("viper", "silicon", ps @ _*)
+              if ps.nonEmpty && ps.last.startsWith("BuildInfo") && ps.last.endsWith(".class") =>
+        /* On Jenkins, it seems that two copies of class viper.silicon.BuildInfo get assembly-ed:
+         * One is contained in Silicon's fat JAR (copied into Voila's workspace as lib/silicon.jar),
+         * the other one is locally generated (silicon/target/scala-XX/classes). The latter is
+         * probably locally generated because the corresponding Scala source file is also locally
+         * generated (silicon/target/scala-XX/src_managed) by the sbt-buildinfo plugin, probably
+         * upon loading Silicon's build.sbt, which is also copied into Voila's workspace.
+         * 
+         * To work around the problem, we simply keep the first copy that is encountered. Note that
+         * this is most likely not what we actually want. E.g. it could contain an incorrect (most
+         * likely newer) build timestamp, or even Voila's Mercurial revision instead of Silicon's.
+         */
+        MergeStrategy.first
+      case x =>
+        (assemblyMergeStrategy in assembly).value(x)
     },
     assembly / test := {})
   .enablePlugins(BuildInfoPlugin)
