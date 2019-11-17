@@ -6,8 +6,7 @@
 
 package viper.voila
 
-import java.nio.file.Path
-
+import java.nio.file.{Path, Paths}
 import org.scalatest.BeforeAndAfterAll
 import viper.silver
 import viper.voila.frontend.Config
@@ -34,13 +33,19 @@ class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
       val projectInfo: ProjectInfo = new ProjectInfo(List("Voila"))
 
       def run(testInput: AnnotatedTestInput): Seq[AbstractOutput] = {
-        val config =
-          new Config(Array(
-            "--logLevel", "ERROR",
-            "-i", testInput.file.toFile.getPath))
+        var voilaConfigOptions = Array(
+          "--logLevel", "ERROR",
+          "-i", testInput.file.toFile.getPath)
 
+        configMap.get("saveViperFilesIn").foreach(viperFileDirectory => {
+          val viperOutputFilepath =
+            Paths.get(viperFileDirectory.toString, testInput.prefix, s"${testInput.file.toFile.getName}.vpr")
+
+          voilaConfigOptions ++= Array("-o", viperOutputFilepath.toFile.getPath)
+        })
+
+        val config = new Config(voilaConfigOptions)
         val (result, elapsed) = time(() => voilaInstance.verify(config))
-
         info(s"Time required: $elapsed")
 
         result match {
