@@ -92,6 +92,10 @@ class Voila extends StrictLogging {
   def verify(file: Path, config: Config): Option[VoilaResult] = {
     setLogLevelsFromConfig(config)
 
+    /* TODO: Code further down alternates between use of `file` and `config.inputFileName`.
+     *       If both values are expected to be equal, why pass `file` at all?
+     */
+
     logger.info(VoilaConstants.versionMessage)
 
     if (!Files.isRegularFile(file)) exitWithError(s"${config.inputFileName()} is not a file")
