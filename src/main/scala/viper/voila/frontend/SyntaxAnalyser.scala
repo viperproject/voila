@@ -36,7 +36,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", "non_atomic",
-    "if", "else", "while", "do", "skip",
+    "if", "else", "while", "do", "skip", "new",
     "inhale", "exhale", "assume", "assert", "havoc", "use_region_interpretation", "use_guard_uniqueness", "use",
     "make_atomic", "update_region", "use_atomic", "open_region",
     "true", "false", "null",
@@ -280,6 +280,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     openRegion |
     "(" ~> statements <~ ")" <~ ";" |
     procedureCall |
+    idnuse ~ (":=" ~> "new" ~> idnuse) ~ ("(" ~> listOfExpressions <~ ")" <~ ";") ^^ PNew |
     idnuse ~ (":=" ~> location) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     location ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign

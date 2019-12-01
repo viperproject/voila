@@ -263,6 +263,10 @@ case class PHeapRead(lhs: PIdnUse, location: PLocation) extends PHeapAccess {
   val statementName = "heap-read"
 }
 
+case class PNew(lhs: PIdnUse, struct: PIdnUse, arguments: Vector[PExpression]) extends PStatement {
+  val statementName = s"new:${struct.name}"
+}
+
 case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Vector[PIdnUse])
     extends PStatement {
 

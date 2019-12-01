@@ -1,0 +1,64 @@
+struct cell_int {
+  int ival;
+}
+
+struct cell_cell_int {
+  cell_int cval;
+}
+
+struct mem_pair {
+  bool bval;
+  mem_pair mval;
+}
+
+procedure test01() {
+  cell_int ci;
+
+  ci := new cell_int(123);
+  assert ci.ival |-> 123;
+
+  ci.ival := 0;
+}
+
+procedure test02() {
+  cell_int ci1;
+  cell_int ci2;
+
+  ci1 := new cell_int(0);
+  ci2 := new cell_int(0);
+
+  assert ci1 != ci2 && ci1.ival |-> ?v && ci2.ival |-> v && v == 0;
+}
+
+procedure test03() {
+  cell_int ci;
+  cell_cell_int cci1;
+  cell_cell_int cci2;
+
+  ci := new cell_int(-1);
+  cci1 := new cell_cell_int(ci);
+  cci2 := new cell_cell_int(ci);
+
+  assert cci1.cval |-> ci && cci2.cval |-> ci;
+  exhale cci2.cval |-> _;
+  cci1.cval := null;
+
+  //:: ExpectedOutput(assignment_error:permission_error)
+  cci2.cval := null;
+}
+
+procedure test04() {
+  mem_pair mp1;
+  mem_pair mp2;
+  mem_pair mp3;
+
+  mp1 := new mem_pair();
+  mp2 := new mem_pair(true);
+  mp3 := new mem_pair(false, null);
+
+  assert mp3.bval |-> false && mp3.mval |-> null;
+  assert mp2.bval |-> true;
+
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert mp2.mval |-> ?mv && mp1.bval |-> ?bv && (mv == null || bv == false);
+}

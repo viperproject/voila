@@ -920,6 +920,34 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, vprWrite)
 
+      case PNew(lhs, struct, arguments) =>
+        val decl = semanticAnalyser.entity(struct).asInstanceOf[StructEntity].declaration
+
+        assert(
+          arguments.size <= decl.fields.size,
+          s"Struct ${decl.id} only has ${decl.fields.size} fields to initialize")
+
+        val vprLocalVarType = translate(semanticAnalyser.typeOfIdn(lhs))
+        val vprLocalVar = vpr.LocalVar(lhs.name, vprLocalVarType)().withSource(lhs)
+
+        val vprFields = translate(decl)
+        val vprNew = vpr.NewStmt(vprLocalVar, vprFields)().withSource(statement)
+
+        val vprArguments = arguments map translate
+
+        val vprAssignments =
+          vprArguments zip vprFields map { case (arg, field) =>
+            vpr.FieldAssign(vpr.FieldAccess(vprLocalVar, field)(), arg)().withSource(statement)
+          }
+
+        val vprResult =
+          vpr.Seqn(
+            vprNew +: vprAssignments,
+            Vector.empty
+          )()
+
+        surroundWithSectionComments(statement.statementName, vprResult)
+
       case foldUnfold: PFoldUnfold with PStatement =>
         val (vprPredicateAccess, optConstraints) = translateUseOf(foldUnfold.predicateExp)
 

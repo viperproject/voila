@@ -248,6 +248,8 @@ class DefaultPrettyPrinter
       case ghost: PGhostStatement => toDoc(ghost)
       case PSeqComp(first, second) => toDoc(first) <> line <> toDoc(second)
       case PSkip() => "skip" <> semi
+      case PNew(lhs, struct, arguments) =>
+        toDoc(lhs) <+> ":=" <+> "new" <+> toDoc(struct) <> asArguments(arguments)
       case PAssign(lhs, rhs) => toDoc(lhs) <+> ":=" <+> toDoc(rhs) <> semi
       case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location) <> semi
       case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs) <> semi

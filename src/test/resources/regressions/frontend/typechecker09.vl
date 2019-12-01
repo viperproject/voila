@@ -1,0 +1,37 @@
+struct mem_pair {
+  int ival;
+  bool bval;
+}
+
+struct cell {
+  cell cval;
+}
+
+procedure test00() {
+  cell c;
+
+  //:: ExpectedOutput(typechecker_error)
+  c := new test01();
+}
+
+procedure test01() {
+  mem_pair mp;
+
+  mp := new cell();
+}
+
+procedure test02() {
+  cell c;
+
+  //:: ExpectedOutput(typechecker_error)
+  c := new cell(77, -77);
+}
+
+procedure test03() {
+  mem_pair mp;
+
+  mp := new mem_pair(0, true);
+
+  //:: ExpectedOutput(typechecker_error)
+  mp := new mem_pair(true, 0);
+}

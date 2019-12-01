@@ -166,6 +166,31 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PHeapWrite(location, rhs) =>
         reportTypeMismatch(location, typeOfLocation(location), typ(rhs))
 
+      case newStmt @ PNew(lhs, struct, arguments) =>
+        val lhsEntity = entity(lhs)
+
+        message(
+          lhs,
+          s"Cannot assign to ${lhs.name}",
+          !lhsEntity.isInstanceOf[LocalVariableLikeEntity])
+
+        entity(struct) match {
+          case StructEntity(structDecl) =>
+            reportTypeMismatch(lhs, typeOfIdn(struct), typeOfIdn(lhs))
+
+            if (arguments.size > structDecl.fields.size) {
+              message(
+                newStmt,
+                s"Wrong number of arguments for constructor of '${struct.name}', got ${arguments.size} "
+                  + s"but expected at most ${structDecl.fields.size}")
+            } else {
+              reportTypeMismatch(arguments, structDecl.fields.take(arguments.size))
+            }
+
+          case other =>
+            message(struct, s"Cannot instantiate ${struct.name}, struct expected")
+        }
+
       case call: PProcedureCall =>
         checkUse(entity(call.procedure)) {
           case ProcedureEntity(decl) => (
@@ -1075,7 +1100,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val atomicity: PStatement => AtomicityKind =
     attr[PStatement, AtomicityKind] {
-      case _: PAssign => AtomicityKind.Nonatomic
+      case _: PAssign | _: PNew => AtomicityKind.Nonatomic
 
       case seq: PSeqComp =>
         seq.components.filterNot(isGhost) match {
