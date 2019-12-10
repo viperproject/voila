@@ -473,6 +473,9 @@ case class PPointsTo(location: PLocation, value: PExpression)
     extends PExpression with PBindingContext
 
 
+// TODO: Reconsider design of PGuardExp: the trait has an "argument: PGuardArg", there is a subclass
+//       "PStandardGuardArg" which has "arguments: Vector[PExpression]" — too many things are/have "arguments".
+
 sealed trait PGuardExp extends PExpression {
   def guard: PIdnUse
   def argument: PGuardArg
@@ -483,11 +486,15 @@ case class PBaseGuardExp(guard: PIdnUse, argument: PGuardArg) extends PGuardExp
 case class PRegionedGuardExp(guard: PIdnUse, regionId: PIdnExp, argument: PGuardArg) extends PGuardExp
 
 
-sealed trait PGuardArg extends PAstNode with PrettyExpression
+sealed trait PGuardArg extends PAstNode with PrettyExpression {
+  def arguments: Vector[PExpression]
+}
 
 case class PStandartGuardArg(arguments: Vector[PExpression]) extends PGuardArg
 
-case class PSetGuardArg(set: PExpression) extends PGuardArg
+case class PSetGuardArg(set: PExpression) extends PGuardArg {
+  val arguments = Vector(set)
+}
 
 
 sealed trait PTrackingResource extends PExpression {
