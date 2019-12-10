@@ -819,6 +819,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               }
             case _ => PUnknownType()
           }
+        case _: PRegionIdType =>
+          val region = usedWithRegion(receiver)
+
+          region.fields.find(_.id.name == field.name) match {
+            case Some(fieldDecl) => fieldDecl.typ
+            case None => PUnknownType()
+          }
         case _ => PUnknownType()
       }
     }
