@@ -642,7 +642,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             s"Could not associate region identifier $id with a region assertion. " +
               "This can, for example, happen if a guard is used (such as G@r), but the region " +
               "identifier (such as r) it is used with isn't used in a region assertion " +
-              "(such as R(r, ...)). This is currently not supported.")
+              "(such as R(r, ...) or r := new R(...)). This is currently not supported.")
         } else if (regions.size > 1) {
           sys.error(
             s"Identifier $id is used as the region identifier of different region types: " +
