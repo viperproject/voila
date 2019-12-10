@@ -1324,7 +1324,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
            _: PMapLookup |
            _: PMapUpdate |
            _: PMapValues |
-           _:PNamedBinder |
+           _: PNamedBinder |
            _: PNullLit => ???
     }
 
