@@ -218,10 +218,15 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
               val argumentsMessages =
                 if (arguments.size != regionDecl.formalInArgs.size - 1) {
+                  val hint =
+                    if (arguments.size > regionDecl.formalInArgs.size - 1) " (note that the region id must be omitted)"
+                    else ""
+
                   message(
                     newStmt,
                     s"Wrong number of arguments for region constructor '${constructor.name}', got ${arguments.size} "
-                      + s"but expected ${regionDecl.formalInArgs.size - 1} (the region id must be omitted)")
+                      + s"but expected ${regionDecl.formalInArgs.size - 1}"
+                      + hint)
                 } else {
                   reportTypeMismatch(arguments, regionDecl.formalInArgs.tail)
                 }
