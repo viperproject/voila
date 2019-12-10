@@ -7,7 +7,6 @@
 package viper.voila.frontend
 
 import scala.collection.immutable.ListSet
-import scala.collection.mutable
 import scala.language.implicitConversions
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
@@ -40,10 +39,23 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                       s"Receiver $receiver does not have a field $field",
                       !struct.fields.exists(_.id.name == field.name))
 
-                   case other if !other.isInstanceOf[ErrorEntity] =>
-                     message(receiver, s"Receiver $receiver is not of struct type")
+                  case other if !other.isInstanceOf[ErrorEntity] =>
+                    message(receiver, s"Receiver $receiver is not of struct type")
                 }
-              case other if !other.isInstanceOf[PUnknownType] => // FIXME: looks wrong
+
+              case PRegionIdType() =>
+                // TODO: Determine with which region `receiver` is associated.
+                //       Note that usedWithRegion(r) currently does not handle associations established by
+                //       new region constructs.
+
+                // message(
+                //   receiver,
+                //   s"Receiver $receiver does not have a field $field",
+                //   !region.fields.exists(_.id.name == field.name))
+
+                noMessages
+
+              case other if !other.isInstanceOf[PUnknownType] =>
                 message(receiver, s"Receiver $receiver is not of reference type")
             }
 
@@ -145,9 +157,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         message(
           lhs,
           s"Cannot assign to ${lhs.name}",
-          !lhsEntity.isInstanceOf[LocalVariableLikeEntity])
-
-        reportTypeMismatch(rhs, typeOfIdn(lhs), typ(rhs))
+          !lhsEntity.isInstanceOf[LocalVariableLikeEntity]
+        ) ++ reportTypeMismatch(rhs, typeOfIdn(lhs), typ(rhs))
 
       case PHeapRead(localVariable, location) =>
         check(entity(localVariable)) {
@@ -166,30 +177,62 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PHeapWrite(location, rhs) =>
         reportTypeMismatch(location, typeOfLocation(location), typ(rhs))
 
-      case newStmt @ PNew(lhs, struct, arguments) =>
+      case newStmt @ PNewStmt(lhs, constructor, arguments, guards, initializer) =>
         val lhsEntity = entity(lhs)
 
-        message(
-          lhs,
-          s"Cannot assign to ${lhs.name}",
-          !lhsEntity.isInstanceOf[LocalVariableLikeEntity])
+        val lhsMessages =
+          message(
+            lhs,
+            s"Cannot assign to ${lhs.name}",
+            !lhsEntity.isInstanceOf[LocalVariableLikeEntity])
 
-        entity(struct) match {
-          case StructEntity(structDecl) =>
-            reportTypeMismatch(lhs, typeOfIdn(struct), typeOfIdn(lhs))
+        val constructorMessages =
+          entity(constructor) match {
+            case StructEntity(structDecl) =>
+              val typeMessages =
+                reportTypeMismatch(lhs, typeOfIdn(constructor), typeOfIdn(lhs))
 
-            if (arguments.size > structDecl.fields.size) {
-              message(
-                newStmt,
-                s"Wrong number of arguments for constructor of '${struct.name}', got ${arguments.size} "
-                  + s"but expected at most ${structDecl.fields.size}")
-            } else {
-              reportTypeMismatch(arguments, structDecl.fields.take(arguments.size))
-            }
+              val argumentsMessages =
+                if (arguments.size > structDecl.fields.size) {
+                  message(
+                    newStmt,
+                    s"Wrong number of arguments for struct constructor '${constructor.name}', got ${arguments.size} "
+                      + s"but expected at most ${structDecl.fields.size}")
+                } else {
+                  reportTypeMismatch(arguments, structDecl.fields.take(arguments.size))
+                }
 
-          case other =>
-            message(struct, s"Cannot instantiate ${struct.name}, struct expected")
-        }
+              val guardsMessages =
+                guards.fold(noMessages)(
+                  message(_, s"Struct constructor does not take a list of guards"))
+
+              val initializerMessages =
+                initializer.fold(noMessages)(
+                  message(_, s"Struct constructor does not take an initializer block"))
+
+              typeMessages ++ argumentsMessages ++ guardsMessages ++ initializerMessages
+
+            case RegionEntity(regionDecl) =>
+              val typeMessages =
+                reportTypeMismatch(lhs, PRegionIdType(), typeOfIdn(lhs))
+
+              val argumentsMessages =
+                if (arguments.size != regionDecl.formalInArgs.size - 1) {
+                  message(
+                    newStmt,
+                    s"Wrong number of arguments for region constructor '${constructor.name}', got ${arguments.size} "
+                      + s"but expected ${regionDecl.formalInArgs.size - 1}")
+                } else {
+                  reportTypeMismatch(arguments, regionDecl.formalInArgs.tail)
+                }
+
+              typeMessages ++ argumentsMessages
+
+            case _ =>
+              message(constructor, s"Cannot instantiate ${constructor.name}, struct or region expected")
+          }
+
+        lhsMessages ++ constructorMessages
 
       case call: PProcedureCall =>
         checkUse(entity(call.procedure)) {
@@ -527,70 +570,79 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   }
 
   lazy val usedWithRegion: PIdnNode => PRegion =
-    attr[PIdnNode, PRegion](regionIdUsedWith(_)._1)
+    attr[PIdnNode, PRegion](id => {
+      val usages = regionIdUsedWith(id)
+      assert(usages.nonEmpty)
 
-  /**
-    * Some region predicate of the region referred to by an identifier definition or use.
-    */
+      usages.head.region
+    })
 
+  /** Given a region identifier such as `r`, returns one of potentially many region assertions `Reg(r, ...)`. */
   lazy val usedWithRegionPredicate: PIdnNode => PPredicateExp =
-    attr[PIdnNode, PPredicateExp](id => regionIdUsedWith(id) match { case (region, regionAssertions) =>
-      val regionArguments =
-        regionAssertions
-          .map(_.arguments.take(region.formalInArgs.length))
-          .distinct
+    attr[PIdnNode, PPredicateExp](id => {
+      val predicateUsages: Vector[RegionPredicateUsage] =
+        regionIdUsedWith(id).collect { case rpg: RegionPredicateUsage => rpg }
 
-      regionArguments match {
+      val predicateArguments =
+        predicateUsages.map(_.arguments).distinct
+
+      predicateArguments match {
         case Seq() =>
           sys.error(s"Could not associate region identifier $id with a region assertion (such as R($id, ...)).")
         case Seq(_) =>
-          regionAssertions.head
-        case predicateAccesses =>
+          predicateUsages.head.source
+        case _ =>
           sys.error(
             s"The in-arguments of a region assertion are not expected to change (in the scope " +
               s"of a single program member), but the following region assertions were found: " +
-              s"${predicateAccesses.mkString(", ")}")
+              s"${predicateUsages.map(_.source).mkString(", ")}. " +
+              "Attention: for simplicity, semantically equivalent but syntactically different arguments " +
+              "are currently rejected.")
       }
     })
 
-  private lazy val regionIdUsedWith: PIdnNode => (PRegion, Vector[PPredicateExp]) =
-    attr[PIdnNode, (PRegion, Vector[PPredicateExp])](id => enclosingMember(id) match {
+  private lazy val regionIdUsedWith: PIdnNode => Vector[RegionIdUsage] =
+    attr[PIdnNode, Vector[RegionIdUsage]](id => enclosingMember(id) match {
       case Some(member) =>
-        val usages =
-          new  mutable.HashMap[PRegion, mutable.Set[Option[PPredicateExp]]]
-          with mutable.MultiMap[PRegion, Option[PPredicateExp]]
+        var usages = Vector.empty[RegionIdUsage]
 
         everywhere(query[PAstNode] {
           case region: PRegion if region.regionId.id.name == id.name =>
-            usages.addBinding(region, None)
+            usages +:= RegionDeclarationUsage(id, region)
 
           case exp @ PPredicateExp(predicate, PIdnExp(`id`) +: _) =>
             entity(predicate) match {
-              case RegionEntity(declaration) => usages.addBinding(declaration, Some(exp))
+              case RegionEntity(declaration) => usages +:= RegionPredicateUsage(id, declaration, exp)
+              case _ => /* Do nothing */
+            }
+
+          case stmt: PNewStmt if stmt.lhs == id =>
+            entity(stmt.constructor) match {
+              case RegionEntity(declaration) => usages +:= NewStmtUsage(id, declaration, stmt)
               case _ => /* Do nothing */
             }
         })(member)
 
-      if (usages.isEmpty) {
-        sys.error(
-          s"Could not associate region identifier $id with a region assertion. " +
-            "This can, for example, happen if a guard is used (such as G@r), but the region " +
-            "identifier (such as r) it is used with isn't used in a region assertion " +
-            "(such as R(r, ...)). This is currently not supported.")
-      } else if (usages.size == 1) {
-        val (region, regionAssertions) = usages.head
+        val regions = usages.map(_.region).distinct
 
-        (region, regionAssertions.flatten.toVector)
-      } else {
-        sys.error(
-          s"Identifier $id is used as the region identifier of different region types:" +
-          s"${usages.keySet.mkString(", ")}. This is currently not supported.")
-      }
+        if (regions.isEmpty) {
+          sys.error(
+            s"Could not associate region identifier $id with a region assertion. " +
+              "This can, for example, happen if a guard is used (such as G@r), but the region " +
+              "identifier (such as r) it is used with isn't used in a region assertion " +
+              "(such as R(r, ...)). This is currently not supported.")
+        } else if (regions.size > 1) {
+          sys.error(
+            s"Identifier $id is used as the region identifier of different region types: " +
+              s"${regions.map(_.id.name).mkString(", ")}. This is not allowed.")
+        } else {
+          usages
+        }
 
       case None =>
         sys.error(
           s"It appears that identifier $id is used as a region identifier, but in a scope/at a " +
-           "program point where region identifiers are not expected.")
+            "program point where region identifiers are not expected.")
     })
 
   def enclosingMember(of: PAstNode): Option[PMember] =
@@ -661,8 +713,38 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     attr[PStatement, Boolean] {
       case _: PGhostStatement => true
       case compound: PCompoundStatement => compound.components forall isGhost
-      case _ => false
+      case stmt => isInNewRegionInitializerBlock(stmt)
     }
+
+  lazy val isNewRegionStatement: PNewStmt => Boolean =
+    attr[PNewStmt, Boolean](newStmt => {
+      entity(newStmt.constructor) match {
+        case _: StructEntity => false
+        case _: RegionEntity => true
+        case other => sys.error(s"Unexpectedly found $other")
+      }
+    })
+
+  private lazy val enclosingNewStatementAttr: PStatement => PAstNode => Option[PNewStmt] =
+    paramAttr[PStatement, PAstNode, Option[PNewStmt]] { of => {
+      case newStmt: PNewStmt => Some(newStmt)
+      case _: PMember => None
+      case tree.parent(p) => enclosingNewStatementAttr(of)(p)
+    }}
+
+  def enclosingNewStatement(of: PStatement): Option[PNewStmt] =
+    enclosingNewStatementAttr(of)(of)
+
+  private lazy val isInNewRegionInitializerBlock: PStatement => Boolean =
+    attr[PStatement, Boolean](stmt => {
+      // NOTE: For simplicity, a statement s1 is currently considered to be inside the initialiser block of a
+      // new-statement s2 iff s1 is a (transitive) child of s2. If new-statements could contain statements outside of
+      // the initialiser block, the current check would no longer suffice.
+      enclosingNewStatement(stmt) match {
+        case None => false
+        case Some(newStmt) => isNewRegionStatement(newStmt)
+      }
+    })
 
   /** Given an interference clause '?s in X on r', where the trailing 'on r' is optional,
     * interferenceOnRegionId returns the identifier 'r' of the region to which the interference
@@ -1100,7 +1182,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val atomicity: PStatement => AtomicityKind =
     attr[PStatement, AtomicityKind] {
-      case _: PAssign | _: PNew => AtomicityKind.Nonatomic
+      case _: PAssign => AtomicityKind.Nonatomic
+
+      case newStmt: PNewStmt =>
+        entity(newStmt.constructor) match {
+          case _: StructEntity => AtomicityKind.Nonatomic
+          case _: RegionEntity => AtomicityKind.Atomic
+          case _ => ???
+        }
 
       case seq: PSeqComp =>
         seq.components.filterNot(isGhost) match {
@@ -1267,3 +1356,25 @@ object AtomicityKind {
   case object Atomic extends AtomicityKind
 }
 
+private sealed trait RegionIdUsage {
+  def id: PIdnNode
+  def region: PRegion
+  def arguments: Vector[PAstNode]
+  def source: PAstNode
+
+  override lazy val toString: String =
+    s"${id.name} -> ${region.id}${arguments.mkString("(", ",", ")")} [${source.position}]"
+}
+
+private final case class RegionDeclarationUsage(id: PIdnNode, region: PRegion) extends RegionIdUsage {
+  val arguments: Vector[PIdnDef] = region.formalInArgs.map(_.id)
+  val source: PRegion = region
+}
+
+private final case class RegionPredicateUsage(id: PIdnNode, region: PRegion, source: PPredicateExp) extends RegionIdUsage {
+  val arguments: Vector[PExpression] = source.arguments.take(region.formalInArgs.length)
+}
+
+private final case class NewStmtUsage(id: PIdnNode, region: PRegion, source: PNewStmt) extends RegionIdUsage {
+  val arguments: Vector[PExpression] = source.arguments
+}

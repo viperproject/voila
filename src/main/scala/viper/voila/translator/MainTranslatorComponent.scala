@@ -274,13 +274,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       ++ usedVariableHavocs(tree)
       ++ havocAllInstancesMethods(tree)
       ++ recordedSetComprehensionFunctions
-      ++ tree.root.regions.flatMap(region => {
+      ++ tree.root.regions.flatMap(region => { // TODO: For uniformity, include in translation of region itself
             val typ = semanticAnalyser.typ(region.state)
 
             Vector(stepFromField(typ), stepToField(typ))
          }).distinct
-      ++ (tree.root.structs flatMap translate)
       ++ (tree.root.regions flatMap translate)
+      ++ (tree.root.structs flatMap translate)
       ++ (tree.root.predicates map translate)
       ++ (tree.root.procedures map translate)
       ++ (tree.root.regions flatMap additionalRegionChecks) /* Checks need to be done after region and procedure translation */
@@ -920,33 +920,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         surroundWithSectionComments(statement.statementName, vprWrite)
 
-      case PNew(lhs, struct, arguments) =>
-        val decl = semanticAnalyser.entity(struct).asInstanceOf[StructEntity].declaration
-
-        assert(
-          arguments.size <= decl.fields.size,
-          s"Struct ${decl.id} only has ${decl.fields.size} fields to initialize")
-
-        val vprLocalVarType = translate(semanticAnalyser.typeOfIdn(lhs))
-        val vprLocalVar = vpr.LocalVar(lhs.name, vprLocalVarType)().withSource(lhs)
-
-        val vprFields = translate(decl)
-        val vprNew = vpr.NewStmt(vprLocalVar, vprFields)().withSource(statement)
-
-        val vprArguments = arguments map translate
-
-        val vprAssignments =
-          vprArguments zip vprFields map { case (arg, field) =>
-            vpr.FieldAssign(vpr.FieldAccess(vprLocalVar, field)(), arg)().withSource(statement)
-          }
-
-        val vprResult =
-          vpr.Seqn(
-            vprNew +: vprAssignments,
-            Vector.empty
-          )()
-
-        surroundWithSectionComments(statement.statementName, vprResult)
+      case newStmt: PNewStmt =>
+        semanticAnalyser.entity(newStmt.constructor) match {
+          case StructEntity(decl) => translateStructAllocation(newStmt, decl)
+          case RegionEntity(decl) => translateRegionAllocation(newStmt, decl)
+          case other => sys.error(s"Expected struct or region, but found $other (${other.getClass.getSimpleName})")
+        }
 
       case foldUnfold: PFoldUnfold with PStatement =>
         val (vprPredicateAccess, optConstraints) = translateUseOf(foldUnfold.predicateExp)
@@ -1378,6 +1357,70 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case stmt: PUseAtomic => translate(stmt)
       case stmt: POpenRegion => translate(stmt)
     }
+  }
+
+  def translateStructAllocation(newStmt: PNewStmt, struct: PStruct): vpr.Stmt = {
+    val PNewStmt(lhs, _, arguments, None, None) = newStmt
+
+    val vprLocalVarType = translate(semanticAnalyser.typeOfIdn(lhs))
+    val vprLocalVar = vpr.LocalVar(lhs.name, vprLocalVarType)().withSource(lhs)
+
+    val vprFields = struct.fields.map(field => toField(struct, field.id))
+    val vprNew = vpr.NewStmt(vprLocalVar, vprFields)().withSource(newStmt)
+
+    val vprArguments = arguments map translate
+
+    val vprAssignments =
+      vprArguments zip vprFields map { case (arg, field) =>
+        vpr.FieldAssign(vpr.FieldAccess(vprLocalVar, field)(), arg)().withSource(newStmt)
+      }
+
+    val vprResult =
+      vpr.Seqn(
+        vprNew +: vprAssignments,
+        Vector.empty
+      )()
+
+    surroundWithSectionComments(newStmt.statementName, vprResult)
+  }
+
+  def translateRegionAllocation(newStmt: PNewStmt, region: PRegion): vpr.Stmt = {
+    val PNewStmt(lhs, constructor, arguments, guards, initializer) = newStmt
+
+    val vprLocalVar = vpr.LocalVar(lhs.name, translate(PRegionIdType()))().withSource(lhs)
+
+    val vprFields = region.fields.map(field => toField(region, field.id))
+    val vprNew = vpr.NewStmt(vprLocalVar, vprFields)().withSource(newStmt)
+
+    val vprArguments = arguments map translate
+
+    val optVprInitializer = initializer map translate
+
+    val vprRegionPredicate =
+      regionPredicateAccess(region, vprLocalVar +: vprArguments).withSource(constructor)
+
+    val vprFoldRegionPredicate =
+      vpr.Fold(vprRegionPredicate)().withSource(newStmt)
+
+    val ebt = this.errorBacktranslator // TODO: Should not be necessary!!!!!
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.FoldFailed if e causedBy vprFoldRegionPredicate =>
+        val clarificationStr =
+          s"In particular, closing ${constructor.name}(${lhs.name}, ${arguments.mkString(", ")}) might fail"
+
+        AllocationError(newStmt)
+          .dueTo(RegionStateError(constructor))
+          .dueTo(AdditionalErrorClarification(clarificationStr, constructor))
+          .dueTo(ebt.translate(e.reason))
+    }
+
+    val vprResult =
+      vpr.Seqn(
+        vprNew +: optVprInitializer.toSeq :+ vprFoldRegionPredicate,
+        Vector.empty
+      )()
+
+    surroundWithSectionComments(newStmt.statementName, vprResult)
   }
 
   def translate(expression: PExpression): vpr.Exp =

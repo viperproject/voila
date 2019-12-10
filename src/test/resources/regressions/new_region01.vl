@@ -1,0 +1,42 @@
+struct cell {
+  int val;
+}
+
+region Cell(id r, int lvl, cell c)
+  ghost_fields { int _copy; }
+  guards { duplicable Z; }
+  interpretation { c.val |-> ?v && r._copy |-> v }
+  state { v }
+  actions { ?n, ?m | n <= m | Z: n ~> m; }
+
+procedure test01(id r0, cell c0)
+  requires Cell(r0, 100, c0); // TODO: Workaround for issue #84
+{
+  cell c;
+  id r;
+  id oldr;
+
+  c := new cell(0);
+
+  oldr := r;
+
+  r := new Cell(1, c) with Z {
+    r._copy := 0;
+    // r._copy := 1;
+    // r._copy := 0;
+  }
+
+//  assert r != oldr;
+//  assert Cell(r, lvl, c);
+//  assert Z@r;
+//
+//  skip;
+//  skip;
+//
+//  open_region using Cell(r) {
+//    assert c.val |-> ?w && r._copy |-> w;
+//  }
+//
+//  //:: ExpectedOutput(assert_error:assertion_error)
+//  assert w == 0;
+}

@@ -147,8 +147,11 @@ case class PAction(binders: Vector[PNamedBinder], condition: PExpression, guards
 
 sealed trait PMember extends PDeclaration with PScope
 
-case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMember
-  // TODO: Introduce PFieldDecl; use instead PFormalArgumentDecl
+sealed trait PMemberWithFields extends PMember {
+  def fields: Vector[PFormalArgumentDecl] // TODO: Introduce PFieldDecl; use instead of PFormalArgumentDecl
+}
+
+case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMemberWithFields
 
 case class PRegion(id: PIdnDef,
                    formalInArgs: Vector[PFormalArgumentDecl],
@@ -156,8 +159,9 @@ case class PRegion(id: PIdnDef,
                    guards: Vector[PGuardDecl],
                    interpretation: PExpression,
                    state: PExpression,
-                   actions: Vector[PAction])
-    extends PMember {
+                   actions: Vector[PAction],
+                   fields: Vector[PFormalArgumentDecl] = Vector.empty)
+    extends PMemberWithFields {
 
   val regionId: PFormalArgumentDecl = formalInArgs.head
 
@@ -263,8 +267,14 @@ case class PHeapRead(lhs: PIdnUse, location: PLocation) extends PHeapAccess {
   val statementName = "heap-read"
 }
 
-case class PNew(lhs: PIdnUse, struct: PIdnUse, arguments: Vector[PExpression]) extends PStatement {
-  val statementName = s"new:${struct.name}"
+case class PNewStmt(lhs: PIdnUse,
+                    constructor: PIdnUse,
+                    arguments: Vector[PExpression],
+                    guards: Option[Vector[PBaseGuardExp]],
+                    initializer: Option[PStatement])
+    extends PStatement {
+
+  val statementName = s"new:${constructor.name}"
 }
 
 case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Vector[PIdnUse])

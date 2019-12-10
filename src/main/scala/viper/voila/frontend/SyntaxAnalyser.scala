@@ -78,11 +78,12 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val region: Parser[PRegion] =
     ("region" ~> idndef) ~
     ("(" ~> formalArgsNonEmpty) ~ ((";" ~> formalArgsNonEmpty).? <~ ")") ~
+    ("ghost_fields" ~> "{" ~> (formalArg <~ ";").* <~ "}").? ~
     ("guards" ~> "{" ~> guard.+ <~ "}") ~
     ("interpretation" ~> "{" ~> expression <~ "}") ~
     ("state" ~> "{" ~> expression <~ "}") ~
     ("actions" ~> "{" ~> action.* <~ "}") ^^ {
-      case id ~ inArgs ~ optOutArgs ~ guards ~ interpretation ~ state ~ actions =>
+      case id ~ inArgs ~ optOutArgs ~ optGhostFields ~ guards ~ interpretation ~ state ~ actions =>
         val outArgs = optOutArgs.getOrElse(Vector.empty)
 
         PRegion(
@@ -92,7 +93,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
           guards,
           interpretation,
           state,
-          actions)
+          actions,
+          optGhostFields.getOrElse(Vector.empty))
     }
 
   lazy val guard: Parser[PGuardDecl] =
@@ -280,10 +282,21 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     openRegion |
     "(" ~> statements <~ ")" <~ ";" |
     procedureCall |
-    idnuse ~ (":=" ~> "new" ~> idnuse) ~ ("(" ~> listOfExpressions <~ ")" <~ ";") ^^ PNew |
+    newStmt |
     idnuse ~ (":=" ~> location) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     location ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
     idnuse ~ (":=" ~> expression) <~ ";" ^^ PAssign
+
+  lazy val newStmt: Parser[PNewStmt] =
+    idnuse ~ (":=" ~> "new" ~> idnuse) ~
+      ("(" ~> listOfExpressions <~ ")") ~
+      ("with" ~> guardPrefix).? ~
+      (";" | ("{" ~> statements <~ "}" <~ ";".?).?) ^^ {
+        case lhs ~ cnstr ~ args ~ optGuards ~ ";" =>
+          PNewStmt(lhs, cnstr, args, optGuards, None)
+        case lhs ~ cnstr ~ args ~ optGuards ~ (init: Some[PStatement@unchecked]) =>
+          PNewStmt(lhs, cnstr, args, optGuards, init)
+      }
 
   lazy val procedureCall: Parser[PProcedureCall] =
     (repsep(idnuse, ",") <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
