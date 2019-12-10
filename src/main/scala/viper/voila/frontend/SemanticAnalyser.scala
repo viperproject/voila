@@ -730,6 +730,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     attr[PStatement, Boolean] {
       case _: PGhostStatement => true
       case compound: PCompoundStatement => compound.components forall isGhost
+      case newStmt: PNewStmt => isNewRegionStatement(newStmt)
       case stmt => isInNewRegionInitializerBlock(stmt)
     }
 
