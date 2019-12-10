@@ -320,7 +320,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         fields = fields,
         functions = functions,
         predicates = predicates,
-        methods = methods
+        methods = methods,
+        extensions = Vector.empty
       )()
 
     val backtranslator = _errorBacktranslator
