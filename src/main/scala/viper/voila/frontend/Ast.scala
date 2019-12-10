@@ -490,7 +490,7 @@ sealed trait PGuardArg extends PAstNode with PrettyExpression {
   def arguments: Vector[PExpression]
 }
 
-case class PStandartGuardArg(arguments: Vector[PExpression]) extends PGuardArg
+case class PStandardGuardArg(arguments: Vector[PExpression]) extends PGuardArg
 
 case class PSetGuardArg(set: PExpression) extends PGuardArg {
   val arguments = Vector(set)

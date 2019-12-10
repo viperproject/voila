@@ -106,7 +106,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         action.guards.flatMap { case PBaseGuardExp(guardId, guardArgument) =>
           checkUse(entity(guardId)) {
             case GuardEntity(decl, _) => check(guardArgument) {
-              case PStandartGuardArg(guardArguments) => check(decl.modifier) {
+              case PStandardGuardArg(guardArguments) => check(decl.modifier) {
                 case _: PUniqueGuard | _: PDuplicableGuard =>
                   val lengthMessages = reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
 
@@ -319,7 +319,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 checkUse(entity(guardId)) {
                   case GuardEntity(decl, _) =>
                     argument match {
-                      case PStandartGuardArg(arguments) =>
+                      case PStandardGuardArg(arguments) =>
                         val lengthMessages =
                           reportArgumentLengthMismatch (exp, decl.id, decl.formalArguments.length, arguments.length)
 
@@ -867,7 +867,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             } else {
               val guardOption = action.guards find {
                 _.argument match {
-                  case PStandartGuardArg(args) =>
+                  case PStandardGuardArg(args) =>
                     args.exists(AstUtils.isBoundVariable(_, binder))
 
                   case _ => false
@@ -875,7 +875,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               }
 
               guardOption match {
-                case Some(PBaseGuardExp(guardId, PStandartGuardArg(guardArguments))) =>
+                case Some(PBaseGuardExp(guardId, PStandardGuardArg(guardArguments))) =>
                   val guard = region.guards.find(_.id.name == guardId.name).get
                   val argIdx = guardArguments.indexWhere(arg => AstUtils.isBoundVariable(arg, binder))
 

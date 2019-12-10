@@ -124,14 +124,14 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     success(PUniqueGuard())
 
   private lazy val guardArg: Parser[PGuardArg] =
-    "(" ~> listOfExpressions <~ ")" ^^ PStandartGuardArg |
+    "(" ~> listOfExpressions <~ ")" ^^ PStandardGuardArg |
     "|" ~> expression <~ "|" ^^ PSetGuardArg
 
   private lazy val guardBasePrefix: Parser[PBaseGuardExp] =
     idnuse ~ guardArg ^^ {
       case guardId ~ args => PBaseGuardExp(guardId, args)
     } |
-    idnuse ^^ (guardId => PBaseGuardExp(guardId, PStandartGuardArg(Vector.empty).at(guardId)))
+    idnuse ^^ (guardId => PBaseGuardExp(guardId, PStandardGuardArg(Vector.empty).at(guardId)))
 
   private lazy val guardPrefix: Parser[Vector[PBaseGuardExp]] =
     rep1sep(guardBasePrefix, "&&")
@@ -506,7 +506,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case guardId ~ args ~ regionId => PRegionedGuardExp(guardId, regionId, args)
     } |
     (idnuse <~ "@") ~ idnexp ^^ {
-      case guardId ~ regionId => PRegionedGuardExp(guardId, regionId, PStandartGuardArg(Vector.empty).at(guardId))
+      case guardId ~ regionId => PRegionedGuardExp(guardId, regionId, PStandardGuardArg(Vector.empty).at(guardId))
     }
 
   lazy val setExp0: Parser[PSetExp] =
