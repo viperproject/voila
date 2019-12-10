@@ -1,0 +1,54 @@
+struct cell {
+  int val;
+}
+
+region CellA(id r, int lvl, cell c)
+  ghost_fields { int _copyA; }
+  guards { duplicable A; }
+  interpretation { true }
+  state { 64 }
+  actions { }
+
+region CellB(id r, int lvl, cell c)
+  ghost_fields { int _copyB; }
+  guards { duplicable B; }
+  interpretation { true }
+  state { 65 }
+  actions { }
+
+procedure test01() {
+  id r;
+  cell c;
+
+  //:: ExpectedOutput(typechecker_error)
+  r := new CellA(r, 1, c);
+}
+
+procedure test02() {
+  cell c;
+
+  //:: ExpectedOutput(typechecker_error)
+  c := new CellA(1, c);
+}
+
+procedure test03() {
+  id r;
+  cell c;
+
+  r := new CellA(1, c) with A;
+}
+
+procedure test05() {
+  id r;
+  cell c;
+
+  r := new CellA(1, c) with A { inhale true; }
+}
+
+procedure test06() {
+  id r;
+  cell c;
+
+  //:: ExpectedOutput(typechecker_error)
+  r := new CellA(1, c) with A && B;
+}

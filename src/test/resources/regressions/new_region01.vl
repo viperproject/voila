@@ -22,21 +22,55 @@ procedure test01(id r0, cell c0)
 
   r := new Cell(1, c) with Z {
     r._copy := 0;
-    // r._copy := 1;
-    // r._copy := 0;
   }
 
-//  assert r != oldr;
-//  assert Cell(r, lvl, c);
-//  assert Z@r;
-//
-//  skip;
-//  skip;
-//
-//  open_region using Cell(r) {
-//    assert c.val |-> ?w && r._copy |-> w;
-//  }
-//
-//  //:: ExpectedOutput(assert_error:assertion_error)
-//  assert w == 0;
+  assert r != oldr;
+  assert Cell(r, 1, c, 0);
+  assert Z@r;
+
+  skip;
+  skip;
+
+  open_region using Cell(r, 1, c) {
+    assert c.val |-> ?w && r._copy |-> w;
+  }
+
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert w == 0;
+}
+
+procedure test02() {
+  cell c;
+  id r;
+
+  c := new cell(0);
+
+  //:: ExpectedOutput(allocation_error:region_state_error)
+  r := new Cell(1, c) with Z {
+    r._copy := 1;
+  }
+}
+
+procedure test03() {
+  cell c;
+  id r;
+
+  c := new cell(0);
+
+  r := new Cell(1, c) with Z {
+    r._copy := 1;
+    r._copy := 0;
+  }
+
+  assert Cell(r, 1, c, 0);
+}
+
+procedure test04() {
+  cell c;
+  id r;
+
+  c := new cell(123);
+
+  //:: ExpectedOutput(allocation_error:region_state_error)
+  r := new Cell(1, c) with Z;
 }

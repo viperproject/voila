@@ -1386,20 +1386,59 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translateRegionAllocation(newStmt: PNewStmt, region: PRegion): vpr.Stmt = {
-    val PNewStmt(lhs, constructor, arguments, guards, initializer) = newStmt
+    val PNewStmt(lhs, constructor, arguments, optGuards, optInitializer) = newStmt
 
+    // Let PNewStmt be the following:
+    //   r := new R(e1, e2, ...) with G1, G2, ... { stmt }
+    // Futhermore, let region R declare ghost fields f1, f2, ...
+
+    // Viper variable r
     val vprLocalVar = vpr.LocalVar(lhs.name, translate(PRegionIdType()))().withSource(lhs)
 
+    // Viper fields f1, f2, ...
     val vprFields = region.fields.map(field => toField(region, field.id))
+
+    // r := new(f1, f2, ...)
     val vprNew = vpr.NewStmt(vprLocalVar, vprFields)().withSource(newStmt)
 
+    // G1(r, ...), G2(r, ...), ...
+    val vprGuards: Vector[vpr.PredicateAccessPredicate] =
+      optGuards.fold(Vector.empty[vpr.PredicateAccessPredicate])(_.map(guardExp => {
+        val guardDecl =
+          semanticAnalyser.entity(guardExp.guard) match {
+            case GuardEntity(guardDecl, `region`) => guardDecl
+            case other => sys.error(s"Unexpectedly found $other")
+          }
+
+        val vprGuardArguments =
+          guardExp.argument.arguments map translate
+
+        vpr.PredicateAccessPredicate(
+          vpr.PredicateAccess(
+            vprLocalVar +: vprGuardArguments,
+            guardPredicate(guardDecl, region).name
+          )(),
+          vpr.FullPerm()() // TODO: What about fractional guards?
+        )()
+      }))
+
+    // inhale G1(r, ...) && G2(r, ...) && ...
+    val vprInhaleGuards =
+      vpr.Inhale(
+        viper.silicon.utils.ast.BigAnd(vprGuards)
+      )()
+
+    // Viper argument e1, e2, ...
     val vprArguments = arguments map translate
 
-    val optVprInitializer = initializer map translate
+    // Viper initialiser code stmt
+    val optVprInitializer = optInitializer map translate
 
+    // R(r, e1, e2, ...)
     val vprRegionPredicate =
       regionPredicateAccess(region, vprLocalVar +: vprArguments).withSource(constructor)
 
+    // fold R(r, e1, e2, ...)
     val vprFoldRegionPredicate =
       vpr.Fold(vprRegionPredicate)().withSource(newStmt)
 
@@ -1417,7 +1456,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprResult =
       vpr.Seqn(
-        vprNew +: optVprInitializer.toSeq :+ vprFoldRegionPredicate,
+        vprNew +:
+          vprInhaleGuards +:
+          optVprInitializer.toSeq :+
+          vprFoldRegionPredicate,
         Vector.empty
       )()
 

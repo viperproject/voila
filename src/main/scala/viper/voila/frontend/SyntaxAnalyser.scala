@@ -291,11 +291,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     idnuse ~ (":=" ~> "new" ~> idnuse) ~
       ("(" ~> listOfExpressions <~ ")") ~
       ("with" ~> guardPrefix).? ~
-      (";" | ("{" ~> statements <~ "}" <~ ";".?).?) ^^ {
+      (";" | ("{" ~> statements <~ "}" <~ ";".?)) ^^ {
         case lhs ~ cnstr ~ args ~ optGuards ~ ";" =>
           PNewStmt(lhs, cnstr, args, optGuards, None)
-        case lhs ~ cnstr ~ args ~ optGuards ~ (init: Some[PStatement@unchecked]) =>
-          PNewStmt(lhs, cnstr, args, optGuards, init)
+        case lhs ~ cnstr ~ args ~ optGuards ~ init =>
+          PNewStmt(lhs, cnstr, args, optGuards, Some(init.asInstanceOf[PStatement])) // TODO: Avoid cast
       }
 
   lazy val procedureCall: Parser[PProcedureCall] =

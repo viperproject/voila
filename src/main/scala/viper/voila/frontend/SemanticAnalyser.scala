@@ -177,7 +177,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PHeapWrite(location, rhs) =>
         reportTypeMismatch(location, typeOfLocation(location), typ(rhs))
 
-      case newStmt @ PNewStmt(lhs, constructor, arguments, guards, initializer) =>
+      case newStmt @ PNewStmt(lhs, constructor, arguments, optGuards, optInitializer) =>
         val lhsEntity = entity(lhs)
 
         val lhsMessages =
@@ -203,11 +203,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 }
 
               val guardsMessages =
-                guards.fold(noMessages)(
+                optGuards.fold(noMessages)(
                   message(_, s"Struct constructor does not take a list of guards"))
 
               val initializerMessages =
-                initializer.fold(noMessages)(
+                optInitializer.fold(noMessages)(
                   message(_, s"Struct constructor does not take an initializer block"))
 
               typeMessages ++ argumentsMessages ++ guardsMessages ++ initializerMessages
@@ -221,12 +221,24 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   message(
                     newStmt,
                     s"Wrong number of arguments for region constructor '${constructor.name}', got ${arguments.size} "
-                      + s"but expected ${regionDecl.formalInArgs.size - 1}")
+                      + s"but expected ${regionDecl.formalInArgs.size - 1} (the region id must be omitted)")
                 } else {
                   reportTypeMismatch(arguments, regionDecl.formalInArgs.tail)
                 }
 
-              typeMessages ++ argumentsMessages
+              val guardsMessages =
+                optGuards.fold(noMessages)(_.flatMap(guardExp =>
+                  entity(guardExp.guard) match {
+                    case GuardEntity(_, `regionDecl`) =>
+                      noMessages
+                    case _ =>
+                      message(
+                        guardExp,
+                        s"Region ${constructor.name} does not declare guard ${guardExp.guard.name}")
+                  }
+                ))
+
+              typeMessages ++ argumentsMessages ++ guardsMessages
 
             case _ =>
               message(constructor, s"Cannot instantiate ${constructor.name}, struct or region expected")
