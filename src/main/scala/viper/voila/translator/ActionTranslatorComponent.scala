@@ -259,7 +259,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       }
 
     guardExp.argument match {
-      case PStandartGuardArg(args) =>
+      case PStandardGuardArg(args) =>
         constructFromModifier(
           guardDecl.modifier,
           args map translate
@@ -347,7 +347,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       )().withSource(guardExp)
 
     (guardDecl.modifier, guardExp.argument) match {
-      case (_: PUniqueGuard, PStandartGuardArg(args)) =>
+      case (_: PUniqueGuard, PStandardGuardArg(args)) =>
         vpr.Inhale(
           vpr.PermLeCmp(
             permPredicate(args map translate),
@@ -403,7 +403,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
   sealed trait TranslatedPGuardArg
 
-  case class TranslatedPStandartGuardArg(arguments: Vector[vpr.Exp],
+  case class TranslatedPStandardGuardArg(arguments: Vector[vpr.Exp],
                                          preArgs: Option[Vector[PExpression]])
       extends TranslatedPGuardArg
 
@@ -427,7 +427,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.map { g =>
-      g.guard.name -> TranslatedPStandartGuardArg(Vector.empty, Some(Vector.empty))
+      g.guard.name -> TranslatedPStandardGuardArg(Vector.empty, Some(Vector.empty))
     }(breakOut)
 
     val unionMap: Map[String, TranslatedPGuardArg] = {
@@ -443,7 +443,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
       unionGuards foreach { g =>
         g.argument match {
-          case arg: PStandartGuardArg =>
+          case arg: PStandardGuardArg =>
             singleArg.addBinding(g.guard.name, arg.arguments)
 
           case arg: PSetGuardArg =>
@@ -469,7 +469,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         (uniqueSingleArg.isDefinedAt(name), combinedSingleArg.isDefinedAt(name), combinedSetArg.isDefinedAt(name)) match {
           case (false, false, true) => name -> TranslatedPSetGuardArg(combinedSetArg(name))
           case (false, true, false) => name -> TranslatedPSetGuardArg(combinedSingleArg(name))
-          case (true, true, false) => name -> TranslatedPStandartGuardArg(uniqueSingleArg(name) map translate, Some(uniqueSingleArg(name)))
+          case (true, true, false) => name -> TranslatedPStandardGuardArg(uniqueSingleArg(name) map translate, Some(uniqueSingleArg(name)))
           case (_, true, true) => name -> TranslatedPSetGuardArg(vpr.AnySetUnion(combinedSetArg(name), combinedSingleArg(name))())
           case other => sys.error(s"Found unexpected case $other")
         }
@@ -481,7 +481,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
       addGuards foreach { g =>
         val name = g.guard.name
-        val perm = translate(g.argument.asInstanceOf[PStandartGuardArg].arguments.head)
+        val perm = translate(g.argument.asInstanceOf[PStandardGuardArg].arguments.head)
 
         if (accMap.contains(name)) {
           accMap.update(name, vpr.PermAdd(perm, accMap(name))())
@@ -491,7 +491,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       }
 
       accMap.toVector.map { case(name,perm) =>
-        name -> TranslatedPStandartGuardArg(Vector(perm), None)}(breakOut)
+        name -> TranslatedPStandardGuardArg(Vector(perm), None)}(breakOut)
     }
 
     noArgMap ++ unionMap ++ addMap
@@ -546,7 +546,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           val relevantUsedGuardArg = usedGuardsMap(actionGuardName)
 
           (relevantUsedGuardArg, actionGuardArg) match {
-            case (TranslatedPStandartGuardArg(heldGuardArgs, _), TranslatedPStandartGuardArg(requiredGuardArgs, _)) =>
+            case (TranslatedPStandardGuardArg(heldGuardArgs, _), TranslatedPStandardGuardArg(requiredGuardArgs, _)) =>
               (guardDecl.modifier, heldGuardArgs, requiredGuardArgs) match {
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs, sollArgs) =>
                   /* used_guard_args == action_guard_args */
@@ -566,7 +566,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                   )
               }
 
-            case (TranslatedPStandartGuardArg(heldGuardArgs, _), TranslatedPSetGuardArg(requiredGuardSet)) =>
+            case (TranslatedPStandardGuardArg(heldGuardArgs, _), TranslatedPSetGuardArg(requiredGuardSet)) =>
               (guardDecl.modifier, heldGuardArgs) match {
                 case (_: PUniqueGuard | _: PDuplicableGuard, haveArgs) =>
                   /* \/xs :: tuple(xs) in action_guard_set ==>  tuple(xs) = tuple(used_guard_args) */
@@ -593,7 +593,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                   sys.error(s"Divisible guards not yet supported here: $other")
               }
 
-            case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPStandartGuardArg(requiredGuardArgs, _)) =>
+            case (TranslatedPSetGuardArg(heldGuardSet), TranslatedPStandardGuardArg(requiredGuardArgs, _)) =>
               (guardDecl.modifier, requiredGuardArgs) match {
                 case (_: PUniqueGuard | _: PDuplicableGuard, sollArgs) =>
                   /* tuple(action_guard_args) in used_guard_set */
@@ -751,7 +751,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           )()
 
         guardArgument match {
-          case PStandartGuardArg(guardArguments) =>
+          case PStandardGuardArg(guardArguments) =>
             (guardDecl.modifier, guardArguments) match {
               case (_: PDuplicableGuard, _) =>
                 /* true */
@@ -960,7 +960,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
     actionGuardArg.toVector foreach { case (guardName, guardArg) =>
       (guardArg, usedGuardArg(guardName)) match {
-        case (actionArg: TranslatedPStandartGuardArg, usedArg: TranslatedPStandartGuardArg)
+        case (actionArg: TranslatedPStandardGuardArg, usedArg: TranslatedPStandardGuardArg)
              if actionArg.preArgs.isDefined =>
 
           actionArg.preArgs.get.zip(usedArg.arguments) foreach { case (formal, actual) =>

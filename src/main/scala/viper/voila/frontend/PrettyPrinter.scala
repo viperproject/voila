@@ -429,7 +429,7 @@ class DefaultPrettyPrinter
 
       def toDoc(arg: PGuardArg): Doc =
         arg match {
-          case PStandartGuardArg(args) =>
+          case PStandardGuardArg(args) =>
             asArguments(args)
           case PSetGuardArg(set) =>
             "|" <> toDoc(set) <> "|"

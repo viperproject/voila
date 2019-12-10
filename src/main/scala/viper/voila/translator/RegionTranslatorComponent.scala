@@ -369,7 +369,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       val guards = actionMaps(index).toVector
 
       val guardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
-        case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
+        case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandardGuardArg(args, _)) =>
           args.length match {
             case 0 => guardVarMap(name)
             case _ => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
@@ -378,7 +378,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
           vpr.AnySetSubset(set, guardVarMap(name))()
 
-        case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
+        case (_: PDivisibleGuard, TranslatedPStandardGuardArg(args, _)) =>
           vpr.GeCmp(args.head, guardVarMap(name))()
 
         case other @ (_: PDivisibleGuard, _: TranslatedPSetGuardArg) =>
@@ -438,7 +438,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
         val aGuardConstraints = guards map { case (name, arg) =>
           (guardModifierMap(name), arg) match {
-            case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandartGuardArg(args, _)) =>
+            case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandardGuardArg(args, _)) =>
               args.length match {
                 case 0 => guardVarMap(name)
                 case _ => vpr.AnySetContains(tupleWrap(args), guardVarMap(name))()
@@ -447,7 +447,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
             case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPSetGuardArg(set)) =>
               vpr.AnySetSubset(set, guardVarMap(name))()
 
-            case (_: PDivisibleGuard, TranslatedPStandartGuardArg(args, _)) =>
+            case (_: PDivisibleGuard, TranslatedPStandardGuardArg(args, _)) =>
               vpr.GeCmp(args.head, guardVarMap(name))()
 
             case (_: PDivisibleGuard, TranslatedPSetGuardArg(_)) => ???
@@ -526,7 +526,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val (guardBinder, stateBinder) = action.binders partition { binder =>
       action.guards.exists{ _.argument match {
-        case PStandartGuardArg(args) =>
+        case PStandardGuardArg(args) =>
           args.exists(isBoundExpExtractableFromPoint(binder, _))
 
         case _ => false

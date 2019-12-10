@@ -471,7 +471,7 @@ case class PRegionedGuardExp(guard: PIdnUse, regionId: PIdnExp, argument: PGuard
 
 sealed trait PGuardArg extends PAstNode with PrettyExpression
 
-case class PStandartGuardArg(arguments: Vector[PExpression]) extends PGuardArg
+case class PStandardGuardArg(arguments: Vector[PExpression]) extends PGuardArg
 
 case class PSetGuardArg(set: PExpression) extends PGuardArg
 
