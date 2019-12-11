@@ -26,16 +26,19 @@ object VoilaConstants {
   val toolName: String  = "Voila"
   val toolCopyright: String  = "(c) Copyright ETH Zurich 2016 - 2019"
 
-  val toolVersion: String = {
+  val buildVersion: Option[String] = {
     val buildRevision = BuildInfo.hg("revision")
     val buildBranch = BuildInfo.hg("branch")
-    val buildVersion = s"$buildRevision${if (buildBranch == "default") "" else s"@$buildBranch"}"
 
-    s"${BuildInfo.projectVersion} ($buildVersion)"
+    if (buildRevision.isEmpty && buildBranch.isEmpty) None
+    else if (buildBranch == "default") Some(buildRevision)
+    else Some(s"$buildRevision@$buildBranch")
   }
 
-  val versionMessage: String  =
-    s"${VoilaConstants.toolName} ${VoilaConstants.toolVersion}"
+  val toolVersion: String =
+    s"${BuildInfo.projectVersion}${buildVersion.fold("")(v => s" ($v)")}"
+
+  val toolNameAndVersion: String = s"${toolName} ${toolVersion}"
 
   val preambleFile: String  = "preamble.vpr"
 }
@@ -96,7 +99,7 @@ class Voila extends StrictLogging {
      *       If both values are expected to be equal, why pass `file` at all?
      */
 
-    logger.info(VoilaConstants.versionMessage)
+    logger.info(VoilaConstants.toolNameAndVersion)
 
     if (!Files.isRegularFile(file)) exitWithError(s"${config.inputFileName()} is not a file")
     if (!Files.isReadable(file)) exitWithError(s"Cannot read from ${config.inputFileName()}")

@@ -23,7 +23,7 @@ class Config(arguments: Seq[String])
    * Prologue
    */
 
-  version(VoilaConstants.versionMessage)
+  version(VoilaConstants.toolNameAndVersion)
 
   banner(s"""Usage: ${VoilaConstants.toolName} [OPTIONS] -i <input-file>
             |
