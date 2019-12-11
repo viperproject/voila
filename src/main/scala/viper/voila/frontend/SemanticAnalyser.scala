@@ -188,7 +188,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         val constructorMessages =
           entity(constructor) match {
-            case StructEntity(structDecl) =>
+            case StructEntity(structDecl) => /* s := new struct(e1,  ...) */
               val typeMessages =
                 reportTypeMismatch(lhs, typeOfIdn(constructor), typeOfIdn(lhs))
 
@@ -212,7 +212,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
               typeMessages ++ argumentsMessages ++ guardsMessages ++ initializerMessages
 
-            case RegionEntity(regionDecl) =>
+            case RegionEntity(regionDecl) => /* r := new Region(lvl, e1, ...) with G1 && ... { init }*/
               val typeMessages =
                 reportTypeMismatch(lhs, PRegionIdType(), typeOfIdn(lhs))
 
@@ -419,11 +419,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     * the same.
     */
   def isCompatible(t1: PType, t2: PType): Boolean = {
-    (t1 == t2) ||
-    (t1.isInstanceOf[PRefType] && t2.isInstanceOf[PNullType]) ||
-    (t2.isInstanceOf[PRefType] && t1.isInstanceOf[PNullType]) ||
-    (t1 == PUnknownType()) ||
-    (t2 == PUnknownType())
+    (t1, t2) match {
+      case (`t1`, `t1`) => true
+      case (PRefType(id1), PRefType(id2)) => id1.name == id2.name
+      case (_: PRefType, _: PNullType) | (_: PNullType, _: PRefType) => true
+      case (_: PUnknownType, _) | (_, _: PUnknownType) => true
+      case _ => false
+    }
   }
 
   /**
@@ -841,8 +843,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case FormalArgumentEntity(decl) => decl.typ
       case FormalReturnEntity(decl) => decl.typ
       case LocalVariableEntity(decl) => decl.typ
-      case ProcedureEntity(_) => ???
       case LogicalVariableEntity(decl) => typeOfLogicalVariable(decl)
+      case StructEntity(decl) => PRefType(decl.id)
       case _ => PUnknownType()
     })
 

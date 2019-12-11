@@ -521,7 +521,7 @@ case class PFracType() extends PType
 case class PNullType() extends PInternalType
 case class PUnknownType() extends PInternalType
 
-case class PRefType(id: PIdnUse) extends PType
+case class PRefType(id: PIdnNode) extends PType
 
 /* TODO: Is it worth having PCollectionType, given that pairs and maps don't extend it? Can this be changed? */
 
