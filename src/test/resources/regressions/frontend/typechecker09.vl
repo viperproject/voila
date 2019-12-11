@@ -17,7 +17,14 @@ procedure test00() {
 procedure test01() {
   mem_pair mp;
 
+  //:: ExpectedOutput(typechecker_error)
   mp := new cell();
+}
+
+procedure test05() {
+  cell c;
+
+  c := new cell();
 }
 
 procedure test02() {

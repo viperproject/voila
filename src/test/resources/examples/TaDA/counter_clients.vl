@@ -157,13 +157,14 @@ procedure client() {
   int k1;
   int k2;
 
-  assume alvl > lvl;
+  assume alvl > lvl >= 0;
 
   // x := makeCounter();
-  inhale Counter(c, lvl, x, 0) && G@c;
+  x := new cell(0);
+  c := new Counter(lvl, x) with G;
+
   // Create a new CClient region
-  inhale TOTAL(0)@a && INC(0, 1f)@a;
-  fold CClient(a, alvl, c, lvl, x, 0);
+  a := new CClient(alvl, c, lvl, x) with TOTAL(0) && INC(0, 1f);
 
   // Duplicate region assertion
   assert CClient(a, alvl, c, lvl, x);

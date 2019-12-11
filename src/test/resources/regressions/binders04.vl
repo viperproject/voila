@@ -1,0 +1,19 @@
+struct cell {
+  int val;
+}
+
+region Cell(id r, int lvl, cell c)
+  ghost_fields { int _val; }
+  guards { duplicable Z; }
+  interpretation { true }
+  state { 0 }
+  actions { }
+
+procedure test01() {
+  id r;
+  cell c;
+
+  inhale Cell(r, 100, c);
+  unfold Cell(r, 100, c);
+  inhale r._val |-> ?w;
+}

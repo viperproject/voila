@@ -21,13 +21,12 @@ region Join(id r, int lvl, memcell x)
   actions { SET: 0 ~> 1; }
 
 // TODO: make_join()
-procedure make_join(id r, int lvl) returns (memcell ret)
+procedure make_join(int lvl) returns (id r, memcell x)
   requires true;
-  ensures Join(r, lvl, ret, 0) && SET@r;
+  ensures Join(r, lvl, x, 0) && SET@r;
 //{
-//    v := alloc(1);
-//    [v] := 0;
-//    return v;
+//  x := new memcell(0);
+//  r := new Join(lvl, x) with SET;
 //}
 
 procedure set_to_one(id r, int lvl, memcell x)
@@ -98,13 +97,11 @@ procedure main(id dummy, int methodLvl)
 
   // y := make_join();
   // Yields Join(s, lvl, y, 0) && SET@s
-    y := make_join(s, lvl);
+    s, y := make_join(lvl);
 
   // x := alloc(1);
-    inhale x.f |-> ?q;
-
   // [x] := 0;
-    x.f := 0;
+    x := new memcell(0);
 
   (
     // TODO: Encode region predicates with wildcard access to account for duplicability?

@@ -11,17 +11,12 @@ region Sum(id r, int lvl, mempair p, int v)
   state { v + w }
   actions { ?n, ?m | Z: n ~> m; }
 
-procedure test01()
-
-{
+procedure test01() {
   mempair p;
   id r;
 
   p := new mempair(1, -1);
-
-  // new Sum(r, lvl, p, 1)
-  inhale Z@r;
-  fold Sum(r, 0, p, 1);
+  r := new Sum(0, p, 1) with Z;
 
   skip;
   skip;

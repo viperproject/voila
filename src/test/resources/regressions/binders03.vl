@@ -1,6 +1,6 @@
 region Tuple2(id r, int lvl, tuple2 x; int v, int w)
   guards { unique G; }
-  interpretation { x._1 |-> ?v && x._2 |-> ?w }
+  interpretation { x.f1 |-> ?v && x.f2 |-> ?w }
   state { v + w }
   actions {}
 
@@ -28,6 +28,6 @@ procedure test02(id r, int lvl, tuple2 x) {
 }
 
 struct tuple2 {
-  int _1;
-  int _2;
+  int f1;
+  int f2;
 }

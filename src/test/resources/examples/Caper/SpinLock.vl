@@ -23,22 +23,9 @@ region SLock(id r, int lvl, memcell x)
     UNLOCK: 1 ~> 0;
   }
 
-// TODO: Too many issues
-procedure makeLock(id r, int lvl) returns (memcell ret)
-//  // ensures SLock(r, lvl, ret, 0) && LOCK@r; // TODO: See issue #23
-{
-//  // ret := alloc(1); // See Voila issue #17
-//  memcell x;
-//  havoc x;
-//  inhale (x.f |-> ?v);
-//  x.f := 0;
-//
-//  inhale UNLOCK@r; // See Voila issues #18 ...
-//  inhale LOCK@r;   // ... and #19
-//  fold SLock(r, lvl, x, 0);
-//
-//  ret := x;
-}
+// TODO: Implement; but see issue #23
+procedure makeLock(int lvl) returns (id r, memcell ret)
+  ensures SLock(r, lvl, ret, 0) && LOCK@r;
 
 abstract_atomic procedure acquire(id r, int lvl, memcell x)
   interference ?v in Set(0, 1) on r;
