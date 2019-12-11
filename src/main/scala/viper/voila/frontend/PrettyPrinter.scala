@@ -176,8 +176,9 @@ class DefaultPrettyPrinter
         "struct" <+> toDoc(id) <+>
         block(lterm(fields map toDoc, semi))
 
-      case PRegion(id, formalInArgs, formalOutArgs, guards, interpretation, state, actions) =>
+      case PRegion(id, formalInArgs, formalOutArgs, guards, interpretation, state, actions, fields) =>
         "region" <+> toDoc(id) <>
+        "ghost_fields" <+> block(lterm(fields map toDoc, semi)) <@>
         asFormalArguments(formalInArgs) <>
         (formalOutArgs match {
           case Seq() => emptyDoc
@@ -248,6 +249,18 @@ class DefaultPrettyPrinter
       case ghost: PGhostStatement => toDoc(ghost)
       case PSeqComp(first, second) => toDoc(first) <> line <> toDoc(second)
       case PSkip() => "skip" <> semi
+
+      case PNewStmt(lhs, constructor, arguments, guards, initializer) =>
+        val initializerDoc =
+          initializer.fold(emptyDoc)(stmt => space <> braces(nest(toDoc(stmt))))
+
+        val guardsDoc =
+          guards.fold(emptyDoc)(guards => space <> "with" <+> asBaseGuards(guards))
+
+        toDoc(lhs) <+> ":=" <+> "new" <+> toDoc(constructor) <> asArguments(arguments) <>
+          guardsDoc <>
+          initializerDoc
+
       case PAssign(lhs, rhs) => toDoc(lhs) <+> ":=" <+> toDoc(rhs) <> semi
       case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location) <> semi
       case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs) <> semi
@@ -288,6 +301,9 @@ class DefaultPrettyPrinter
 
   def asFormalReturns(returns: Vector[PFormalReturnDecl]): Doc =
     parens(ssep(returns map toDoc, comma <> space))
+
+  def asBaseGuards(arguments: Vector[PBaseGuardExp]): Doc =
+    ssep(arguments map toDoc, space <> "&&" <> space)
 
   def toDoc(rule: PRuleStatement): Doc = {
     rule match {

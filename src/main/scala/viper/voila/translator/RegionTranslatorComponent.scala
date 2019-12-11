@@ -197,6 +197,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
   def translate(region: PRegion): Vector[vpr.Declaration] = {
     val regionPredicateName = region.id.name
 
+    val fields = region.fields.map(field => toField(region, field.id))
+
     val formalRegionArgs = region.formalInArgs map translate
 
     /* predicate region(id, args) { interpretation } */
@@ -214,7 +216,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val skolemizationFunctionFootprint = collectActionSkolemizationFunctionFootprint(region)
     val skolemizationFunctions = collectActionSkolemizationFunctions(region)
 
-    (   guardPredicates
+    (   fields
+     ++ guardPredicates
      ++ collectingFunctions.flatMap(_(region)).distinct
      ++ region.guards.flatMap(guard => guardTriggerFunction(guard, region))
      ++ region.guards.flatMap(guard => guardTriggerFunctionAxiom(guard, region))

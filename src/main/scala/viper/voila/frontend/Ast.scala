@@ -147,8 +147,11 @@ case class PAction(binders: Vector[PNamedBinder], condition: PExpression, guards
 
 sealed trait PMember extends PDeclaration with PScope
 
-case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMember
-  // TODO: Introduce PFieldDecl; use instead PFormalArgumentDecl
+sealed trait PMemberWithFields extends PMember {
+  def fields: Vector[PFormalArgumentDecl] // TODO: Introduce PFieldDecl; use instead of PFormalArgumentDecl
+}
+
+case class PStruct(id: PIdnDef, fields: Vector[PFormalArgumentDecl]) extends PMemberWithFields
 
 case class PRegion(id: PIdnDef,
                    formalInArgs: Vector[PFormalArgumentDecl],
@@ -156,8 +159,9 @@ case class PRegion(id: PIdnDef,
                    guards: Vector[PGuardDecl],
                    interpretation: PExpression,
                    state: PExpression,
-                   actions: Vector[PAction])
-    extends PMember {
+                   actions: Vector[PAction],
+                   fields: Vector[PFormalArgumentDecl] = Vector.empty)
+    extends PMemberWithFields {
 
   val regionId: PFormalArgumentDecl = formalInArgs.head
 
@@ -261,6 +265,16 @@ case class PHeapWrite(location: PLocation, rhs: PExpression) extends PHeapAccess
 
 case class PHeapRead(lhs: PIdnUse, location: PLocation) extends PHeapAccess {
   val statementName = "heap-read"
+}
+
+case class PNewStmt(lhs: PIdnUse,
+                    constructor: PIdnUse,
+                    arguments: Vector[PExpression],
+                    guards: Option[Vector[PBaseGuardExp]],
+                    initializer: Option[PStatement])
+    extends PStatement {
+
+  val statementName = s"new:${constructor.name}"
 }
 
 case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Vector[PIdnUse])
@@ -459,6 +473,9 @@ case class PPointsTo(location: PLocation, value: PExpression)
     extends PExpression with PBindingContext
 
 
+// TODO: Reconsider design of PGuardExp: the trait has an "argument: PGuardArg", there is a subclass
+//       "PStandardGuardArg" which has "arguments: Vector[PExpression]" — too many things are/have "arguments".
+
 sealed trait PGuardExp extends PExpression {
   def guard: PIdnUse
   def argument: PGuardArg
@@ -469,11 +486,15 @@ case class PBaseGuardExp(guard: PIdnUse, argument: PGuardArg) extends PGuardExp
 case class PRegionedGuardExp(guard: PIdnUse, regionId: PIdnExp, argument: PGuardArg) extends PGuardExp
 
 
-sealed trait PGuardArg extends PAstNode with PrettyExpression
+sealed trait PGuardArg extends PAstNode with PrettyExpression {
+  def arguments: Vector[PExpression]
+}
 
 case class PStandardGuardArg(arguments: Vector[PExpression]) extends PGuardArg
 
-case class PSetGuardArg(set: PExpression) extends PGuardArg
+case class PSetGuardArg(set: PExpression) extends PGuardArg {
+  val arguments = Vector(set)
+}
 
 
 sealed trait PTrackingResource extends PExpression {
@@ -500,7 +521,7 @@ case class PFracType() extends PType
 case class PNullType() extends PInternalType
 case class PUnknownType() extends PInternalType
 
-case class PRefType(id: PIdnUse) extends PType
+case class PRefType(id: PIdnNode) extends PType
 
 /* TODO: Is it worth having PCollectionType, given that pairs and maps don't extend it? Can this be changed? */
 

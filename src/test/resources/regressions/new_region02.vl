@@ -1,0 +1,21 @@
+struct cell {
+  int val;
+}
+
+region Cell(id r, int lvl, cell c)
+  ghost_fields { int _copy; }
+  guards { duplicable Z; }
+  interpretation { c.val |-> ?v && r._copy |-> ?w && v == w }
+  state { v }
+  actions { ?n, ?m | n <= m | Z: n ~> m; }
+
+procedure test02() {
+  id r;
+  cell c;
+
+  c := new cell(12);
+
+  r := new Cell(1, c) {
+    r._copy := 12;
+  }
+}

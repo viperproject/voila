@@ -17,10 +17,10 @@ procedure destroy()
 
 struct arcell {
   int value;
-  int _absstate; // ghost
 }
 
 region ARCounter(id r, int lvl, arcell c)
+  ghost_fields { int _absstate; }
   guards {
     duplicable ARC(int n);
     duplicable Z;
@@ -28,7 +28,7 @@ region ARCounter(id r, int lvl, arcell c)
   interpretation {
 //    n > 0 | n : object() &*& r@arc|-1-n| &*& c |-> n;
 //    0 : r@arc|-1|;
-    c._absstate |-> ?n && 0 <= n &&
+    r._absstate |-> ?n && 0 <= n &&
     (n > 0 ? object() && ARC(-1-n)@r && c.value |-> n : ARC(-1)@r)
     // TODO: Ghost field _absstate wouldn't be needed if c.value |-> were always in the region.
     //       Removing _absstate would reduce the amount of ghost.
@@ -74,111 +74,109 @@ procedure init(int lvl) returns (id r, arcell c)
   create();
 
   // c := alloc(1);
-  inhale c.value |-> _;
-
-  c.value := 1;
+  // [c] := 1
+  c := new arcell(1);
 
   // Create region ARCounter(r, lvl, c)
-  inhale ARC(-1)@r;
-  inhale c._absstate |-> 0;
-  fold ARCounter(r, lvl, c);
+  r := new ARCounter(lvl, c) with ARC(-1) {
+    r._absstate := 0;
+  }
 
   // Manipulate abstract state and guard to establish postcondition (TODO: view shift?)
   unfold ARCounter(r, lvl, c);
-  exhale c._absstate |-> _;
-  inhale c._absstate |-> 1;
+  r._absstate := 1;
   use ARC_split(r, -2, 1);
   fold ARCounter(r, lvl, c);
 }
 
-macro prune_infeasible_proof_branch(r, c) {
-  assert c._absstate |-> ?a;
-  assert 0 <= a;
-  if (a == 0) {
-    use ARC_false1(r, 1);
-    assert false;
-  }
-}
-
-procedure clone(id r, int lvl, arcell c)
-  requires ARCounter(r, lvl, c) && ARC(1)@r;
-  requires Z@r;
-  ensures  ARCounter(r, lvl, c) && ARC(2)@r;
-{
-  int cnt;
-  bool b;
-
-  do
-    invariant !b ? ARCounter(r, lvl, c) && ARC(1)@r && Z@r : ARCounter(r, lvl, c) && ARC(2)@r;
-  {
-    // cnt := [c];
-    open_region
-      using ARCounter(r, lvl, c);
-    {
-      prune_infeasible_proof_branch(r, c); // ghost
-
-      cnt := c.value;
-    }
-
-    // b := CAS(c,cnt,cnt+1);
-    use_atomic
-      using ARCounter(r, lvl, c) with Z@r;
-    {
-      prune_infeasible_proof_branch(r, c); // ghost
-
-      b := CAS(c, cnt, cnt + 1);
-
-      // ghost
-      if (b) {
-        exhale c._absstate |-> cnt;
-        inhale c._absstate |-> cnt + 1;
-        use ARC_split(r, -1-(cnt+1), 1); // split-off another ARC(1)
-        use ARC_join(r, 1, 1); // join two ARC(1) into one ARC(2)
-      }
-    }
-  } while (!b);
-}
-
-procedure drop(id r, int lvl, arcell c)
-  requires ARCounter(r, lvl, c) && ARC(1)@r;
-  requires Z@r;
-  ensures  true;
-{
-  int cnt;
-  bool b;
-
-  do
-    invariant !b ? ARCounter(r, lvl, c) && ARC(1)@r && Z@r : (cnt == 1 ==> object());
-  {
-    open_region
-      using ARCounter(r, lvl, c);
-    {
-      prune_infeasible_proof_branch(r, c); // ghost
-
-      cnt := c.value;
-    }
-
-    use_atomic
-      using ARCounter(r, lvl, c) with Z@r;
-    {
-      prune_infeasible_proof_branch(r, c); // ghost
-
-      b := CAS(c, cnt, cnt - 1);
-
-      // ghost
-      if (b) {
-        exhale c._absstate |-> cnt;
-        inhale c._absstate |-> cnt - 1;
-        use ARC_join(r, -1-cnt, 1); // join back ARC(1)
-      }
-    }
-
-  } while (!b);
-
-  if (cnt == 1) {
-    destroy();
-  }
-}
+//macro prune_infeasible_proof_branch(r, c) {
+//  assert r._absstate |-> ?a;
+//  assert 0 <= a;
+//  if (a == 0) {
+//    use ARC_false1(r, 1);
+//    assert false;
+//  }
+//}
+//
+//procedure clone(id r, int lvl, arcell c)
+//  requires ARCounter(r, lvl, c) && ARC(1)@r;
+//  requires Z@r;
+//  ensures  ARCounter(r, lvl, c) && ARC(2)@r;
+//{
+//  int cnt;
+//  bool b;
+//
+//  do
+//    invariant !b ? ARCounter(r, lvl, c) && ARC(1)@r && Z@r : ARCounter(r, lvl, c) && ARC(2)@r;
+//  {
+//    // cnt := [c];
+//    open_region
+//      using ARCounter(r, lvl, c);
+//    {
+//      prune_infeasible_proof_branch(r, c); // ghost
+//
+//      cnt := c.value;
+//    }
+//
+//    // b := CAS(c,cnt,cnt+1);
+//    use_atomic
+//      using ARCounter(r, lvl, c) with Z@r;
+//    {
+//      prune_infeasible_proof_branch(r, c); // ghost
+//
+//      b := CAS(c, cnt, cnt + 1);
+//
+//      // ghost
+//      if (b) {
+//        exhale r._absstate |-> cnt;
+//        inhale r._absstate |-> cnt + 1;
+//        use ARC_split(r, -1-(cnt+1), 1); // split-off another ARC(1)
+//        use ARC_join(r, 1, 1); // join two ARC(1) into one ARC(2)
+//      }
+//    }
+//  } while (!b);
+//}
+//
+//procedure drop(id r, int lvl, arcell c)
+//  requires ARCounter(r, lvl, c) && ARC(1)@r;
+//  requires Z@r;
+//  ensures  true;
+//{
+//  int cnt;
+//  bool b;
+//
+//  do
+//    invariant !b ? ARCounter(r, lvl, c) && ARC(1)@r && Z@r : (cnt == 1 ==> object());
+//  {
+//    open_region
+//      using ARCounter(r, lvl, c);
+//    {
+//      prune_infeasible_proof_branch(r, c); // ghost
+//
+//      cnt := c.value;
+//    }
+//
+//    use_atomic
+//      using ARCounter(r, lvl, c) with Z@r;
+//    {
+//      prune_infeasible_proof_branch(r, c); // ghost
+//
+//      b := CAS(c, cnt, cnt - 1);
+//
+//      // ghost
+//      if (b) {
+//        exhale r._absstate |-> cnt;
+//        inhale r._absstate |-> cnt - 1;
+//        use ARC_join(r, -1-cnt, 1); // join back ARC(1)
+//      }
+//    }
+//
+//  } while (!b);
+//
+//  if (cnt == 1) {
+//    destroy();
+//  }
+//}
 
 primitive_atomic procedure CAS(arcell x, int now, int thn) returns (bool ret)
   requires x.value |-> ?v;

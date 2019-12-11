@@ -1,0 +1,41 @@
+struct S {
+  int f;
+}
+
+region R(id r, int lvl, S s)
+  ghost_fields { int _g; }
+  guards { duplicable Z; }
+  interpretation { true }
+  state { true }
+  actions { }
+
+procedure test01() {
+  S s;
+
+  //:: ExpectedOutput(typechecker_error)
+  s := new R(1, s);
+}
+
+procedure test02() {
+  id r;
+
+  //:: ExpectedOutput(typechecker_error)
+  r := new S(2);
+}
+
+struct S2 {
+  int f2;
+}
+
+procedure test03() {
+  S s;
+
+  //:: ExpectedOutput(typechecker_error)
+  s := new S2(-3);
+}
+
+procedure test04() {
+  S2 s2;
+
+  s2 := new S2(0);
+}

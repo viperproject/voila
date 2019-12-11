@@ -97,6 +97,17 @@ case class AssignmentError(offendingNode: PStatement, detail: Option[Verificatio
     copy(offendingNode, detail)
 }
 
+case class AllocationError(offendingNode: PNewStmt, detail: Option[VerificationError] = None)
+    extends AbstractVerificationError {
+
+  type OffendingNode = PNewStmt
+  def localId: String = "allocation_error"
+  val localMessage: String = "Allocation might fail"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class PostconditionError(offendingNode: PExpression, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
@@ -307,10 +318,11 @@ case class InsufficientRegionPermissionError(offendingNode: PPredicateExp, detai
     copy(offendingNode, detail)
 }
 
-case class RegionStateError(offendingNode: PPredicateExp, detail: Option[VerificationError] = None)
+// TODO: Make offendingNode should be less generic
+case class RegionStateError(offendingNode: PAstNode, detail: Option[VerificationError] = None)
   extends AbstractVerificationError {
 
-  type OffendingNode = PPredicateExp
+  type OffendingNode = PAstNode
   def localId: String = "region_state_error"
   val localMessage: String = s"Region ${offendingNode.formatForUsers} might not be in the expected state"
 

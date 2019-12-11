@@ -1,6 +1,6 @@
 region Triple(id r, int lvl, triple x; int u, int v)
   guards { unique G; }
-  interpretation { x._1 |-> ?u && x._2 |-> ?v && x._3 |-> ?w && 0 < w }
+  interpretation { x.f1 |-> ?u && x.f2 |-> ?v && x.f3 |-> ?w && 0 < w }
   state { w <= u + v + w }
   actions {}
 
@@ -31,7 +31,7 @@ procedure test02(id r, int lvl, triple x)
 }
 
 struct triple {
-  int _1;
-  int _2;
-  int _3;
+  int f1;
+  int f2;
+  int f3;
 }

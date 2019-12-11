@@ -10,7 +10,7 @@ import viper.voila.frontend._
 import viper.silver.{ast => vpr}
 
 trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
-  def toField(declaredBy: PStruct, id: PIdnNode): vpr.Field = {
+  def toField(declaredBy: PMemberWithFields, id: PIdnNode): vpr.Field = {
     val fieldType = declaredBy.fields.find(_.id.name == id.name).get.typ
 
     vpr.Field(
@@ -20,15 +20,21 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def translate(location: PLocation): vpr.FieldAccess = {
-    val receiverType =
-      semanticAnalyser.typeOfIdn(location.receiver).asInstanceOf[PRefType]
+    val receiverMember: PMemberWithFields =
+      semanticAnalyser.typeOfIdn(location.receiver) match {
+        case referenceType: PRefType =>
+          semanticAnalyser.entity(referenceType.id).asInstanceOf[StructEntity].declaration
 
-    val receiverStruct =
-      semanticAnalyser.entity(receiverType.id).asInstanceOf[StructEntity].declaration
+        case _: PRegionIdType =>
+          semanticAnalyser.usedWithRegion(location.receiver)
+
+        case other =>
+          sys.error(s"Unexpectedly found $other")
+      }
 
     vpr.FieldAccess(
       translateUseOf(location.receiver),
-      toField(receiverStruct, location.field)
+      toField(receiverMember, location.field)
     )().withSource(location)
   }
 

@@ -1,0 +1,66 @@
+struct cell {
+  int val;
+}
+
+region Inner(id r, int lvl, cell c)
+  guards { unique I; }
+  interpretation { c.val |-> ?v }
+  state { v }
+  actions { ?n, ?m | n <= m | I: n ~> m; }
+
+region Outer(id s, int lvl, id r, int rlvl, cell c)
+  guards { duplicable O; }
+  interpretation { Inner(r, rlvl, c, ?v) && rlvl < lvl && I@r }
+  state { v }
+  actions { ?n, ?m | n <= m | O: n ~> m; }
+
+procedure test01() {
+  cell c;
+  id r, s;
+  int rlvl, slvl;
+  inhale rlvl < slvl;
+
+  inhale Inner(r, rlvl, c, 0) && I@r;
+
+  inhale O@s;
+  fold Outer(s, slvl, r, rlvl, c, 0);
+
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert false;
+}
+
+procedure test02() {
+  cell c;
+  id r, s;
+  int rlvl, slvl;
+  inhale 0 <= rlvl < slvl;
+
+  c := new cell(0);
+  assert c.val |-> 0;
+  r := new Inner(rlvl, c) with I;
+  assert Inner(r, rlvl, c, 0) && I@r;
+
+  inhale O@s;
+  fold Outer(s, slvl, r, rlvl, c, 0);
+
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert false;
+}
+
+procedure test03() {
+  cell c;
+  id r, s;
+  int rlvl, slvl;
+  inhale 0 <= rlvl < slvl;
+
+  c := new cell(0);
+  assert c.val |-> 0;
+  r := new Inner(rlvl, c) with I;
+  assert Inner(r, rlvl, c, 0) && I@r;
+
+  s := new Outer(slvl, r, rlvl, c) with O;
+  assert Outer(s, slvl, r, rlvl, c, 0) && O@s;
+
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert false;
+}

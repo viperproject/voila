@@ -1,0 +1,34 @@
+struct mempair {
+  int left;
+  int right;
+}
+
+region Sum(id r, int lvl, mempair p, int v)
+  guards { duplicable Z; }
+  interpretation {
+    p.left |-> v && p.right |-> ?w
+  }
+  state { v + w }
+  actions { ?n, ?m | Z: n ~> m; }
+
+procedure test01() {
+  mempair p;
+  id r;
+
+  p := new mempair(1, -1);
+  r := new Sum(0, p, 1) with Z;
+
+  skip;
+  skip;
+
+  //  // open_region currently not possible, see issue #84
+  // open_region using Sum(r, 0, p, 1) {
+  //   assert p.left |-> 1;
+  // }
+
+  unfold Sum(r, 0, p, 1);
+  assert p.left |-> 1;
+
+  //:: ExpectedOutput(assert_error)
+  assert p.right |-> -1;
+}

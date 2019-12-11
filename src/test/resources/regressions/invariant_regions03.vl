@@ -1,0 +1,38 @@
+// :: IgnoreFile(/voila/issue/85/)
+
+struct node {
+  int val;
+  node next;
+}
+
+region Node(id r, int lvl, node n, int v)
+  ghost_fields {
+    id _next_id;
+    int _next_level;
+    int _next_val;
+  }
+  guards { unique OWN; }
+  interpretation {
+    n.val |-> v && n.next |-> ?nxt &&
+    (nxt != null ==>
+      r._next_id |-> ?nxt_id &&
+      r._next_level |-> ?nxt_lvl &&
+      r._next_val |-> ?nxt_v &&
+      Node(nxt_id, nxt_lvl, nxt, nxt_v) &&
+      OWN@nxt_id)
+  }
+  state { nxt }
+  actions { ?m | OWN: null ~> m; }
+
+procedure test01(id rr, node nn)
+  requires Node(rr, 1000, nn, 0); // TODO: Workaround for issue #84
+{
+  node n1; id r1;
+
+  n1 := new node(1, null);
+  r1 := new Node(100, n1, 1) with OWN;
+
+  use_atomic using Node(r1, 100, n1, 1) with OWN@r1 {
+    assert n1.val |-> 1;
+  }
+}
