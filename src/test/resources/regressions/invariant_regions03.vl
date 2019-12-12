@@ -1,5 +1,3 @@
-// :: IgnoreFile(/voila/issue/85/)
-
 struct node {
   int val;
   node next;

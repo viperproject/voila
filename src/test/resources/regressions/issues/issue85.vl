@@ -1,0 +1,38 @@
+struct node {
+  node next;
+}
+
+region Node(id r, int lvl, node n)
+  ghost_fields { id _next_id; }
+  guards { duplicable Z; }
+  interpretation {
+    // Interpretation is nonsensical; crafted to contain several nested region assertions
+    n.next |-> ?nxt &&
+    10 < lvl &&
+    (nxt != null
+      ? r._next_id |-> ?nxt_id1 &&
+        Node(nxt_id1, lvl - 1, null)
+      : r._next_id |-> ?nxt_id2 &&
+        Node(nxt_id2, lvl - 4, null)) &&
+    (123 < lvl ==>
+      r._next_id |-> ?nxt_id3 &&
+      Node(nxt_id3, lvl - 2, nxt) &&
+      (456 < lvl < 789 ==> Node(nxt_id3, lvl - 3, nxt)))
+  }
+  state { nxt }
+  actions { ?m | Z: null ~> m; }
+
+procedure test01(id rr, node nn)
+  requires Node(rr, 2000, nn); // TODO: Work-around for issue #84
+{
+  node n0;
+  id r0;
+  int lvl0;
+  assume 30 < lvl0 < 1000;
+
+  inhale Node(r0, lvl0, n0) && Z@r0;
+
+  use_atomic using Node(r0, lvl0, n0) with Z@r0 {
+    assert true;
+  }
+}

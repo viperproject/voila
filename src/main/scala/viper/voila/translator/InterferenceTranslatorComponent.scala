@@ -6,7 +6,9 @@
 
 package viper.voila.translator
 
+import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.silver.ast._
+
 import scala.collection.breakOut
 import viper.silver.{ast => vpr}
 import viper.voila.backends.ViperAstUtils
@@ -176,24 +178,41 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
     val refLabel = freshLabel("transitionPre")
 
-    var allRegions: List[(PRegion, Vector[vpr.Exp])] = Nil
+    // Next steps: collect all region assertions R(e1, ...) that occur in the current `region`'s interpretation,
+    // in vector `nestedRegion`. Each entry is a triple (path conditions, region, region assertion arguments),
+    // where region and assertion arguments form R(e1, ...), and where the path conditions are all conditions
+    // (of if-then-else expressions) under which the region assertion is nested.
+    type NestedRegionRecord = (Vector[vpr.Exp], PRegion, Vector[vpr.Exp])
 
-    translateWith(region.interpretation) {
-      case pred: PPredicateExp if extractableRegionInstance(pred) =>
-        val (innerRegion, inArgs, _) = getRegionPredicateDetails(pred)
+    val nestedRegionCollector =
+      collect[Vector, NestedRegionRecord] {
+        case regionExp: PPredicateExp if extractableRegionInstance(regionExp) =>
+          val (innerRegion, inArgs, _) =
+            getRegionPredicateDetails(regionExp)
 
-        allRegions ::= (innerRegion, inArgs map (translate(_).replace(mapping)))
+          val vprPathConditions =
+            semanticAnalyser.pathConditions(regionExp) map (translate(_).replace(mapping))
 
-        translate(pred)
-    }
+          val vprInArgs = inArgs map (translate(_).replace(mapping))
 
-    if (allRegions.nonEmpty) {
-      val footprintHavocs = allRegions map { case (innerRegion, innerArgs) =>
-        val wrapper = singleWrapper(innerArgs)
-        interferenceSetFunctions.havoc(innerRegion, refLabel)(wrapper)
+          (vprPathConditions, innerRegion, vprInArgs)
       }
 
-      val tranformStmt =
+    val nestedRegions: Vector[NestedRegionRecord] =
+      nestedRegionCollector(region.interpretation)
+
+    if (nestedRegions.nonEmpty) {
+      val footprintHavocs =
+        nestedRegions.map { case (_, innerRegion, innerArgs) =>
+          // We could conditionally havoc interference set functions, by using the path conditions
+          // collected as part of `nestedRegions`. The additional branches would probably reduce
+          // performance, though.
+
+          val wrapper = singleWrapper(innerArgs)
+          interferenceSetFunctions.havoc(innerRegion, refLabel)(wrapper)
+        }.distinct
+
+      val transformStmt =
         if (stateDependencies.nonEmpty) {
           val rhsContainTerms = stateDependencies map { case (decl, innerRegion, innerArgs) =>
             vpr.AnySetContains(
@@ -225,28 +244,44 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
               body
             )()
           )()
-
         } else {
           ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no additional linking required", "")))
         }
 
-      val referencePointSelections = allRegions map { case (innerRegion, innerArgs) =>
+      val referencePointSelections = nestedRegions map { case (pathConditions, innerRegion, innerArgs) =>
         val wrapper = singleWrapper(innerArgs)
         val prePermissions = vpr.LabelledOld(_: vpr.Exp, refLabel.name)()
 
+        // TODO: @Felix: I [Malte] couldn't figure out how to pass pathConditions to either
+        //       referencePointConstraint or interferenceReferenceFunctions.select in a meaningful
+        //       way.
+
         val constraint = referencePointConstraint(innerRegion, prePermissions)
 
-        interferenceReferenceFunctions.select(innerRegion, constraint, refLabel)(wrapper)
+        interferenceReferenceFunctions.select(innerRegion, constraint, refLabel)(wrapper) match {
+          // Only constrain the interference set if pathConditions hold.
+          // I.e.: given `inhale hf() == old[lbl](hf)`,
+          // rewrite it to `inhale pcs ==> hf() == old[lbl](hf)`.
+          case seqn @ vpr.Seqn(Seq(vprStmt1, vprInhale @ vpr.Inhale(vprAssertion)), Seq()) =>
+            ViperAstUtils.Seqn(
+              vprStmt1,
+              vpr.Inhale(
+                vpr.Implies(
+                  viper.silicon.utils.ast.BigAnd(pathConditions),
+                  vprAssertion
+                )()
+              )(vprInhale.pos, vprInhale.info, vprInhale.errT)
+            )(seqn.pos, seqn.info, seqn.errT)
+          case other =>
+            sys.error(s"Unexpectedly found $other (of class ${other.getClass.getName})")
+        }
       }
 
       vpr.Seqn(
-        refLabel ::
-        footprintHavocs :::
-        tranformStmt ::
-        referencePointSelections,
+        (refLabel +: footprintHavocs) ++
+          (transformStmt +: referencePointSelections),
         Vector.empty
       )()
-
     } else {
       ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no interference context translation needed", "")))
     }
