@@ -13,6 +13,7 @@ import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{id => _, _}
 import org.bitbucket.inkytonik.kiama.util.Messaging._
 import org.bitbucket.inkytonik.kiama.util.{Entity, ErrorEntity, MultipleEntity, UnknownEntity}
+import viper.voila.VoilaGlobalState
 import viper.voila.reporting.PIdnNodeIdentifier
 
 class SemanticAnalyser(tree: VoilaTree) extends Attribution {
@@ -1350,9 +1351,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ => ListSet.empty
     }
 
-  /** Path conditions under which an expression is reached. Currently, only conditionals are
-    * considered. Possible extensions might be short-circuiting conjunctions/disjunctions, or
-    * unfolding expressions.
+  /** Path conditions under which an expression occurs.
+    * Currently, only conditionals are considered as path conditions. Possible extensions could be short-circuiting
+    * conjunctions/disjunctions, or unfolding expressions.
     */
   lazy val pathConditions: PExpression => Vector[PExpression] =
     attr {
@@ -1364,9 +1365,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         pathConditions(exp) :+ cnd
       case tree.parent.pair(n, exp @ PConditional(cnd, _, els)) if n eq els =>
         // Current node (n) is a conditional's else-branch (els)
-        pathConditions(exp) :+ PNot(cnd)
-          // WARNING: Newly created PNot isn't in the tree Kiama maintains. This may cause problems
-          // if Kiama is used to traverse the PNot later on.
+        val negatedCnd = PNot(cnd)
+          // WARNING: Newly created PNot isn't in the tree structure Kiama maintains. This may cause problems
+          // if Kiama is later on used to traverse the PNot.
+        VoilaGlobalState.positions.dupPos(cnd, negatedCnd)
+        pathConditions(exp) :+ negatedCnd
       case tree.parent(exp: PExpression) =>
         pathConditions(exp)
       case _ =>

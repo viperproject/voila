@@ -6,7 +6,7 @@
 
 package viper.voila.translator
 
-import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{everywhere, query}
+import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.silver.ast._
 
 import scala.collection.breakOut
@@ -178,58 +178,39 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
     val refLabel = freshLabel("transitionPre")
 
-//    var allRegions: List[(PRegion, Vector[vpr.Exp])] = Nil
-//
-//    translateWith(region.interpretation) {
-//      case pred: PPredicateExp if extractableRegionInstance(pred) =>
-//        val (innerRegion, inArgs, _) = getRegionPredicateDetails(pred)
-//
-//        allRegions ::= (innerRegion, inArgs map (translate(_).replace(mapping)))
-//
-//        translate(pred)
-//    }
-//
-//    println("\n\n[linkInterferenceContext]")
-//    println(s"  region = ${region.id.name}\n")
-//
-//    println("  allRegions = ")
-//    allRegions foreach (r => println(s"    ${r._1.id.name}(${r._2.mkString(", ")})"))
-//
-//    println("\n  attribute approach:")
+    // Next steps: collect all region assertions R(e1, ...) that occur in the current `region`'s interpretation,
+    // in vector `nestedRegion`. Each entry is a triple (path conditions, region, region assertion arguments),
+    // where region and assertion arguments form R(e1, ...), and where the path conditions are all conditions
+    // (of if-then-else expressions) under which the region assertion is nested.
+    type NestedRegionRecord = (Vector[vpr.Exp], PRegion, Vector[vpr.Exp])
 
-    var allRegions2 = Vector.empty[(Vector[vpr.Exp], PRegion, Vector[vpr.Exp])]
+    val nestedRegionCollector =
+      collect[Vector, NestedRegionRecord] {
+        case regionExp: PPredicateExp if extractableRegionInstance(regionExp) =>
+          val (innerRegion, inArgs, _) =
+            getRegionPredicateDetails(regionExp)
 
-    everywhere(query[PAstNode] {
-      case regionExp: PPredicateExp if extractableRegionInstance(regionExp) =>
-//        println(s"    ${semanticAnalyser.pathConditions(regionExp)}  -->  ${regionExp.pretty}")
+          val vprPathConditions =
+            semanticAnalyser.pathConditions(regionExp) map (translate(_).replace(mapping))
 
-        val (innerRegion, inArgs, _) =
-          getRegionPredicateDetails(regionExp)
+          val vprInArgs = inArgs map (translate(_).replace(mapping))
 
-        val pcs = semanticAnalyser.pathConditions(regionExp)
-        val vprPcs = pcs map (translate(_).replace(mapping))
-
-        allRegions2 = allRegions2 :+ (vprPcs, innerRegion, inArgs map (translate(_).replace(mapping)))
-    })(region.interpretation)
-
-//    println("\n  allRegions2 = ")
-//    allRegions2 foreach (r => {
-//      println(s"    [${r._1.mkString(" && ")}]  -->\n      ${r._2.id.name}(${r._3.mkString(", ")})")
-//    })
-//
-//    println("\n\n")
-
-//    if (allRegions.nonEmpty) {
-//      val footprintHavocs = allRegions map { case (innerRegion, innerArgs) =>
-    if (allRegions2.nonEmpty) {
-      val footprintHavocs = allRegions2 map { case (_, innerRegion, innerArgs) =>
-        // We could conditionally havoc interference set functions, by using the path conditions
-        // collected as part of `allRegions2`. The additional branches would probably reduce
-        // performance, though.
-
-        val wrapper = singleWrapper(innerArgs)
-        interferenceSetFunctions.havoc(innerRegion, refLabel)(wrapper)
+          (vprPathConditions, innerRegion, vprInArgs)
       }
+
+    val nestedRegions: Vector[NestedRegionRecord] =
+      nestedRegionCollector(region.interpretation)
+
+    if (nestedRegions.nonEmpty) {
+      val footprintHavocs =
+        nestedRegions.map { case (_, innerRegion, innerArgs) =>
+          // We could conditionally havoc interference set functions, by using the path conditions
+          // collected as part of `nestedRegions`. The additional branches would probably reduce
+          // performance, though.
+
+          val wrapper = singleWrapper(innerArgs)
+          interferenceSetFunctions.havoc(innerRegion, refLabel)(wrapper)
+        }.distinct
 
       val transformStmt =
         if (stateDependencies.nonEmpty) {
@@ -263,13 +244,11 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
               body
             )()
           )()
-
         } else {
           ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no additional linking required", "")))
         }
 
-//      val referencePointSelections = allRegions map { case (innerRegion, innerArgs) =>
-      val referencePointSelections = allRegions2 map { case (pathConditions, innerRegion, innerArgs) =>
+      val referencePointSelections = nestedRegions map { case (pathConditions, innerRegion, innerArgs) =>
         val wrapper = singleWrapper(innerArgs)
         val prePermissions = vpr.LabelledOld(_: vpr.Exp, refLabel.name)()
 
@@ -303,7 +282,6 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
           (transformStmt +: referencePointSelections),
         Vector.empty
       )()
-
     } else {
       ViperAstUtils.Seqn()(info = vpr.SimpleInfo(Vector("", "no interference context translation needed", "")))
     }
