@@ -1350,6 +1350,29 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ => ListSet.empty
     }
 
+  /** Path conditions under which an expression is reached. Currently, only conditionals are
+    * considered. Possible extensions might be short-circuiting conjunctions/disjunctions, or
+    * unfolding expressions.
+    */
+  lazy val pathConditions: PExpression => Vector[PExpression] =
+    attr {
+      case tree.parent.pair(n, exp @ PConditional(cnd, _, _)) if n eq cnd =>
+        // Current node (n) is a conditional's condition (cnd)
+        pathConditions(exp)
+      case tree.parent.pair(n, exp @ PConditional(cnd, thn, _)) if n eq thn =>
+        // Current node (n) is a conditional's then-branch (thn)
+        pathConditions(exp) :+ cnd
+      case tree.parent.pair(n, exp @ PConditional(cnd, _, els)) if n eq els =>
+        // Current node (n) is a conditional's else-branch (els)
+        pathConditions(exp) :+ PNot(cnd)
+          // WARNING: Newly created PNot isn't in the tree Kiama maintains. This may cause problems
+          // if Kiama is used to traverse the PNot later on.
+      case tree.parent(exp: PExpression) =>
+        pathConditions(exp)
+      case _ =>
+        Vector.empty
+    }
+
   private implicit def defs2UsesSets(xs: ListSet[PIdnDef]): ListSet[PIdnUse] =
     xs.map(idndef => PIdnUse(idndef.name))
 
