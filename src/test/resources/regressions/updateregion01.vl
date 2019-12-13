@@ -1,5 +1,3 @@
-//:: IgnoreFile(/voila/issue/73/)
-
 struct cell {
   int value;
 }
