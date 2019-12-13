@@ -1,0 +1,10 @@
+macro assume_positive(i) {
+  assume 0 <= i;
+}
+
+procedure test01() {
+  bool b;
+  int i, j;
+
+  assume_positive(b ? i : j);
+}

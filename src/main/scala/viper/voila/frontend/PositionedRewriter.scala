@@ -14,6 +14,9 @@ class PositionedRewriter(override val positions: Positions)
     extends org.bitbucket.inkytonik.kiama.rewriting.PositionedRewriter
        with org.bitbucket.inkytonik.kiama.rewriting.Cloner {
 
+  // Is used to give unique names to formal macro arguments. See `def expand` further down.
+  private var macroArgumentsVariableRenamingCounter: Int = 0
+
   def deepcloneAndRename[T <: Product](t: T, renamings: Map[String, String]): T = {
     /* Implementation adapted from Cloner.deepclone */
 
@@ -104,8 +107,34 @@ class PositionedRewriter(override val positions: Positions)
 
   /* TODO: Consider moving macro expansion code elsewhere, e.g. in a dedicated trait */
 
-  def expand(macros: Vector[PMacro], members: Vector[PMember]): Vector[PMember] = {
-    val mm: Map[String, PMacro] = macros.map(makro => makro.id.name -> makro)(breakOut)
+  def expand(sourceMacros: Vector[PMacro], members: Vector[PMember]): Vector[PMember] = {
+    // To avoid infinite expansion (issue #54) in cases where an actual macro argument contains an
+    // identifier, e.g. a variable, that is also a formal macro argument, we first give unique names
+    // to all formal macro arguments.
+    //
+    // TODO: Think about error reporting and how to avoid that synthesised names show up in error
+    //       messages.
+
+    val sanitizedMacros =
+      sourceMacros map (makro => {
+        val formals: Vector[PIdnDef] =
+          makro match {
+            case PTypeMacro(_, formalArguments, _) => formalArguments.getOrElse(Vector.empty)
+            case PExpressionMacro(_, formalArguments, _) => formalArguments.getOrElse(Vector.empty)
+            case PStatementMacro(_, formalArguments, _, _) => formalArguments
+          }
+
+        val renamings: Map[String, String] =
+          formals.map(formal => {
+            macroArgumentsVariableRenamingCounter += 1
+
+            formal.name -> s"_${formal.name}_$macroArgumentsVariableRenamingCounter"
+          }).toMap
+
+        deepcloneAndRename(makro, renamings)
+      })
+
+    val mm: Map[String, PMacro] = sanitizedMacros.map(makro => makro.id.name -> makro)(breakOut)
 
     def instantiateMacroBody(formals: Vector[PIdnDef],
                              actuals: Vector[PExpression],
