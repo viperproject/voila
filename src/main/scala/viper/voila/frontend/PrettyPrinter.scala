@@ -265,7 +265,13 @@ class DefaultPrettyPrinter
       case PHeapRead(lhs, location) => toDoc(lhs) <+> ":=" <+> toDoc(location) <> semi
       case PHeapWrite(location, rhs) => toDoc(location) <+> ":=" <+> toDoc(rhs) <> semi
 
-      case _: PIf => ???
+      case PIf(cond, thn, optEls) =>
+        val elseDoc = optEls match {
+          case None => emptyDoc
+          case Some(els) => "else" <> braces(nest(toDoc(els)))
+        }
+
+        "if" <> parens(toDoc(cond)) <> braces(nest(toDoc(thn))) <> elseDoc
 
       case PWhile(cond, invariants, body) =>
         (   "while" <> parens(toDoc(cond)) <> line
@@ -289,7 +295,11 @@ class DefaultPrettyPrinter
       case PAssert(assertion) => "assert" <+> toDoc(assertion) <> semi
       case PHavocVariable(variable) => "havoc" <+> toDoc(variable) <> semi
       case PHavocLocation(location) => "havoc" <+> toDoc(location) <> semi
-      case _: PLemmaApplication | _: PUseGuardUniqueness | _: PUseRegionInterpretation => ???
+      case PLemmaApplication(call) => "use" <+> toDoc(call)<> semi
+      case PUseRegionInterpretation(regionPredicate) =>
+        "use_region_interpretation" <+> toDoc(regionPredicate) <> semi
+      case other =>
+        sys.error(s"Implementation missing for element of class ${other.getClass.getSimpleName}")
     }
   }
 
