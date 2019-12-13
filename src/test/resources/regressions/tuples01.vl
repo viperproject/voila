@@ -1,0 +1,24 @@
+procedure test01() {
+  tuple<int, bool> p;
+
+  p := Tuple<int, bool>(1, true);
+  assert get0(p) == 1;
+
+  assert get0(Tuple(1, true)) == 1;
+  assert get1(Tuple(1, true)) == true;
+}
+
+procedure test02(tuple<bool, int> p1, tuple<bool, int> p2) {
+  assume p1 == p2;
+  assert get0(p1) == get0(p2) && get1(p1) == get1(p2);
+}
+
+procedure test03(tuple<bool, int> p1, tuple<bool, int> p2) {
+  assume get0(p1) == get0(p2) && get1(p1) == get1(p2);
+  assert p1 == p2;
+}
+
+procedure test04(int x1, frac x2, int y1, frac y2) {
+  assume Tuple(x1, x2) == Tuple(y1, y2);
+  assert x1 == y1 && x2 == y2;
+}

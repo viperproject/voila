@@ -31,7 +31,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   val reservedWords: Set[String] = Set(
     "true", "false",
-    "int", "bool", "id", "set", "frac", "seq", "pair", "map",
+    "int", "bool", "id", "set", "frac", "seq", "tuple", "map",
     "region", "guards", "unique", "duplicable", "divisible", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
@@ -43,7 +43,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "div", "mod",
     "Set", "Int", "Nat", "union",
     "Seq", "size", "head", "tail",
-    "Pair", "fst", "snd",
     "Tuple",
     "Map", "keys", "vals", "lkup", "upd", "disj",
     "unfolding"
@@ -478,7 +477,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     regex("[0-9]+".r) ^^ (lit => PIntLit(BigInt(lit))) |
     setExp0 |
     seqExp0 |
-    pairExp0 |
     tupleExp0 |
     mapExp0 |
     applicationLikeExp |
@@ -535,19 +533,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       case typeAnnotation ~ elements => PExplicitSeq(elements, typeAnnotation)
     }
 
-  lazy val pairExp0: Parser[PTupleExp] =
-    pairLiteral |
-    "fst" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 0)) |
-    "snd" ~> "(" ~> expression <~ ")" ^^ (PTupleGet(_, 1))
-
-  lazy val pairLiteral: Parser[PExplicitTuple] =
-    "Pair" ~>
-    ("<" ~> (typ <~ ",") ~ typ <~ ">").? ~
-    ("(" ~> (expression <~ ",") ~ expression <~ ")") ^^ {
-      case typeAnnotation ~ (element1 ~ element2) =>
-        PExplicitTuple(Vector(element1, element2), typeAnnotation map { case t1 ~ t2 => Vector(t1, t2) })
-    }
-
   lazy val tupleExp0: Parser[PTupleExp] =
     tupleLiteral |
     ("get" ~> regex("[0-9]+".r)) ~ ("(" ~> expression <~ ")") ^^ {
@@ -600,7 +585,6 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "frac" ^^^ PFracType() |
     "set" ~> "<" ~> typ <~ ">" ^^ PSetType |
     "seq" ~> "<" ~> typ <~ ">" ^^ PSeqType |
-    "pair" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ {case t1 ~ t2 => PTupleType(Vector(t1,t2))} |
     "tuple" ~> "<" ~> rep1sep(typ, ",") <~ ">" ^^ PTupleType |
     "map" ~> "<" ~> (typ <~ ",") ~ typ <~ ">" ^^ PMapType |
     idnuse ^^ PRefType

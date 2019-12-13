@@ -1,36 +1,36 @@
-procedure test01(pair<int, bool> p1) {
-  pair<int, bool> p2;
+procedure test01(tuple<int, bool> p1) {
+  tuple<int, bool> p2;
 
   p2 := p1;
 }
 
-procedure test02(pair<int, bool> p1) {
-  pair<bool, int> p2;
+procedure test02(tuple<int, bool> p1) {
+  tuple<bool, int> p2;
 
   //:: ExpectedOutput(typechecker_error)
   p2 := p1;
 }
 
-procedure test03(pair<int, bool> p) {
+procedure test03(tuple<int, bool> p) {
   int e1;
   bool e2;
 
-  e1 := fst(p);
-  e2 := snd(p);
+  e1 := get0(p);
+  e2 := get1(p);
 }
 
-procedure test04(pair<int, bool> p1) {
-  pair<bool, int> p2;
+procedure test04(tuple<int, bool> p1) {
+  tuple<bool, int> p2;
 
-  assume fst(p1) == snd(p2);
+  assume get0(p1) == get1(p2);
   //:: ExpectedOutput(typechecker_error)
-  assume snd(p1) == snd(p2);
+  assume get1(p1) == get1(p2);
 }
 
 procedure test05() {
-  assert fst(Pair(1, 2)) == 1;
-  assert fst(Pair(1, true)) == 1;
-  assert snd(Pair(1, true)) == true;
+  assert get0(Tuple(1, 2)) == 1;
+  assert get0(Tuple(1, true)) == 1;
+  assert get1(Tuple(1, true)) == true;
   //:: ExpectedOutput(typechecker_error)
-  assert snd(Pair(true, 1)) == true;
+  assert get1(Tuple(true, 1)) == true;
 }
