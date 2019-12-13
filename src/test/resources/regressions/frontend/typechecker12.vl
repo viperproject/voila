@@ -1,0 +1,47 @@
+struct cell {
+  int val;
+}
+
+region CellA(id r, int lvl, cell c)
+  guards { duplicable A; }
+  interpretation {
+    c.val |-> ?n
+  }
+  state { n }
+  actions {
+    ?m1, ?m2 | true | A: m1 ~> m2; // OK
+    A: ?m1 ~> ?m2;                 // Likewise (just more concise)
+  }
+
+region CellB(id r, int lvl, cell c)
+  guards { duplicable B; }
+  interpretation {
+    c.val |-> ?n
+  }
+  state { n }
+  actions {
+    //:: ExpectedOutput(typechecker_error)
+    ?m1, ?m2 | m1 + m2 | B: m1 ~> m2; // Condition m1 + m2 is int, but must be bool
+  }
+
+region CellC(id r, int lvl, cell c)
+  guards { duplicable C; }
+  interpretation {
+    c.val |-> ?n
+  }
+  state { n }
+  actions {
+    //:: ExpectedOutput(typechecker_error)
+    ?m1, ?m2 | m1: m1 ~> m2; // m1 is not a guard
+  }
+
+region CellD(id r, int lvl, cell c)
+  guards { duplicable D; }
+  interpretation {
+    c.val |-> ?n
+  }
+  state { n }
+  actions {
+    //:: ExpectedOutput(typechecker_error)
+    A: ?m1 ~> ?m2; // A is not a guard of this region, but of CellA
+  }

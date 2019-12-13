@@ -1,0 +1,14 @@
+struct memcell {
+  int f;
+}
+
+region Counter(id c, int lvl, memcell x)
+  guards { unique G; }
+  interpretation {
+    x.f |-> ?n
+  }
+  state { n }
+  actions {
+    //:: ExpectedOutput(typechecker_error)
+    G: lvl ~> ?m;
+  }

@@ -7,6 +7,7 @@
 package viper.voila.frontend
 
 import scala.collection.immutable.ListSet
+import scala.collection.breakOut
 import scala.language.implicitConversions
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
@@ -103,54 +104,83 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         contractMessages ++ atomicityMessages
 
       case action: PAction => // TODO: add guard type check and it seems that condition type check is missing
-        reportTypeMismatch(action.to, typ(action.from)) ++
-        action.guards.flatMap { case PBaseGuardExp(guardId, guardArgument) =>
-          checkUse(entity(guardId)) {
-            case GuardEntity(decl, _) => check(guardArgument) {
-              case PStandardGuardArg(guardArguments) => check(decl.modifier) {
-                case _: PUniqueGuard | _: PDuplicableGuard =>
-                  val lengthMessages = reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
+        val typeMessages =
+          reportTypeMismatch(action.to, typ(action.from)) ++
+              reportTypeMismatch(action.condition, PBoolType())
 
-                  val typeMessages =
-                    if (lengthMessages.isEmpty) {
-                      reportTypeMismatch(guardArguments, decl.formalArguments)
-                    } else {
-                      Vector.empty
-                    }
+        val freeVariableMessages = {
+          val freeVars = (
+            freeVariables(action.condition) ++
+                freeVariables(action.from) ++
+                freeVariables(action.to) ++
+                (action.guards flatMap freeVariables)
+            ).filterNot(fv => action.binders.exists(_.id.name == fv.name))
 
-                  lengthMessages ++ typeMessages
-
-                case _: PDivisibleGuard =>
-
-                  // FIXME: Indexed divisible guards are currently not supported, add message
-                  val lengthMessages =
-                    reportArgumentLengthMismatch(guardId, decl.id, 1 /* decl.formalArguments.length */, guardArguments.length)
-
-                  val typeMessages =
-                    if (lengthMessages.isEmpty) {
-                      reportTypeMismatch(guardArguments.head, PFracType(), typ(guardArguments.head)) ++
-                      reportTypeMismatch(guardArguments.tail, decl.formalArguments.tail)
-                    } else {
-                      Vector.empty
-                    }
-
-                  lengthMessages ++ typeMessages
-              }
-
-              case PSetGuardArg(guardSet) => check(decl.modifier) {
-                case _: PUniqueGuard | _: PDuplicableGuard =>
-
-                  reportTypeMismatch(guardSet, expectedGuardSetTyp(decl), typ(guardSet))
-
-                case _: PDivisibleGuard =>
-                  message(guardId, s"Indexed divisible guards are currently not supported, but got ${guardId.name}")
-              }
-            }
-
-            case _ =>
-              message(guardId, s"Expected a guard, but got ${guardId.name}")
-          }
+          message(
+            action,
+            s"Actions may not contain free variables, but found: ${freeVars.mkString(", ")}",
+            freeVars.nonEmpty)
         }
+
+        val guardMessages =
+          action.guards.flatMap { case guardExp @ PBaseGuardExp(guardId, guardArgument) =>
+            checkUse(entity(guardId)) {
+              case GuardEntity(decl, declaringRegion) =>
+                val regionMessages =
+                  message(
+                    guardExp,
+                    s"Guard ${guardId.name} is not a guard of this region",
+                    !enclosingMember(action).contains(declaringRegion))
+
+                val typeMessages =
+                  check(guardArgument) {
+                    case PStandardGuardArg(guardArguments) => check(decl.modifier) {
+                      case _: PUniqueGuard | _: PDuplicableGuard =>
+                        val lengthMessages = reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
+
+                        val typeMessages =
+                          if (lengthMessages.isEmpty) {
+                            reportTypeMismatch(guardArguments, decl.formalArguments)
+                          } else {
+                            Vector.empty
+                          }
+
+                        lengthMessages ++ typeMessages
+
+                      case _: PDivisibleGuard =>
+                        // FIXME: Indexed divisible guards are currently not supported, add message
+                        val lengthMessages =
+                          reportArgumentLengthMismatch(guardId, decl.id, 1 /* decl.formalArguments.length */, guardArguments.length)
+
+                        val typeMessages =
+                          if (lengthMessages.isEmpty) {
+                            reportTypeMismatch(guardArguments.head, PFracType(), typ(guardArguments.head)) ++
+                            reportTypeMismatch(guardArguments.tail, decl.formalArguments.tail)
+                          } else {
+                            Vector.empty
+                          }
+
+                        lengthMessages ++ typeMessages
+                    }
+
+                    case PSetGuardArg(guardSet) => check(decl.modifier) {
+                      case _: PUniqueGuard | _: PDuplicableGuard =>
+
+                        reportTypeMismatch(guardSet, expectedGuardSetTyp(decl), typ(guardSet))
+
+                      case _: PDivisibleGuard =>
+                        message(guardId, s"Indexed divisible guards are currently not supported, but got ${guardId.name}")
+                    }
+                  }
+
+                regionMessages ++ typeMessages
+
+              case _ =>
+                message(guardId, s"Expected a guard, but got ${guardId.name}")
+            }
+          }
+
+        typeMessages ++ freeVariableMessages ++ guardMessages
 
       case PAssign(lhs, rhs) =>
         val lhsEntity = entity(lhs)
@@ -1216,7 +1246,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         entity(newStmt.constructor) match {
           case _: StructEntity => AtomicityKind.Nonatomic
           case _: RegionEntity => AtomicityKind.Atomic
-          case _ => ???
+          case other =>
+            sys.error(s"Implementation missing for $other (of class ${other.getClass.getSimpleName})")
         }
 
       case seq: PSeqComp =>
@@ -1296,19 +1327,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         bindingContext match {
           case PSetComprehension(qvar, filter, _) =>
             freeVariables(filter) - PIdnUse(qvar.id.name)
-          case PPredicateExp(_, _) => ???
+          case exp: PPredicateExp =>
 //            Set(arguments flatMap freeVariables :_*)
+            sys.error(s"Implementation missing for $exp (of class ${exp.getClass.getSimpleName})")
           case PPointsTo(location, value) =>
             ListSet(location.receiver) ++ (freeVariables(value) -- boundVariables(value))
         }
 
       case _: PIntLit => ListSet.empty
+      case _: PNullLit => ListSet.empty
       case _: PTrueLit | _: PFalseLit => ListSet.empty
       case _: PFullPerm | _: PNoPerm => ListSet.empty
       case _: PIntSet | _: PNatSet => ListSet.empty
 
       case explicitCollection: PExplicitCollection =>
-        ListSet(explicitCollection.elements flatMap freeVariables :_*)
+        explicitCollection.elements.flatMap(freeVariables)(breakOut)
 
       case PSeqSize(seq) => freeVariables(seq)
       case PSeqHead(seq) => freeVariables(seq)
@@ -1323,7 +1356,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PUnfolding(predicate, body) =>
         freeVariables(predicate) ++ freeVariables(body)
 
-      case exp: PRegionedGuardExp => ListSet(exp.regionId.id)
+      case PRegionedGuardExp(_, regionId, guardArg) =>
+        ListSet(regionId.id) ++ guardArg.arguments.flatMap(freeVariables)(breakOut)
+
+      case PBaseGuardExp(_, guardArg) => guardArg.arguments.flatMap(freeVariables)(breakOut)
+
       case PDiamond(regionId) => ListSet(regionId)
 
       case PRegionUpdateWitness(regionId, from, to) =>
@@ -1331,17 +1368,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case _: PAnonymousBinder => ListSet.empty
 
-      case _: PBaseGuardExp |
-           _: PExplicitMap |
-           _: PExplicitTuple |
-           _: PFracLiteral |
-           _: PMapContains |
-           _: PMapKeys |
-           _: PMapLookup |
-           _: PMapUpdate |
-           _: PMapValues |
-           _: PNamedBinder |
-           _: PNullLit => ???
+      case other =>
+        sys.error(s"Implementation missing for $other (of class ${other.getClass.getSimpleName})")
     }
 
   lazy val boundVariables: PExpression => ListSet[PIdnDef] =
