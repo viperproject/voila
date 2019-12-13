@@ -1,0 +1,96 @@
+struct cell {
+  int value;
+}
+
+region Cell(id r, int lvl, cell c)
+  guards { unique G; }
+  interpretation { c.value |-> ?v }
+  state { v }
+  actions { G: ?n ~> ?m; }
+
+// ***** ***** ***** Minimal example ***** ***** ***** *****
+
+procedure test10(id r, int lvl, cell c)
+  requires Cell(r, lvl, c, 0);
+{
+  inhale r |=> <D>;
+
+  //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
+  update_region
+    using Cell(r, lvl, c);
+  {
+    c.value := 1;
+  }
+}
+
+procedure test10Copy(id r, int lvl, cell c)
+  requires Cell(r, lvl, c, 0);
+{
+  inhale r |=> <D>;
+
+  //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
+  update_region
+    using Cell(r, lvl, c);
+  {
+    c.value := 1;
+  }
+}
+
+// ***** ***** ***** ***** Original example ***** ***** ***** *****
+
+procedure test01(id r, int lvl, cell c)
+  requires Cell(r, lvl, c, 0);
+{
+  //:: ExpectedOutput(update-region_error:diamond_permission_error)
+  update_region
+    using Cell(r, lvl, c);
+  {
+    c.value := 1;
+  }
+}
+
+procedure test02(id r, int lvl, cell c)
+  requires Cell(r, lvl, c, 0);
+{
+  inhale r |=> <D>;
+
+  //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
+  update_region
+    using Cell(r, lvl, c);
+  {
+    c.value := 1;
+  }
+}
+
+abstract_atomic procedure test03(id r, int lvl, cell c)
+  interference ?v in Set(0) on r;
+  requires Cell(r, lvl, c, 0) && G@r;
+{
+  make_atomic
+    using Cell(r, lvl, c) with G@r;
+  {
+    update_region
+      using Cell(r, lvl, c);
+    {
+      c.value := 1;
+    }
+  }
+}
+
+abstract_atomic procedure test04(id r, int lvl, cell c)
+  interference ?v in Set(0) on r;
+  requires Cell(r, lvl, c, 0) && G@r;
+{
+  //:: ExpectedOutput(make-atomic_error:tracking_permission_error)
+  make_atomic
+    using Cell(r, lvl, c) with G@r;
+  {
+    update_region
+      using Cell(r, lvl, c);
+    {
+      c.value := 1;
+    }
+
+    exhale r |=> (0, 1);
+  }
+}

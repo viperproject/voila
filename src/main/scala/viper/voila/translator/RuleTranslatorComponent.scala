@@ -253,7 +253,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           .dueTo(hintAtEnclosingLoopInvariants(regionId))
     }
 
-    val exhaleAtomicityTracking = deselectAtomicityContext(region, vprInArgs)
+    val exhaleAtomicityTracking =
+      deselectAtomicityContext(region, vprInArgs).withSource(updateRegion.regionPredicate)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleAtomicityTracking =>
