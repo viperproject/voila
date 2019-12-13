@@ -73,6 +73,14 @@ class Config(arguments: Seq[String])
     default = Some(false),
     noshort = true)
 
+  val disableSiliconSpecificHavockingCode: ScallopOption[Boolean] = opt[Boolean](
+    name = "disableSiliconSpecificHavockingCode",
+    descr =
+      "Generate special Viper code for havocking that requires the 'scmalte_voila_hacks' " +
+          "branch of Silicon. Can tremendously speed up verification with Silicon.",
+    default = Some(false),
+    noshort = true)
+
   /*
    * Exception handling
    */

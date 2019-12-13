@@ -9,6 +9,7 @@ package viper.voila.translator
 import scala.collection.mutable
 import viper.silver.ast.{Declaration, Exp, Stmt}
 import viper.silver.{ast => vpr}
+import viper.voila.VoilaGlobalState
 import viper.voila.backends.ViperAstUtils
 
 object TranslatorUtils {
@@ -265,19 +266,19 @@ object TranslatorUtils {
     }
 
     override def havoc(id: T, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt = {
-      vpr.MethodCall(
-        methodName = s"havoc_all_${memberName(idToName(id))}",
-        args = Vector.empty,
-        targets = Vector.empty
-      )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+      if (!VoilaGlobalState.config.disableSiliconSpecificHavockingCode()) {
+        vpr.MethodCall(
+          methodName = s"havoc_all_${memberName(idToName(id))}",
+          args = Vector.empty,
+          targets = Vector.empty
+        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+      } else {
+        vpr.Seqn(
+          Vector(exhaleFootprint(id)(wrapper), inhaleFootprint(id)(wrapper)),
+          Vector.empty
+        )()
+      }
     }
-
-//    override def havoc(id: T, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt = {
-//      vpr.Seqn(
-//        Vector(exhaleFootprint(id)(wrapper), inhaleFootprint(id)(wrapper)),
-//        Vector.empty
-//      )()
-//    }
   }
 
   /** Specialized footprint manager for predicates where permission is held only when necessary. */

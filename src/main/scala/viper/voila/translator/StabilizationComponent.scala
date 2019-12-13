@@ -8,10 +8,11 @@ package viper.voila.translator
 
 import viper.silver.ast.{Exp, Label, Stmt, Trigger}
 import viper.silver.{ast => vpr}
+import viper.voila.VoilaGlobalState
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
 import viper.voila.translator.TranslatorUtils.QuantifierWrapper.WrapperExt
-import viper.voila.translator.TranslatorUtils.{QuantifierWrapper, Constraint}
+import viper.voila.translator.TranslatorUtils.{Constraint, QuantifierWrapper}
 
 trait StabilizationComponent { this: PProgramToViperTranslator =>
   object sequenceStabilizeSubject extends TranslatorUtils.Subject[Int] {
@@ -395,55 +396,55 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
           ))())
 
     override def havoc(id: PRegion, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): Stmt = {
-      vpr.MethodCall(
-        methodName = s"havoc_all_${id.id.name}",
-        args = Vector.empty,
-        targets = Vector.empty
-      )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
-    }
+      if (!VoilaGlobalState.config.disableSiliconSpecificHavockingCode()) {
+        vpr.MethodCall(
+          methodName = s"havoc_all_${id.id.name}",
+          args = Vector.empty,
+          targets = Vector.empty
+        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+      } else {
+        val vprRegionArguments = wrapper.args
 
-//    override def havoc(id: PRegion, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): Stmt = {
-//      val vprRegionArguments = wrapper.args
-//
-//      /* R(as) */
-//      val vprRegionPredicateInstance =
-//        vpr.PredicateAccess(
-//          args = vprRegionArguments,
-//          predicateName = id.id.name
-//        )()
-//
-//      /* π */
-//      val vprPreHavocRegionPermissions =
-//        vpr.LabelledOld(vpr.CurrentPerm(vprRegionPredicateInstance)(), label.name)()
-//
-//      /* Note: It is assumed that havocking a region R(as) should not affect the permission
-//       * amount. Hence, π is used everywhere, i.e. there is not dedicated post-havoc permission
-//       * amount in use.
-//       */
-//
-//      /* acc(R(as), π) */
-//      val vprRegionAssertion =
-//        vpr.PredicateAccessPredicate(
-//          loc = vprRegionPredicateInstance,
-//          perm = vprPreHavocRegionPermissions
-//        )()
-//
-//      val vprWrappedRegionAssertion = wrapper.wrapWithoutCondition(vprRegionAssertion)
-//
-//      /* exhale ∀ as · acc(R(as), π) */
-//      val vprExhaleAllRegionInstances = vpr.Exhale(vprWrappedRegionAssertion)()
-//
-//      /* inhale ∀ as · acc(R(as), π) */
-//      val vprInhaleAllRegionInstances = vpr.Inhale(vprWrappedRegionAssertion)()
-//
-//      vpr.Seqn(
-//        Vector(
-//          vprExhaleAllRegionInstances,
-//          vprInhaleAllRegionInstances
-//        ),
-//        Vector.empty
-//      )()
-//    }
+        /* R(as) */
+        val vprRegionPredicateInstance =
+          vpr.PredicateAccess(
+            args = vprRegionArguments,
+            predicateName = id.id.name
+          )()
+
+        /* π */
+        val vprPreHavocRegionPermissions =
+          vpr.LabelledOld(vpr.CurrentPerm(vprRegionPredicateInstance)(), label.name)()
+
+        /* Note: It is assumed that havocking a region R(as) should not affect the permission
+         * amount. Hence, π is used everywhere, i.e. there is not dedicated post-havoc permission
+         * amount in use.
+         */
+
+        /* acc(R(as), π) */
+        val vprRegionAssertion =
+          vpr.PredicateAccessPredicate(
+            loc = vprRegionPredicateInstance,
+            perm = vprPreHavocRegionPermissions
+          )()
+
+        val vprWrappedRegionAssertion = wrapper.wrapWithoutCondition(vprRegionAssertion)
+
+        /* exhale ∀ as · acc(R(as), π) */
+        val vprExhaleAllRegionInstances = vpr.Exhale(vprWrappedRegionAssertion)()
+
+        /* inhale ∀ as · acc(R(as), π) */
+        val vprInhaleAllRegionInstances = vpr.Inhale(vprWrappedRegionAssertion)()
+
+        vpr.Seqn(
+          Vector(
+            vprExhaleAllRegionInstances,
+            vprInhaleAllRegionInstances
+          ),
+          Vector.empty
+        )()
+      }
+    }
 
     override def inhaleFootprint(id: PRegion, label: Label)(wrapper: QuantifierWrapper.Wrapper)
                                 : Stmt = {

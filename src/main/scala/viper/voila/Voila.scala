@@ -43,7 +43,9 @@ object VoilaConstants {
   val preambleFile: String  = "preamble.vpr"
 }
 
+// TODO: Remove global state
 object VoilaGlobalState {
+  var config: Config = _
   var positions: Positions = _
 }
 
@@ -108,6 +110,7 @@ class Voila extends StrictLogging {
 
     val frontend = new Frontend()
 
+    VoilaGlobalState.config = config // TODO: Remove global state
     VoilaGlobalState.positions = frontend.positions // TODO: Remove global state
 
     frontend.parse(file) match {
@@ -235,8 +238,11 @@ class Voila extends StrictLogging {
 
         logger.info("Verifying encoding using Silicon ...")
         val backend = new Silicon(siliconOptions)
-//        logger.info("Verifying encoding using Carbon ...")
-//        val backend = new Carbon(Vector.empty)
+
+        // NOTE: When using Carbon, run Voila with --disableSiliconSpecificHavockingCode
+        //
+        // logger.info("Verifying encoding using Carbon ...")
+        // val backend = new Carbon(Vector.empty)
 
         backend.start()
         val verificationResult = backend.handle(programToVerify)

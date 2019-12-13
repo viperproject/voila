@@ -1,0 +1,30 @@
+struct memcell {
+  int f;
+}
+
+region Cell(id r, int lvl, memcell x)
+  guards { unique G; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions { G: ?n ~> ?m; }
+
+procedure test02(id r, int lvl, memcell x, id s, memcell y)
+  requires Cell(r, lvl, x, 0) && G@r;
+  requires Cell(s, lvl, y, 0) && G@s;
+  requires r != s;
+{
+  assert Cell(r, lvl, x, 0); // Duplicate the
+  inhale Cell(r, lvl, x);    // region assertion
+
+  use_atomic
+    using Cell(r, lvl, x) with G@r;
+  {
+    x.f := 1;
+  }
+
+  assert Cell(s, lvl, y, 0);
+
+  //:: ExpectedOutput(assert_error:assertion_error)
+  //:: MissingOutput(assert_error:assertion_error, /voila/issue/83/)
+  assert false;
+}
