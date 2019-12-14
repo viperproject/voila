@@ -1,5 +1,3 @@
-
-
 struct memcell {
   int next;
   int owner;

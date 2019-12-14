@@ -1,0 +1,24 @@
+struct node {
+  int val;
+  node next;
+}
+
+region Node(id r, int lvl, node n; int v, int w)
+  ghost_fields {
+    int _val;
+    id _next_id;
+    int _next_val;
+  }
+  guards { duplicable Z; }
+  interpretation {
+    n.val |-> ?v &&
+    r._val |-> ?w &&
+    n.next |-> ?nxt &&
+    0 < lvl &&
+    (nxt != null ==>
+      r._next_id |-> ?nxt_id &&
+      r._next_val |-> ?nxt_val &&
+      Node(nxt_id, lvl - 1, nxt, nxt_val, nxt_val))
+  }
+  state { nxt }
+  actions { Z: null ~> ?x; }

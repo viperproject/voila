@@ -1,5 +1,3 @@
-//:: IgnoreFile(/voila/issue/74/)
-
 region FCounter(id r, int lvl, memcell x)
   guards { duplicable INCREMENT; }
   interpretation { x.f |-> ?v && 0 <= v <= 2 }
@@ -12,33 +10,28 @@ procedure incrOrNothing(id r, int lvl, memcell x) returns (int ret)
   requires FCounter(r, lvl, x, ?v0) && INCREMENT@r;
   ensures  FCounter(r, lvl, x, ?v1) && INCREMENT@r;
   ensures  0 <= ret <= 2;
+  ensures  v0 <= ret <= v1;
 {
   int v;
   bool changed;
   bool full;
 
-  use_region_interpretation FCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
-
   changed := false;
   full := false;
 
-  use_region_interpretation FCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
-
   do
     invariant FCounter(r, lvl, x, ?vi);
+    invariant INCREMENT@r;
     invariant 0 <= v <= 2;
-    invariant 0 <= v0 <= vi;
-    invariant vi <= v;
-    // invariant changed ==> v0 < v;
+    invariant v0 <= v <= vi;
   {
-    use_region_interpretation FCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
+
     open_region
       using FCounter(r, lvl, x);
     {
       v := x.f;
     }
 
-    use_region_interpretation FCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
     if (v < 2) {
       use_atomic
         using FCounter(r, lvl, x) with INCREMENT@r;
@@ -46,11 +39,9 @@ procedure incrOrNothing(id r, int lvl, memcell x) returns (int ret)
         changed := CAS(x, v, v + 1);
       }
     } else {
-      assume false;
       full := true;
     }
 
-    use_region_interpretation FCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
   } while (!changed && !full);
 
   ret := v;

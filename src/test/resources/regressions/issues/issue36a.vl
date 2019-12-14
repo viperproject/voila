@@ -1,5 +1,3 @@
-// :: IgnoreFile(/voila/issue/36/)
-
 region R(id s, int lvl, int x)
   guards { duplicable G; }
   interpretation { true }
