@@ -27,8 +27,8 @@ object VoilaConstants {
   val toolCopyright: String  = "(c) Copyright ETH Zurich 2016 - 2019"
 
   val buildVersion: Option[String] = {
-    val buildRevision = BuildInfo.hg("revision")
-    val buildBranch = BuildInfo.hg("branch")
+    val buildRevision = BuildInfo.hgRevision
+    val buildBranch = BuildInfo.hgBranch
 
     if (buildRevision.isEmpty && buildBranch.isEmpty) None
     else if (buildBranch == "default") Some(buildRevision)
@@ -38,7 +38,7 @@ object VoilaConstants {
   val toolVersion: String =
     s"${BuildInfo.projectVersion}${buildVersion.fold("")(v => s" ($v)")}"
 
-  val toolNameAndVersion: String = s"${toolName} ${toolVersion}"
+  val toolNameAndVersion: String = s"$toolName $toolVersion"
 
   val preambleFile: String  = "preamble.vpr"
 }
