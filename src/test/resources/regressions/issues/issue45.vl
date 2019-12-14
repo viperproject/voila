@@ -1,0 +1,12 @@
+predicate ABS()
+
+procedure test()
+  //:: ExpectedOutput(typechecker_error)
+  requires unfolding ABS() in true;
+{
+  //:: ExpectedOutput(typechecker_error)
+  unfold ABS();
+
+  //:: ExpectedOutput(typechecker_error)
+  fold ABS();
+}

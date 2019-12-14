@@ -303,6 +303,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           s"The body of a ${rule.statementName} block must be atomic",
           atomicity(rule.body) != AtomicityKind.Atomic)
 
+      case fold: PFold => reportAbstractPredicateUnFoldIng(fold)
+      case unfold: PUnfold => reportAbstractPredicateUnFoldIng(unfold)
+
       case exp: PExpression => (
            reportTypeMismatch(exp, expectedType(exp), typ(exp))
         ++ check(exp) {
@@ -382,6 +385,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   case PTupleType(elementTypes) =>
                     message(exp, s"Out of bounds access in ${exp.pretty}", index >= elementTypes.length)
                 }
+
+              case unfolding: PUnfolding => reportAbstractPredicateUnFoldIng(unfolding)
           })
     }
 
@@ -441,6 +446,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       }
 
     message(offendingNode, text, !expectedTypes.exists(isCompatible(foundType, _)))
+  }
+
+  def reportAbstractPredicateUnFoldIng(foldUnfold: PFoldUnfold): Messages = {
+    checkUse(entity(foldUnfold.predicateExp.predicate)) {
+      case PredicateEntity(predicate) if predicate.body.isEmpty =>
+        message(foldUnfold, s"Cannot (un)fold ${foldUnfold.predicateExp.pretty} because predicate ${predicate.id.name} is abstract")
+    }
   }
 
   /**
