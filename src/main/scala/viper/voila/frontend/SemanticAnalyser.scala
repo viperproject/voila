@@ -774,8 +774,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val isGhost: PStatement => Boolean =
     attr[PStatement, Boolean] {
       case _: PGhostStatement => true
-      case compound: PCompoundStatement => compound.components forall isGhost
+      case heapAccess: PHeapAccess if typeOfIdn(heapAccess.location.receiver) == PRegionIdType() => true
+      // TODO: The next cases currently prevent reaching the last case with isInNewRegionInitializerBlock.
+      //       This might prevent correctly categorising statements inside initialiser blocks as ghost.
       case newStmt: PNewStmt => isNewRegionStatement(newStmt)
+      case compound: PCompoundStatement => compound.components forall isGhost
       case stmt => isInNewRegionInitializerBlock(stmt)
     }
 
@@ -1252,6 +1255,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val atomicity: PStatement => AtomicityKind =
     attr[PStatement, AtomicityKind] {
+      case _: PGhostStatement => AtomicityKind.Atomic
+      case stmt if isGhost(stmt) => AtomicityKind.Atomic
+
       case _: PAssign => AtomicityKind.Nonatomic
 
       case newStmt: PNewStmt =>
@@ -1274,21 +1280,6 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PSkip => AtomicityKind.Atomic
       case _: PHeapWrite => AtomicityKind.Atomic
       case _: PHeapRead => AtomicityKind.Atomic
-
-      /* TODO: Not sure if it makes sense to attribute an atomicity kind to ghost operations.
-       *       See also `isGhost` and its uses.
-       */
-      case _: PFold => AtomicityKind.Atomic
-      case _: PUnfold => AtomicityKind.Atomic
-      case _: PInhale => AtomicityKind.Atomic
-      case _: PExhale => AtomicityKind.Atomic
-      case _: PAssume => AtomicityKind.Atomic
-      case _: PAssert => AtomicityKind.Atomic
-      case _: PHavocVariable => AtomicityKind.Atomic
-      case _: PHavocLocation => AtomicityKind.Atomic
-      case _: PUseRegionInterpretation => AtomicityKind.Atomic
-      case _: PUseGuardUniqueness => AtomicityKind.Atomic
-      case _: PLemmaApplication => AtomicityKind.Atomic
 
       case _: PMakeAtomic => AtomicityKind.Atomic
       case _: PUpdateRegion => AtomicityKind.Atomic
