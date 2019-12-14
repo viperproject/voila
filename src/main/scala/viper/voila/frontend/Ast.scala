@@ -289,7 +289,7 @@ case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rh
 
 sealed trait PGhostStatement extends PStatement
 
-sealed trait PFoldUnfold extends PAstNode{
+sealed trait PFoldUnfold extends PAstNode {
   def predicateExp: PPredicateExp
 }
 
