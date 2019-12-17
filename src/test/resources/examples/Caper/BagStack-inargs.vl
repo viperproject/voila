@@ -192,7 +192,6 @@ procedure popCAS(id r, int lvl, bag x,
   }
 }
 
-
 procedure pop(id x_r, int x_lvl, bag x) returns (int status, int ret)
   requires Bag(x_r, x_lvl, x, 0) && Z@x_r;
 //  ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
@@ -207,28 +206,21 @@ procedure pop(id x_r, int x_lvl, bag x) returns (int status, int ret)
   node t_nxt; // ghost
   id t2_r; // ghost
   int t2_lvl; // ghost
-  // int v; // ghost
+  int t2_val; // ghost
+  node t2_nxt; // ghost
 
   status := 0;
     //  0: Keep trying
     // -1: Bag was empty
     //  1: Pop succeeded
 
-  exhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t != null && Inv(v); // Loop invariant, see next longer comment
   while (status == 0)
     invariant -1 <= status <= 1;
 //    invariant Bag(r,x,0) &*& (cr = 0 ? true : BagList(rt,t,v,t2,_) &*& t != 0 &*& bagInvariant(v));
     invariant Bag(x_r, x_lvl, x, 0) && Z@x_r;
-    // TODO: Cannot yet use these invariants: they require modelling Caper's immutable
-    //       memory, which is modelled in Voila via ghost code (additional assumes).
-    //       In Voila's Viper encoding, this ghost code, even if put at the end of the loop body,
-    //       is followed by code that havocs regions in order to account for interference, which
-    //       destroys the effect of the immutability assumptions.
-    //       We therefore have to desugare the loop invariant into in- and exhales.
-//    invariant status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t != null && Inv(v);
+    invariant status == 1 ==>
+                t != null && t_lvl < x_lvl && BagList(t_r, t_lvl, t, t_val, t2, _) && Inv(t_val);
   {
-    inhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
-
 //    t := [x];
     open_region
       using Bag(x_r, x_lvl, x);
@@ -236,76 +228,61 @@ procedure pop(id x_r, int x_lvl, bag x) returns (int status, int ret)
       t := x.hd;
 
       // Update t_r/t_lvl to be the region id/level of the bag's head node t
-      t_r := x_r._hd_id;
+      t_r   := x_r._hd_id;
       t_lvl := x_r._hd_level;
       t_val := x_r._hd_value;
       t_nxt := x_r._hd_next;
-      // Update v to be the value of the head node, and duplicate BagList(t_r, ...) (see issue #89)
+
+      // Manually duplicate BagList(t_r, ...), see issue #89.
+      // At the end of the current open_region, one instance goes back into Bag(x_r, ...),
+      // but the other one remains accessible.
       assert BagList(t_r, t_lvl, t, t_val, t_nxt);
       inhale BagList(t_r, t_lvl, t, t_val, t_nxt);
     }
 
-////    if (t = 0) {
-////      return 0;
-////    }
-//    if (t == null) {
-//      status := -1;
-//    } else {
-////      t2 := [t + 1];
-//      open_region
-//        using BagList(t_r, t_lvl, t);
-//      {
-//        t2 := t.next;
-//
-//        // Bind t2's (i.e. t.next's) region id/level as t2_r/t2_lvl
-//        t2_r := t_r._next_id;
-//        t2_lvl := t_r._next_level;
-//        // Duplicate BagList(t2_r, ...)
-//        assert BagList(t2_r, t2_lvl, t2);
-//        inhale BagList(t2_r, t2_lvl, t2);
-//      }
-//
-////      cr := popCAS(x,t,t2);
-//
-//      assert BagList(t_r, t_lvl, t, ?v_1, ?t2_1);
-//      assume v_1 == v && t2_1 == t2;
-//        // TODO: In Caper, BagList(t_r, t_lvl, t, v, t2) is stable because the memory underlying
-//        //       v and t2 is immutable. This isn't supported in Voila. For now, we'll
-//        //       simply assume that the values haven't changed.
-//        //
-//        // If field next (underlying t2) weren't immutable, the call to popCAS might fail:
-//        // the call requires node t to precede node t2 (i.e. t.next == t2), but this could no
-//        // longer be the case if next weren't immutable.
-//        //
-//        // If field value (underlying v) weren't immutable, then we wouldn't be able to prove
-//        // the postcondition: in particular, the assertion Inv(ret) might not hold. This is
-//        // because Inv(v) is obtained (i.e. taken out of the region) in the loop (via popCAS),
-//        // where v is the value of t.value at a particular moment in time (at the point where the
-//        // CAS inside popCAS succeeded). After the loop, t.value is assigned to ret, but if
-//        // t.value weren't immutable, then we might not hold Inv(ret) afterwards.
-//
-//      // Duplicate region assertions, since popCAS consumes them.
-//      // Alternative (until Voila automatically duplicates region assertions): change contract of popCAS.
-//      assert Bag(x_r, x_lvl, x, 0) && BagList(t_r, t_lvl, t, v, t2) && BagList(t2_r, t2_lvl, t2);
-//      inhale Bag(x_r, x_lvl, x, 0) && BagList(t_r, t_lvl, t, v, t2) && BagList(t2_r, t2_lvl, t2);
-//
-//      status := popCAS(x_r, x_lvl, x, t_r, t_lvl, t, t2_r, t2_lvl, t2);
-//
-//      // Model memory immutability (as before)
-//      assert BagList(t_r, t_lvl, t, ?v_2, ?t2_2);
-//      assume v_2 == v && t2_2 == t2;
-//      assert BagList(t_r, t_lvl, t, v, t2);
-//
-//      exhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
+//    if (t = 0) {
+//      return 0;
 //    }
+    if (t == null) {
+      status := -1;
+    } else {
+//      t2 := [t + 1];
+      open_region
+        using BagList(t_r, t_lvl, t, t_val, t_nxt);
+      {
+        t2 := t.next;
+
+        // Store t2's (i.e. t.next's) ghost fields in local variables
+        t2_r   := t_r._next_id;
+        t2_lvl := t_r._next_level;
+        t2_val := t_r._next_value;
+        t2_nxt := t_r._next_node;
+
+        assert t_nxt == t2; // [DEBUG]
+
+        // Manually duplicate BagList(t2_r, ...)
+        assert BagList(t2_r, t2_lvl, t2, t2_val, t2_nxt);
+        inhale BagList(t2_r, t2_lvl, t2, t2_val, t2_nxt);
+      }
+
+//      cr := popCAS(x,t,t2);
+
+      // Duplicate region assertions, since popCAS consumes them.
+      // Alternative (until Voila automatically duplicates region assertions): change contract of popCAS.
+      assert Bag(x_r, x_lvl, x, 0) && BagList(t_r, t_lvl, t, t_val, t2) && BagList(t2_r, t2_lvl, t2, t2_val, t2_nxt);
+      inhale Bag(x_r, x_lvl, x, 0) && BagList(t_r, t_lvl, t, t_val, t2) && BagList(t2_r, t2_lvl, t2, t2_val, t2_nxt);
+
+      status := popCAS(x_r, x_lvl, x, // Bag(x_r, x_lvl, x)
+                       t_r, t_lvl, t, t_val, // BagList(t_r, t_lvl, t, t_val)
+                       t2_r, t2_lvl, t2, t2_val, t2_nxt); // BagList(t2_r, t2_lvl, t2, t2_val, t2_nxt)
+    }
   }
-  inhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
 
   if (status == 1) {
 //    ret := [t];
 //    return ret;
     open_region
-      using BagList(t_r, t_lvl, t, v, t2);
+      using BagList(t_r, t_lvl, t, t_val, t2);
     {
       ret := t.value;
     }
