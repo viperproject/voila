@@ -139,6 +139,7 @@ procedure popCAS(id r, int lvl, bag x,
                  id t2_r, int t2_lvl, node t2, int t2_val, node t2_nxt
                 ) returns (int success)
   requires Bag(r, lvl, x, 0) && BagList(t_r, t_lvl, t, v, t2) && BagList(t2_r, t2_lvl, t2, t2_val, t2_nxt) && t != null && Z@r;
+  requires t_lvl > t2_lvl;
   ensures success == 0 || success == 1;
   ensures success == 1 ==> Inv(v);
   ensures Z@r;
@@ -158,25 +159,15 @@ procedure popCAS(id r, int lvl, bag x,
       r._hd_value := t2_val;
       r._hd_next := t2_nxt;
 
-//      assert BagList(t_r0, t_lvl0, t, t_val0, t_nxt0, 0);
-//        // Bind out-arguments of the region assertion obtained from unfolding Bag(r, x),
-//        // i.e. of the previous head.
-
-//      assume t_r0 == t_r && t_lvl0 == t_lvl && v0 == v && t2_0 == t2;
-//        // Provable in Caper, but currently not by Voila. Implied by x.hd |-> t from (right before) the successful CAS.
-      assert t_r0 == t_r;
-      assert t_lvl0 == t_lvl;
-      assert t_val0 == v;
-      assert t_nxt0 == t2;
+      // The following equalities can be proved by Caper, but currently not by Voila.
+      // In Caper, they are implied by x.hd |-> t from (right before) the successful CAS.
+      // See also issue #16.
+      assume t_r0 == t_r && t_lvl0 == t_lvl &&  t_val0 == v &&  t_nxt0 == t2;
 
       assert BagList(t_r, t_lvl, t, v, t2, 0); // [DEBUG]
         // Knowing that the region BagList(t_r, t_lvl, t, v, t2), which we got from the precondition,
         // is in state 0 requires knowing that it is a duplicate of the previous head, i.e.
         // of BagList(t_r0, t_lvl0, t, t_val0, t_nxt0, 0).
-
-      assert lvl > t_lvl0;
-      assert lvl > t_lvl;
-      assert t_lvl > t2_lvl;
 
       use_atomic
         /* TODO: Reconsider the use of rule use-atomic here.
@@ -195,64 +186,65 @@ procedure popCAS(id r, int lvl, bag x,
         assert t.value |-> v && Inv(v); // [DEBUG]
 
         assert t_r._absstate |-> 0; // [DEBUG]
-        t_r._absstate := 1;         // Update abstract state of region t_r in order to free OWN@t2_r and Inv(v)
+        t_r._absstate := 1; // Update abstract state of region t_r in order to free OWN@t2_r and Inv(v)
       }
-
-      //assert BagList(t2_r, t2_lvl, t2, _, _, 0); // [DEBUG]
     }
   }
 }
 
 
-//procedure pop(id x_r, int x_lvl, bag x) returns (int status, int ret)
-//  requires Bag(x_r, x_lvl, x, 0) && Z@x_r;
-////  ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
-//  ensures  status == 1 ? Bag(x_r, x_lvl, x, 0) && Inv(ret) : Bag(x_r, x_lvl, x, 0);
-//  ensures  status == -1 || status == 1;
-//{
-//  node t;
-//  node t2;
-//  id t_r; // ghost
-//  int t_lvl; // ghost
-//  id t2_r; // ghost
-//  int t2_lvl; // ghost
-//  int v; // ghost
-//
-//  status := 0;
-//    //  0: Keep trying
-//    // -1: Bag was empty
-//    //  1: Pop succeeded
-//
-//  exhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t != null && Inv(v); // Loop invariant, see next longer comment
-//  while (status == 0)
-//    invariant -1 <= status <= 1;
-////    invariant Bag(r,x,0) &*& (cr = 0 ? true : BagList(rt,t,v,t2,_) &*& t != 0 &*& bagInvariant(v));
-//    invariant Bag(x_r, x_lvl, x, 0) && Z@x_r;
-//    // TODO: Cannot yet use these invariants: they require modelling Caper's immutable
-//    //       memory, which is modelled in Voila via ghost code (additional assumes).
-//    //       In Voila's Viper encoding, this ghost code, even if put at the end of the loop body,
-//    //       is followed by code that havocs regions in order to account for interference, which
-//    //       destroys the effect of the immutability assumptions.
-//    //       We therefore have to desugare the loop invariant into in- and exhales.
-////    invariant status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t != null && Inv(v);
-//  {
-//    inhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
-//
-////    t := [x];
-//    open_region
-//      using Bag(x_r, x_lvl, x);
-//    {
-//      t := x.hd;
-//
-//      // Update t_r/t_lvl to be the region id/level of the bag's head node t
-//      t_r := x_r._next_id;
-//      t_lvl := x_r._next_level;
-//      // Update v to be the value of the head node, and duplicate BagList(t_r, ...) (see issue #89)
-//      assert BagList(t_r, t_lvl, t, ?v0);
-//      havoc v; assume v == v0;
-//      inhale BagList(t_r, t_lvl, t);
-//    }
-//
+procedure pop(id x_r, int x_lvl, bag x) returns (int status, int ret)
+  requires Bag(x_r, x_lvl, x, 0) && Z@x_r;
+//  ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
+  ensures  status == 1 ? Bag(x_r, x_lvl, x, 0) && Inv(ret) : Bag(x_r, x_lvl, x, 0);
+  ensures  status == -1 || status == 1;
+{
+  node t;
+  node t2;
+  id t_r; // ghost
+  int t_lvl; // ghost
+  int t_val; // ghost
+  node t_nxt; // ghost
+  id t2_r; // ghost
+  int t2_lvl; // ghost
+  // int v; // ghost
+
+  status := 0;
+    //  0: Keep trying
+    // -1: Bag was empty
+    //  1: Pop succeeded
+
+  exhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t != null && Inv(v); // Loop invariant, see next longer comment
+  while (status == 0)
+    invariant -1 <= status <= 1;
+//    invariant Bag(r,x,0) &*& (cr = 0 ? true : BagList(rt,t,v,t2,_) &*& t != 0 &*& bagInvariant(v));
+    invariant Bag(x_r, x_lvl, x, 0) && Z@x_r;
+    // TODO: Cannot yet use these invariants: they require modelling Caper's immutable
+    //       memory, which is modelled in Voila via ghost code (additional assumes).
+    //       In Voila's Viper encoding, this ghost code, even if put at the end of the loop body,
+    //       is followed by code that havocs regions in order to account for interference, which
+    //       destroys the effect of the immutability assumptions.
+    //       We therefore have to desugare the loop invariant into in- and exhales.
+//    invariant status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t != null && Inv(v);
+  {
+    inhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
+
+//    t := [x];
+    open_region
+      using Bag(x_r, x_lvl, x);
+    {
+      t := x.hd;
+
+      // Update t_r/t_lvl to be the region id/level of the bag's head node t
+      t_r := x_r._hd_id;
+      t_lvl := x_r._hd_level;
+      t_val := x_r._hd_value;
+      t_nxt := x_r._hd_next;
+      // Update v to be the value of the head node, and duplicate BagList(t_r, ...) (see issue #89)
+      assert BagList(t_r, t_lvl, t, t_val, t_nxt);
+      inhale BagList(t_r, t_lvl, t, t_val, t_nxt);
+    }
+
 ////    if (t = 0) {
 ////      return 0;
 ////    }
@@ -306,19 +298,19 @@ procedure popCAS(id r, int lvl, bag x,
 //
 //      exhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
 //    }
-//  }
-//  inhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
-//
-//  if (status == 1) {
-////    ret := [t];
-////    return ret;
-//    open_region
-//      using BagList(t_r, t_lvl, t);
-//    {
-//      ret := t.value;
-//    }
-//  }
-//}
+  }
+  inhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
+
+  if (status == 1) {
+//    ret := [t];
+//    return ret;
+    open_region
+      using BagList(t_r, t_lvl, t, v, t2);
+    {
+      ret := t.value;
+    }
+  }
+}
 
 primitive_atomic procedure CAS_hd(bag x, node now, node thn) returns (int success)
   requires x.hd |-> ?v;
