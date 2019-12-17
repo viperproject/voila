@@ -46,16 +46,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 }
 
               case PRegionIdType() =>
-                // TODO: Determine with which region `receiver` is associated.
-                //       Note that usedWithRegion(r) currently does not handle associations established by
-                //       new region constructs.
+                val region = usedWithRegion(receiver)
 
-                // message(
-                //   receiver,
-                //   s"Receiver $receiver does not have a field $field",
-                //   !region.fields.exists(_.id.name == field.name))
-
-                noMessages
+                 message(
+                   receiver,
+                   s"Receiver $receiver does not have a field $field",
+                   !region.fields.exists(_.id.name == field.name))
 
               case other if !other.isInstanceOf[PUnknownType] =>
                 message(receiver, s"Receiver $receiver is not of reference type")
@@ -136,7 +132,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                   check(guardArgument) {
                     case PStandardGuardArg(guardArguments) => check(decl.modifier) {
                       case _: PUniqueGuard | _: PDuplicableGuard =>
-                        val lengthMessages = reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
+                        val lengthMessages =
+                          reportArgumentLengthMismatch(guardId, decl.id, decl.formalArguments.length, guardArguments.length)
 
                         val typeMessages =
                           if (lengthMessages.isEmpty) {
@@ -451,7 +448,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   def reportAbstractPredicateUnFoldIng(foldUnfold: PFoldUnfold): Messages = {
     checkUse(entity(foldUnfold.predicateExp.predicate)) {
       case PredicateEntity(predicate) if predicate.body.isEmpty =>
-        message(foldUnfold, s"Cannot (un)fold ${foldUnfold.predicateExp.pretty} because predicate ${predicate.id.name} is abstract")
+        message(
+          foldUnfold,
+          s"Cannot (un)fold ${foldUnfold.predicateExp.pretty} because predicate ${predicate.id.name} is abstract")
     }
   }
 

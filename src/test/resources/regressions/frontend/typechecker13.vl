@@ -1,0 +1,73 @@
+struct pairA {
+  int firstA;
+  int secondA;
+}
+
+struct pairB {
+  int firstB;
+  int secondB;
+}
+
+region PairA(id r, int lvl, pairA x)
+  ghost_fields { int _sumA;  }
+  guards { duplicable Z; }
+  interpretation { true }
+  state { 0 }
+  actions { }
+
+region PairB(id r, int lvl, pairB x)
+  ghost_fields { int _sumB;  }
+  guards { duplicable Z; }
+  interpretation { true }
+  state { 0 }
+  actions { }
+
+procedure test01(pairA x) {
+  int v, w;
+  v := x.firstA;
+  w := x.secondA;
+}
+
+procedure test02(pairA x) {
+  int v, w;
+  v := x.firstA;
+  //:: ExpectedOutput(typechecker_error)
+  w := x.secondB;
+}
+
+procedure test03(pairA x) {
+  int v;
+  //:: ExpectedOutput(typechecker_error)
+  v := x._sumA;
+}
+
+procedure test04(id r, pairA x)
+  requires PairA(r, 1, x);
+{
+  int v;
+  //:: ExpectedOutput(typechecker_error)
+  v := x._sumA;
+}
+
+procedure test05(id r, pairA x)
+  requires PairA(r, 1, x);
+{
+  int v;
+  v := r._sumA;
+}
+
+procedure test06(id r, pairA x)
+  requires PairA(r, 1, x);
+{
+  int v;
+  //:: ExpectedOutput(typechecker_error)
+  v := r.firstA;
+}
+
+procedure test07(id r, pairA x)
+  requires PairA(r, 1, x);
+{
+  int v;
+  //:: ExpectedOutput(typechecker_error)
+  v := r._sumB;
+}
