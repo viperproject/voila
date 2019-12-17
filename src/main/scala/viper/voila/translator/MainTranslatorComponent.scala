@@ -374,7 +374,15 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           translateStandardProcedure(procedure)
         case PPrimitiveAtomic() =>
           logger.debug(s"\nTranslating primitive-atomic procedure ${procedure.id.name}")
-          translateStandardProcedure(procedure)
+          val method = translateStandardProcedure(procedure)
+
+          // TODO: A primitive-atomic procedure is expected to be abstract, and thus, the resulting Viper method
+          //       should not have a method body, either. However, instead of removing the falsly generated method
+          //       body, it should not be generated in the first place.
+          if (method.body.nonEmpty)
+            method.copy(body = None)(method.pos, method.info, method.errT)
+          else
+            method
     }
 
     val inhaleSkolemizationFunctionFootprints =
