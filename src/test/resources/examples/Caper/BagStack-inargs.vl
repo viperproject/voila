@@ -134,60 +134,76 @@ procedure push(id r, int lvl, bag x, int v)
 }
 
 
-//procedure popCAS(id r, int lvl, bag x, id t_r, int t_lvl, node t, id t2_r, int t2_lvl, node t2) returns (int success)
-//  requires Bag(r, lvl, x, 0) && BagList(t_r, t_lvl, t, ?v, t2) && BagList(t2_r, t2_lvl, t2) && t != null && Z@r;
-//  ensures success == 0 || success == 1;
-//  ensures success == 1 ==> Inv(v);
-//  ensures Z@r;
-//{
-//  use_atomic
-//    using Bag(r, lvl, x) with Z@r;
-//  {
-//    success := CAS_hd(x, t, t2);
-//
-//    // If pop succeeded, perform various ghost operations
-//    if (success == 1) {
-//      assert r._next_id |-> ?t_r0 && r._next_level |-> ?t_lvl0; // Bind current values
-//      r._next_id := t2_r;    // Update ghost fields to reflect that the new head of the bag is t2, ...
-//      r._next_level := t2_lvl; // ... whose region id/level is t2_r/t2_lvl.
-//
-//      assert BagList(t_r0, t_lvl0, t, ?v0, ?t2_0, 0);
+procedure popCAS(id r, int lvl, bag x,
+                 id t_r, int t_lvl, node t, int v,
+                 id t2_r, int t2_lvl, node t2, int t2_val, node t2_nxt
+                ) returns (int success)
+  requires Bag(r, lvl, x, 0) && BagList(t_r, t_lvl, t, v, t2) && BagList(t2_r, t2_lvl, t2, t2_val, t2_nxt) && t != null && Z@r;
+  ensures success == 0 || success == 1;
+  ensures success == 1 ==> Inv(v);
+  ensures Z@r;
+{
+  use_atomic
+    using Bag(r, lvl, x) with Z@r;
+  {
+    success := CAS_hd(x, t, t2);
+
+    // If pop succeeded, perform various ghost operations
+    if (success == 1) {
+      // Bind current ghost field values
+      assert r._hd_id |-> ?t_r0 && r._hd_level |-> ?t_lvl0 && r._hd_value |-> ?t_val0 && r._hd_next |-> ?t_nxt0;
+      // Update r's ghost fields to reflect that the new head of the bag is t2
+      r._hd_id := t2_r;
+      r._hd_level := t2_lvl;
+      r._hd_value := t2_val;
+      r._hd_next := t2_nxt;
+
+//      assert BagList(t_r0, t_lvl0, t, t_val0, t_nxt0, 0);
 //        // Bind out-arguments of the region assertion obtained from unfolding Bag(r, x),
 //        // i.e. of the previous head.
-//
+
 //      assume t_r0 == t_r && t_lvl0 == t_lvl && v0 == v && t2_0 == t2;
 //        // Provable in Caper, but currently not by Voila. Implied by x.hd |-> t from (right before) the successful CAS.
-//
-//      assert BagList(t_r, t_lvl, t, v, t2, 0); // [DEBUG]
-//        // Knowing that the region BagList(t_r, t_lvl, t, v, t2), which we got from the precondition,
-//        // is in state 0 requires knowing that it is a duplicate of the previous head, i.e.
-//        // of BagList(t_r0, t_lvl0, t, v0, t2_0, 0).
-//
-//      use_atomic
-//        /* TODO: Reconsider the use of rule use-atomic here.
-//         *       We want to temporarily open the BagList region in order to change its ghost state,
-//         *       and afterwards check that the state change was permitted.
-//         *       In TaDA, this might be done via a view shift instead of use-atomic, because the latter expects the
-//         *       execution of a real atomic operation, and it is not yet fully clear how our ghost code could be
-//         *       represented in a corresponding TaDA proof.
-//         */
-//        using BagList(t_r, t_lvl, t) with OWN@t_r;
-//      {
-//        assert t_r._next_id |-> ?t2_r0 && t_r._next_level |-> ?t2_lvl0; // Bind current values
-//        assume t2_r0 == t2_r && t2_lvl0 == t2_lvl; // Currently not provable, see above
-//
-//        assert t.value |-> v && Inv(v); // [DEBUG]
-//
-//        assert t_r._absstate |-> 0; // [DEBUG]
-//        t_r._absstate := 1;         // Update abstract state of region t_r in order to free OWN@t2_r and Inv(v)
-//      }
-//
-//      assert BagList(t2_r, t2_lvl, t2, _, _, 0); // [DEBUG]
-//    }
-//  }
-//}
-//
-//
+      assert t_r0 == t_r;
+      assert t_lvl0 == t_lvl;
+      assert t_val0 == v;
+      assert t_nxt0 == t2;
+
+      assert BagList(t_r, t_lvl, t, v, t2, 0); // [DEBUG]
+        // Knowing that the region BagList(t_r, t_lvl, t, v, t2), which we got from the precondition,
+        // is in state 0 requires knowing that it is a duplicate of the previous head, i.e.
+        // of BagList(t_r0, t_lvl0, t, t_val0, t_nxt0, 0).
+
+      assert lvl > t_lvl0;
+      assert lvl > t_lvl;
+      assert t_lvl > t2_lvl;
+
+      use_atomic
+        /* TODO: Reconsider the use of rule use-atomic here.
+         *       We want to temporarily open the BagList region in order to change its ghost state,
+         *       and afterwards check that the state change was permitted.
+         *       In TaDA, this might be done via a view shift instead of use-atomic, because the latter expects the
+         *       execution of a real atomic operation, and it is not yet fully clear how our ghost code could be
+         *       represented in a corresponding TaDA proof.
+         */
+        using BagList(t_r, t_lvl, t, v, t2) with OWN@t_r;
+      {
+        // Bind current ghost field values
+        assert t_r._next_id |-> ?t2_r0 && t_r._next_level |-> ?t2_lvl0 && t_r._next_value |-> ?t2_val0 && t_r._next_node |-> ?t2_nxt0;
+        //assume t2_r0 == t2_r && t2_lvl0 == t2_lvl; // Currently not provable, see above
+
+        assert t.value |-> v && Inv(v); // [DEBUG]
+
+        assert t_r._absstate |-> 0; // [DEBUG]
+        t_r._absstate := 1;         // Update abstract state of region t_r in order to free OWN@t2_r and Inv(v)
+      }
+
+      //assert BagList(t2_r, t2_lvl, t2, _, _, 0); // [DEBUG]
+    }
+  }
+}
+
+
 //procedure pop(id x_r, int x_lvl, bag x) returns (int status, int ret)
 //  requires Bag(x_r, x_lvl, x, 0) && Z@x_r;
 ////  ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
