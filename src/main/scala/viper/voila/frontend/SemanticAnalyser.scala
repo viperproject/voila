@@ -32,7 +32,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case use: PIdnUse =>
         use match {
           case tree.parent(PLocation(receiver, field)) if use eq field =>
-            check(typeOfIdn(receiver)) {
+            check(typeOfIdn(receiver.id)) {
               case PRefType(referencedTyp) =>
                 check(entity(referencedTyp)) {
                   case StructEntity(struct) =>
@@ -46,7 +46,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 }
 
               case PRegionIdType() =>
-                val region = usedWithRegion(receiver)
+                val region = usedWithRegion(receiver.id)
 
                  message(
                    receiver,
@@ -751,6 +751,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(p) => enclosingStatementAttr(of)(p)
     }}
 
+  // TODO: Replace PAstNode with PExpression in enclosingAssertion and enclosingAssertionAttr.
+  //       It is currently PAstNode because it is sometimes necessary to find the enclosing assertion of
+  //       a PIdnUse. However, these should probably be PIdnExp anyway.
   def enclosingAssertion(of: PAstNode): PExpression =
     enclosingAssertionAttr(of)(of)
 
@@ -773,7 +776,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val isGhost: PStatement => Boolean =
     attr[PStatement, Boolean] {
       case _: PGhostStatement => true
-      case heapAccess: PHeapAccess if typeOfIdn(heapAccess.location.receiver) == PRegionIdType() => true
+      case heapAccess: PHeapAccess if typeOfIdn(heapAccess.location.receiver.id) == PRegionIdType() => true
       // TODO: The next cases currently prevent reaching the last case with isInNewRegionInitializerBlock.
       //       This might prevent correctly categorising statements inside initialiser blocks as ghost.
       case newStmt: PNewStmt => isNewRegionStatement(newStmt)
@@ -862,7 +865,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   lazy val typeOfLocation: PLocation => PType =
     attr[PLocation, PType] { case PLocation(receiver, field) =>
-      typeOfIdn(receiver) match {
+      typeOfIdn(receiver.id) match {
         case receiverType: PRefType =>
           entity(receiverType.id) match {
             case structEntity: StructEntity =>
@@ -873,7 +876,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             case _ => PUnknownType()
           }
         case _: PRegionIdType =>
-          val region = usedWithRegion(receiver)
+          val region = usedWithRegion(receiver.id)
 
           region.fields.find(_.id.name == field.name) match {
             case Some(fieldDecl) => fieldDecl.typ
@@ -1333,7 +1336,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 //            Set(arguments flatMap freeVariables :_*)
             sys.error(s"Implementation missing for $exp (of class ${exp.getClass.getSimpleName})")
           case PPointsTo(location, value) =>
-            ListSet(location.receiver) ++ (freeVariables(value) -- boundVariables(value))
+            ListSet(location.receiver.id) ++ (freeVariables(value) -- boundVariables(value))
         }
 
       case _: PIntLit => ListSet.empty

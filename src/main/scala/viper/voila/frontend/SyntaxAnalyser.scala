@@ -303,7 +303,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val location: Parser[PLocation] =
-    idnuse ~ ("." ~> idnuse) ^^ PLocation
+    idnexp ~ ("." ~> idnuse) ^^ PLocation
 
   /* Parses and unrolls a do-while loop, in a way that avoids name clashes but preserves
    * position information.

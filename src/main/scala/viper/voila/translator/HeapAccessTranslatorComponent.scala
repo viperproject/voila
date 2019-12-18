@@ -21,19 +21,19 @@ trait HeapAccessTranslatorComponent { this: PProgramToViperTranslator =>
 
   def translate(location: PLocation): vpr.FieldAccess = {
     val receiverMember: PMemberWithFields =
-      semanticAnalyser.typeOfIdn(location.receiver) match {
+      semanticAnalyser.typeOfIdn(location.receiver.id) match {
         case referenceType: PRefType =>
           semanticAnalyser.entity(referenceType.id).asInstanceOf[StructEntity].declaration
 
         case _: PRegionIdType =>
-          semanticAnalyser.usedWithRegion(location.receiver)
+          semanticAnalyser.usedWithRegion(location.receiver.id)
 
         case other =>
           sys.error(s"Unexpectedly found $other")
       }
 
     vpr.FieldAccess(
-      translateUseOf(location.receiver),
+      translateUseOf(location.receiver.id),
       toField(receiverMember, location.field)
     )().withSource(location)
   }

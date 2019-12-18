@@ -542,4 +542,4 @@ case class PMapType(keyType: PType, valueType: PType) extends PType
  * Miscellaneous
  */
 
-case class PLocation(receiver: PIdnUse, field: PIdnUse) extends PAstNode
+case class PLocation(receiver: PIdnExp, field: PIdnUse) extends PAstNode
