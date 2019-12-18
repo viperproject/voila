@@ -22,7 +22,7 @@ class ParserTests extends FunSuite with Matchers {
   private val `true` = PTrueLit()
   private val `false` = PFalseLit()
   private val `x` = PIdnUse("x")
-  private val `y.f` = PLocation(PIdnUse("y"), PIdnUse("f"))
+  private val `y.f` = PLocation(PIdnExp(PIdnUse("y")), PIdnUse("f"))
   private val `bxp` = PIdnExp(PIdnUse("b"))
   private val Emp = Vector.empty
 

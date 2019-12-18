@@ -1,7 +1,3 @@
-//:: IgnoreFile(/voila/issue/41/)
-
-// TODO: Currently (nondeterministically?) crashes Silicon - find out, why
-
 // Corresponds to:
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/Queue.t
 //
