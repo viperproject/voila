@@ -8,35 +8,39 @@
 
 struct queue {
   node sentinel;
-  id _nextrid; // ghost
-  int _nextlvl; // ghost
 }
 
 struct node {
   int value;
   node next;
-  int _absstate; // ghost
-  id _nextrid; // ghost
-  int _nextlvl; // ghost
 }
 
 predicate Inv(int v)
 
 region Qu(id q_r, int q_lvl, queue q)
+  ghost_fields {
+    id _sentinel_id;
+    int _sentinel_level;
+  }
   guards { duplicable G; }
   interpretation {
 ////    0 : p |-> x &*& QL(rs,x,_,3*n+1) &*& n >= 0 &*& rs@OWN;
     q.sentinel |-> ?sl && sl != null &&
 //    sentinel._absstate |-> ?x_a && x_a >= 0 && x_a mod 3 == 1 &&
-    q._nextrid |-> ?sl_r &&
-    q._nextlvl |-> ?sl_lvl && sl_lvl < q_lvl &&
+    q_r._sentinel_id |-> ?sl_r &&
+    q_r._sentinel_level |-> ?sl_lvl && sl_lvl < q_lvl &&
     QL(sl_r, sl_lvl, sl, ?sl_a) && sl_a >= 0 && sl_a mod 3 == 1 &&
     OWN@sl_r
   }
   state { 0 }
   actions {}
 
-region QL(id r, int lvl, node x/*, int v */) // TODO: Add v as an out-argument
+region QL(id r, int lvl, node x/*, int v */) // TODO: Add v as an in-argument, see also BagStack-inargs.vl
+  ghost_fields {
+    int _absstate;
+    id _next_id;
+    int _next_level;
+  }
   guards {
     duplicable Z;
     unique OWN;
@@ -69,9 +73,10 @@ region QL(id r, int lvl, node x/*, int v */) // TODO: Add v as an out-argument
 //
     (x.value |-> ?v) &&
     (x.next |-> ?y) &&
-    (x._absstate |-> ?a) &&
-    (x._nextrid |-> ?y_r) &&
-    (x._nextlvl |-> ?y_lvl) && y_lvl < lvl &&
+    (r._absstate |-> ?a) &&
+    (r._next_id |-> ?y_r) &&
+    (r._next_level |-> ?y_lvl) &&
+    (y == null || y_lvl < lvl) && // Level constraint irrelevant if y == null
     (  a == 0               ? (Inv(v) && y == null)
      : a == 1               ? (          y == null)
      : a >= 3 && a mod 3 == 0 ? (Inv(v) && OWN@y_r && QL(y_r, y_lvl, y, ?y_a) && y_a mod 3 == 0 && y != null)
@@ -113,52 +118,49 @@ procedure makeQueue() returns (id r, int lvl, queue ret)
   int rlvl; // ghost
 
   // y := alloc(2);
-  inhale y.value |-> _;
-  inhale y.next |-> _;
-
   // [y + 1] := 0;
+  y := new node();
   y.next := null;
 
   // x := alloc(1);
-  inhale x.sentinel |-> _;
-
   // [x] := y;
-  x.sentinel := y;
+  x := new queue(y);
 
   // return x;
   ret := x;
 
-  inhale y._nextrid |-> _; // ghost
-  inhale y._nextlvl |-> _; // ghost
-  inhale y._absstate |-> 1; // ghost
-  inhale OWN@rs; // ghost
-  fold QL(rs, rlvl, y); // ghost: Close newly-allocated region
+  // Create region QL(rs, ...)
+  rs := new QL(rlvl, y) with OWN {
+    rs._absstate := 1;
+  }
 
-  inhale x._nextrid|-> rs; // ghost
-  inhale x._nextlvl|-> rlvl && rlvl < lvl; // ghost
-  fold Qu(r, lvl, ret); // ghost: Close newly-allocated region
+  // Create region Qu(r, ...)
+  r := new Qu(lvl, ret) {
+    r._sentinel_id := rs;
+    r._sentinel_level := rlvl;
+    assume 0 <= rlvl < lvl;
+  }
 }
 
 procedure getTail(id r, int lvl, node x) returns (node y, id y_r, int y_lvl) // y_r and y_lvl are ghost
   requires QL(r, lvl, x) && x != null;
   ensures  QL(y_r, y_lvl, y) && y != null;
+  ensures  y_lvl <= lvl;
 {
   node n;
   bool cont;
 
   y := x;
 
-  // ghost assignment to y_r
-  havoc y_r;
-  assume y_r == r;
-
-  havoc y_lvl;
-  assume y_lvl == lvl;
+  // Ghost code assignments to y_r and y_lvl
+  havoc y_r;   assume y_r == r;
+  havoc y_lvl; assume y_lvl == lvl;
 
   cont := true;
 
   while (cont)
     invariant QL(y_r, y_lvl, y) && y != null;
+    invariant y_lvl <= lvl;
   {
     open_region
       using QL(y_r, y_lvl, y);
@@ -166,8 +168,8 @@ procedure getTail(id r, int lvl, node x) returns (node y, id y_r, int y_lvl) // 
       n := y.next;
 
       // Ghost code
-      assert y._nextrid |-> ?n_r; // Let n_r be the region id of the next node
-      assert y._nextlvl |-> ?n_lvl; // Let n_lvl be the region lvl of the next node
+      assert y_r._next_id |-> ?n_r; // Let n_r be the region id of the next node
+      assert y_r._next_level |-> ?n_lvl; // Let n_lvl be the region lvl of the next node
       assert n != null ==> QL(n_r, n_lvl, n); // If next node exist, we should hold QL(n_r, n_lvl, n)
       inhale n != null ==> QL(n_r, n_lvl, n); // In this case, duplicate the region assertion
     }
@@ -178,13 +180,9 @@ procedure getTail(id r, int lvl, node x) returns (node y, id y_r, int y_lvl) // 
     } else {
       y := n;
 
-      // ghost assignment to y_r
-      havoc y_r;
-      assume y_r == n_r;
-
-      // ghost assignment to y_lvl
-      havoc y_lvl;
-      assume y_lvl == n_lvl;
+      // Ghost code assignments to y_r and y_lvl
+      havoc y_r;   assume y_r == n_r;
+      havoc y_lvl; assume y_lvl == n_lvl;
     }
   }
 }
@@ -204,13 +202,9 @@ procedure enqueue(id s, int lvl, queue x, int v)
   bool cont;
 
 //  y := alloc(2);
-  inhale y.value |-> _;
-  inhale y.next |-> _;
-
 //  [y] := v;
 //  [y + 1] := 0;
-  y.value := v;
-  y.next := null;
+  y := new node(v, null);
 
   cont := true;
 
@@ -224,14 +218,16 @@ procedure enqueue(id s, int lvl, queue x, int v)
     {
       h := x.sentinel;
 
-      assert x._nextrid |-> ?h_r; // ghost: Bind first queue node's region id
-      assert x._nextlvl |-> ?h_lvl; // ghost: Bind first queue node's region lvl
+      assert s._sentinel_id |-> ?h_r; // ghost: Bind first queue node's region id
+      assert s._sentinel_level |-> ?h_lvl; // ghost: Bind first queue node's region lvl
       assert QL(h_r, h_lvl, h); // ghost: Show that QL(h_r, h_lvl, h) is accessible ...
       inhale QL(h_r, h_lvl, h); // ghost: ... and duplicate the region assertion
     }
 
 //    t := getTail(h);
     t, t_r, t_lvl := getTail(h_r, h_lvl, h);
+
+    inhale Z@t_r; // QL's Z guard is duplicable
 
 //    cr := CAS(t + 1, 0, y);
     use_atomic
@@ -241,25 +237,19 @@ procedure enqueue(id s, int lvl, queue x, int v)
 
       // If append succeeded, perform various ghost operations
       if (b) {
-        inhale y._nextrid |-> _;
-        inhale y._nextlvl |-> _;
-        inhale y._absstate |-> 0; // Choose abstract state of newly-allocated node region
-        havoc y_r;
-        havoc y_lvl;
-        inhale OWN@y_r; // Gain new node's guard
-        fold QL(y_r, y_lvl, y); // Close newly-allocated region
+        // Create region QL(y_r, ...)
+        y_r := new QL(y_lvl, y) with OWN {
+          y_r._absstate := 0;
+          havoc y_lvl; assume 0 < y_lvl < t_lvl; // TODO: This constraint actually requires a dense level order
+        }
 
-        assert t._absstate |-> ?t_a0; // Bind previous tail's abstract state
-        assert t_a0 == 0 || t_a0 == 1; // State was in one of two states [DEBUG]
-        exhale t._absstate |-> t_a0; // Havoc abstract state
-        inhale t._absstate |-> ?t_a1;
-        assume t_a1 >= 3;
-        assume t_a0 == 0 ==> t_a1 mod 3 == 0; // Choose new abstract state ...
-        assume t_a0 == 1 ==> t_a1 mod 3 == 1; // ... depending on previous state
-        exhale t._nextrid |-> _;   // Havoc next region's id ...
-        inhale t._nextrid |-> y_r; // ... and set to y_r
-        exhale t._nextlvl |-> _;   // Havoc next region's lvl ...
-        inhale t._nextlvl |-> y_lvl; // ... and set to y_lvl
+        assert t_r._absstate |-> ?t_a0; // Bind previous tail's abstract state
+        assert t_a0 == 0 || t_a0 == 1; // [DEBUG] State was in one of two states
+        t_r._absstate := t_a0 == 0 ? 3 : 4; // Choose new abstract state, depending on previous state
+
+        // Update t_r's remaining ghost fields to match the new tail y
+        t_r._next_id := y_r;
+        t_r._next_level := y_lvl;
       }
     }
 
@@ -286,7 +276,6 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
   while (!done)
     invariant Qu(q_r, q_lvl, q, 0);
     invariant success ==> Inv(v);
-//    invariant success ==> false;
   {
 //    sentinel := [q];
     open_region
@@ -294,11 +283,11 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
     {
       sl := q.sentinel;
       // ghost: Duplicate sentinel's region assertion
-      assert q._nextrid |-> ?sl_r0;
-      assert q._nextlvl |-> ?sl_lvl0;
+      assert q_r._sentinel_id |-> ?sl_r0;
+      assert q_r._sentinel_level |-> ?sl_lvl0;
       assert QL(sl_r0, sl_lvl0, sl, ?sl_a0);
       inhale QL(sl_r0, sl_lvl0, sl);
-      assert sl_a0 >= 0;     // [DEBUG]
+      assert sl_a0 >= 0; // [DEBUG]
       assert sl_a0 mod 3 == 1; // [DEBUG]
     }
 
@@ -309,8 +298,8 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
       hd := sl.next;
       // ghost: If head present, duplicate its region assertion
       if (hd != null) {
-        assert sl._nextrid |-> ?hd_r0;
-        assert sl._nextlvl |-> ?hd_lvl0;
+        assert sl_r0._next_id |-> ?hd_r0;
+        assert sl_r0._next_level |-> ?hd_lvl0;
         assert QL(hd_r0, hd_lvl0, hd, ?hd_a0);
         inhale QL(hd_r0, hd_lvl0, hd);
       }
@@ -325,9 +314,11 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
       use_atomic
         using Qu(q_r, q_lvl, q) with G@q_r;
       {
-        assert q._nextrid |-> ?sl_r1;
-        assert q._nextlvl |-> ?sl_lvl1;
-        assert q.sentinel |-> ?sl1;
+        // Bind various logical variables
+        assert q_r._sentinel_id |-> ?sl_r1;
+        assert q_r._sentinel_level |-> ?sl_lvl1;
+        assert q.sentinel |-> ?sl1; // Note: Reading a non-ghost-field this way might look fishy, but it
+                                    // "merely" compensates for Voila's limited support for existentials
         assert QL(sl_r1, sl_lvl1, sl1, ?sl_a1);
 
         (
@@ -335,25 +326,25 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
           // If dequeue succeeded, perform various ghost operations
           if (success) {
             // Since the CAS succeeded, q.sentinel was sl before the CAS.
-            assert sl1 == sl;      // [DEBUG]
-            assume sl_r1 == sl_r0; // TODO: Implied by sl1 == sl
-            assume sl_lvl1 == sl_lvl0; // TODO: Implied by sl1 == sl
-            assert sl_a1 >= 0;     // [DEBUG]
+            assert sl1 == sl; // [DEBUG]
+            assume sl_r1 == sl_r0 && sl_lvl1 == sl_lvl0; // TODO: Implied by sl1 == sl, see also issue #16
+            assert sl_a1 >= 0; // [DEBUG]
             assert sl_a1 mod 3 == 1; // [DEBUG]
 
-            exhale q._nextrid |-> _;
-            inhale q._nextrid |-> hd_r0;
+//            exhale q_r._nextrid |-> _;
+//            inhale q_r._nextrid |-> hd_r0;
+//            exhale q_r._nextlvl |-> _;
+//            inhale q_r._nextlvl |-> hd_lvl0;
+            q_r._sentinel_id := hd_r0;
+            q_r._sentinel_level := hd_lvl0;
 
-            exhale q._nextlvl |-> _;
-            inhale q._nextlvl |-> hd_lvl0;
-
-            use_atomic // TODO: Reconsider which rule to use here
-              using QL(sl_r0, sl_lvl0, sl) with OWN@sl_r0;
+            use_atomic // TODO: Reconsider which rule to use here. Since all ghost, unfold-fold might be more appropriate.
+              using QL(sl_r1, sl_lvl0, sl) with OWN@sl_r1;
             {
               assert sl.next |-> ?hd1;
               if (hd1 != hd) {
                 assume false;
-                  // TODO: Provable in Caper (i.e. unreachable), but not in Voila.
+                  // TODO: False provable in Caper (i.e. code unreachable), but not in Voila.
                   //
                   // My current understanding is the following: without knowing that sentinel
                   // still precedes head we won't get OWN for head out of the sentinel (we would
@@ -366,30 +357,28 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
                   // changing the next pointer once it is non-null.
               }
 
-              assert sl._nextrid |-> ?hd_r1;
-              assume hd_r1 == hd_r0; // TODO: Implied by hd1 == hd
-
-              assert sl._nextlvl |-> ?hd_lvl1;
-              assume hd_lvl1 == hd_lvl0; // TODO: Implied by hd1 == hd
+              assert sl_r1._next_id |-> ?hd_r1 && sl_r1._next_level |-> ?hd_lvl1;
+              assume hd_r1 == hd_r0 && hd_lvl1 == hd_lvl0; // TODO: Implied by hd1 == hd, see Voila issue #16
 
               assert sl_a1 mod 3 == 1; // [DEBUG]
-              assert sl_a1 >= 4;     // [DEBUG]
-              exhale sl._absstate |-> sl_a1;
-              inhale sl._absstate |-> sl_a1 + 1;
-              assert (sl_a1 + 1) >= 5;     // [DEBUG]
+              assert sl_a1 >= 4; // [DEBUG]
+              exhale sl_r1._absstate |-> sl_a1;
+              inhale sl_r1._absstate |-> sl_a1 + 1;
+              assert (sl_a1 + 1) >= 5; // [DEBUG]
               assert (sl_a1 + 1) mod 3 == 2; // [DEBUG]
 
               use_atomic // TODO: Reconsider which rule to use here
                 using QL(hd_r0, hd_lvl0, hd) with OWN@hd_r0;
               {
                 assert hd.value |-> ?v0;
-                assert hd._absstate |-> ?u40;
-                assert u40 mod 3 == 0;          // [DEBUG]
-                assert u40 == 0 || u40 >= 3;  // [DEBUG]
-                assert Inv(v0);               // [DEBUG]
-                assume u40 == 0; // TODO: Get rid of (case split?) Could also be a non-issue once overlapping actions are supported.
-                exhale hd._absstate |-> u40;
-                inhale hd._absstate |-> u40 + 1;
+                assert hd_r0._absstate |-> ?u40;
+                assert u40 mod 3 == 0; // [DEBUG]
+                assert u40 == 0 || u40 >= 3; // [DEBUG]
+                assert Inv(v0); // [DEBUG]
+                assume u40 == 0; // TODO: Get rid of (case split?). Could also be a non-issue once overlapping actions are supported.
+//                exhale hd_r0._absstate |-> u40;
+//                inhale hd_r0._absstate |-> u40 + 1;
+                hd_r0._absstate := u40 + 1;
               }
 
               // Duplicate region assertion
@@ -398,17 +387,17 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
             }
           }
         );
+      }
 
 //        if (r != 0)
-        if (success) {
+      if (success) {
 //          res := [head];
 //          return res;
-          open_region
-            using QL(hd_r0, hd_lvl0, hd);
-          {
-            v := hd.value;
-            assume v == v0; // TODO: Holds in Caper because hd.value is immutable
-          }
+        open_region
+          using QL(hd_r0, hd_lvl0, hd);
+        {
+          v := hd.value;
+//          assume v == v0; // TODO: Not necessary if v were an in-argument, see comment at decl. of region QL
         }
       }
     }
