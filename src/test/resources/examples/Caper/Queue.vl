@@ -113,16 +113,16 @@ procedure makeQueue() returns (id r, int lvl, queue ret)
   id rs; // ghost
   int rlvl; // ghost
 
-  // y := alloc(2);
-  // [y + 1] := 0;
+//  y := alloc(2);
+//  [y + 1] := 0;
   y := new node();
   y.next := null;
 
-  // x := alloc(1);
-  // [x] := y;
+//  x := alloc(1);
+//  [x] := y;
   x := new queue(y);
 
-  // return x;
+//  return x;
   ret := x;
 
   // Create region QL(rs, ...)
@@ -171,7 +171,7 @@ procedure getTail(id r, int lvl, node x) returns (node y, id y_r, int y_lvl) // 
     }
 
     if (n == null) {
-      // return y;
+//      return y;
       cont := false;
     } else {
       y := n;
@@ -327,14 +327,10 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
             assert sl_a1 >= 0; // [DEBUG]
             assert sl_a1 mod 3 == 1; // [DEBUG]
 
-//            exhale q_r._nextrid |-> _;
-//            inhale q_r._nextrid |-> hd_r0;
-//            exhale q_r._nextlvl |-> _;
-//            inhale q_r._nextlvl |-> hd_lvl0;
             q_r._sentinel_id := hd_r0;
             q_r._sentinel_level := hd_lvl0;
 
-            use_atomic // TODO: Reconsider which rule to use here. Since all ghost, unfold-fold might be more appropriate.
+            use_atomic
               using QL(sl_r1, sl_lvl0, sl) with OWN@sl_r1;
             {
               assert sl.next |-> ?hd1;
@@ -358,23 +354,20 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
 
               assert sl_a1 mod 3 == 1; // [DEBUG]
               assert sl_a1 >= 4; // [DEBUG]
-              exhale sl_r1._absstate |-> sl_a1;
-              inhale sl_r1._absstate |-> sl_a1 + 1;
+              sl_r1._absstate := sl_a1 + 1; // Update abstract state of QL(sl_r1, ...)
               assert (sl_a1 + 1) >= 5; // [DEBUG]
               assert (sl_a1 + 1) mod 3 == 2; // [DEBUG]
 
-              use_atomic // TODO: Reconsider which rule to use here
+              use_atomic
                 using QL(hd_r0, hd_lvl0, hd) with OWN@hd_r0;
               {
-                assert hd.value |-> ?v0;
                 assert hd_r0._absstate |-> ?u40;
+                assert hd.value |-> ?v0; // [DEBUG]
                 assert u40 mod 3 == 0; // [DEBUG]
                 assert u40 == 0 || u40 >= 3; // [DEBUG]
                 assert Inv(v0); // [DEBUG]
                 assume u40 == 0; // TODO: Get rid of (case split?). Could also be a non-issue once overlapping actions are supported.
-//                exhale hd_r0._absstate |-> u40;
-//                inhale hd_r0._absstate |-> u40 + 1;
-                hd_r0._absstate := u40 + 1;
+                hd_r0._absstate := u40 + 1; // Update abstract state of QL(hd_r0, ...)
               }
 
               // Duplicate region assertion
@@ -393,7 +386,7 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
           using QL(hd_r0, hd_lvl0, hd);
         {
           v := hd.value;
-//          assume v == v0; // TODO: Not necessary if v were an in-argument, see comment at decl. of region QL
+          // assume v == v0; // TODO: Not necessary if v were an in-argument, see comment at decl. of region QL
         }
       }
     }
