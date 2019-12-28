@@ -233,6 +233,7 @@ class Voila extends StrictLogging {
         siliconOptions ++= Vector("--logLevel", "ERROR")
         siliconOptions ++= Vector("--disableCatchingExceptions")
         siliconOptions ++= Vector("--enableMoreCompleteExhale") /* Fewer permission-related incompletenesses */
+        if (!config.disableSiliconSpecificHavockingCode()) siliconOptions ++= Vector("--enableHavocHack")
 
         logger.info("Encoded Voila program in Viper")
 

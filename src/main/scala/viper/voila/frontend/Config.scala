@@ -76,8 +76,9 @@ class Config(arguments: Seq[String])
   val disableSiliconSpecificHavockingCode: ScallopOption[Boolean] = opt[Boolean](
     name = "disableSiliconSpecificHavockingCode",
     descr =
-      "Generate special Viper code for havocking that requires the 'scmalte_voila_hacks' " +
-          "branch of Silicon. Can tremendously speed up verification with Silicon.",
+      "By default, Voila generates special Viper code that allows Silicon to efficiently havoc resources, which " +
+          "can tremendously improve Voila's performance. See also Silicon option --enableHavocHack and Silicon " +
+          "issue #407.",
     default = Some(false),
     noshort = true)
 

@@ -8,9 +8,15 @@ package viper.voila.backends
 
 import viper.carbon
 import viper.silver
+import viper.voila.frontend.Config
 
-class Carbon(commandLineArguments: Seq[String]) extends ViperVerifier {
+class Carbon(commandLineArguments: Seq[String], voilaConfig: Config) extends ViperVerifier {
   var backend: carbon.CarbonVerifier = _
+
+  assert(
+    voilaConfig.disableSiliconSpecificHavockingCode(),
+    "Using Carbon as Voila's backend requires running Voila with " +
+      s"--${voilaConfig.disableSiliconSpecificHavockingCode.name}")
 
   def start(): Unit = {
     require(backend == null)
