@@ -48,6 +48,8 @@ class PortableVoilaTests extends VoilaTests with BeforeAndAfterEach {
     override protected def adjustCommandLineOptions(options: Vector[CommandLineArgument]): Vector[CommandLineArgument] = {
       var adjustedOptions = super.adjustCommandLineOptions(options)
 
+      // TODO: Passing additional arguments this way could be supported by VoilaTests.scala directly
+
       val voilaOptionsPropertyValue =
         Option(System.getProperty(voilaOptionsPropertyName)).fold("")(_.trim)
 
