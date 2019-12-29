@@ -50,6 +50,17 @@ object VoilaGlobalState {
 }
 
 class Voila extends StrictLogging {
+  // TODO: Have verify() return VerificationDurationRecord instead of storing it here.
+  //       Maybe include in the returned VoilaResult.
+  var _lastDurations: Option[VerificationDurationRecord] = None
+
+  def lastDuration: Option[VerificationDurationRecord] = _lastDurations
+
+  def lastDuration_=(duration: VerificationDurationRecord): Unit = {
+    _lastDurations = Some(duration)
+  }
+
+
   val defaultPreambleFile: Path = {
     val resource = getClass.getClassLoader.getResource(VoilaConstants.preambleFile)
 
@@ -113,7 +124,21 @@ class Voila extends StrictLogging {
     VoilaGlobalState.config = config // TODO: Remove global state
     VoilaGlobalState.positions = frontend.positions // TODO: Remove global state
 
-    frontend.parse(file) match {
+    var timer: Timer = null
+    val durations = new VerificationDurationRecord()
+    lastDuration = durations
+
+
+    // Step 1: Parsing
+    timer = TimingUtils.startTimer()
+
+    val parserResult = frontend.parse(file)
+
+    timer.stop()
+    durations.parsing = Some(timer.durationMillis)
+
+
+    parserResult match {
       case Left(voilaErrors) =>
         Some(Failure(voilaErrors))
 
@@ -125,42 +150,23 @@ class Voila extends StrictLogging {
         logger.info(s"  ${program.predicates.length} predicate(s): ${program.predicates.map(_.id.name).mkString(", ")}")
         logger.info(s"  ${program.procedures.length} procedures(s): ${program.procedures.map(_.id.name).mkString(", ")}")
 
-        /* Pretty-print the parsed and desugared Voila program back to a file, if requested */
-        config.outputParsedProgramFileName.map(new File(_)).foreach(outputFile => {
-          logger.info(
-             "Writing parsed and desugared input program back to file " +
-            s"${config.outputParsedProgramFileName()}")
+        potentiallyPrettyPrintParsedProgramToFile(config, program)
+        potentiallyReportExcludedProcedures(config, program)
 
-          FileUtils.writeStringToFile(outputFile, program.pretty, UTF_8)
-        })
 
-        if (config.include.supplied) {
-          val excludedProcedures: Vector[String] =
-            program.procedures
-              .map(_.id.name)
-              .filterNot(config.include().contains)
-
-          if (excludedProcedures.nonEmpty) {
-            logger.warn(
-              "The following procedures have been excluded from verification: " +
-              excludedProcedures.mkString(", "))
-          }
-        }
+        // Step 2: Typechecking
+        timer.start()
 
         val tree = new VoilaTree(program)
 
-        var stop = false
-        tree.nodes foreach (n => {
-          frontend.positions.getStart(n) match {
-            case Some(_) => /* OK, nothing to do */
-            case None =>
-              stop = true
-              logger.error(s"### NO POSITION FOR ${n.getClass.getSimpleName}:\n  $n")
-          }
-        })
-        if (stop) exitWithError("Position problems!", 10)
+        abortIfTreeHasPositionProblems(tree, frontend.positions)
 
         val semanticAnalyser = new SemanticAnalyser(tree)
+
+        timer.stop()
+        durations.typechecking = Some(timer.durationMillis)
+
+
         val messages = semanticAnalyser.errors
 
         if (messages.nonEmpty) {
@@ -172,6 +178,10 @@ class Voila extends StrictLogging {
         val nameSanitizer = new ViperNameSanitizer()
 
         logger.debug(s"Taking Viper preamble from ${defaultPreambleFile.toString}")
+
+
+        // Step 3: Translating
+        timer.start()
 
         val preambleProgram =
           defaultPreamble match {
@@ -200,17 +210,23 @@ class Voila extends StrictLogging {
             methods = preambleProgram.methods ++ translatedProgram.methods
           )(translatedProgram.pos, translatedProgram.info, translatedProgram.errT)
 
-        /* Pretty-print the generated Viper program to a file, if requested */
-        config.outputFileName.map(new File(_)).foreach(outputFile => {
-          logger.debug(s"Writing generated program to file ${config.outputFileName()}")
+        timer.stop()
+        durations.translation = Some(timer.durationMillis)
 
-          FileUtils.writeStringToFile(
-            outputFile,
-            silver.ast.pretty.FastPrettyPrinter.pretty(programToVerify),
-            UTF_8)
-        })
 
-        programToVerify.checkTransitively match {
+        potentiallyPrettyPrintViperProgramToFile(config, programToVerify)
+
+
+        // Step 4: Checking consistency
+        timer.start()
+
+        val consistencyCheckResults = programToVerify.checkTransitively
+
+        timer.stop()
+        durations.consistency = Some(timer.durationMillis)
+
+
+        consistencyCheckResults match {
           case Seq() => /* No errors, all good */
           case _errors =>
             /* TODO: Generated program yields unexpected consistency errors about
@@ -237,6 +253,10 @@ class Voila extends StrictLogging {
 
         logger.info("Encoded Voila program in Viper")
 
+
+        // Step 5: Verification
+        timer.start()
+
         logger.info("Verifying encoding using Silicon ...")
         val backend = new Silicon(siliconOptions)
 
@@ -248,10 +268,68 @@ class Voila extends StrictLogging {
         backend.start()
         val verificationResult = backend.handle(programToVerify)
         backend.stop()
+
+        timer.stop()
+        durations.verification = Some(timer.durationMillis)
+
+
         logger.info(s"... done (with ${getNumberOfErrors(verificationResult)} Viper error(s))")
 
         backtranslateOrReportErrors(verificationResult, errorBacktranslator)
     }
+  }
+
+  /* Pretty-print the parsed and desugared Voila program back to a file, if requested. */
+  private def potentiallyPrettyPrintParsedProgramToFile(config: Config, program: PProgram): Unit = {
+    config.outputParsedProgramFileName.map(new File(_)).foreach(outputFile => {
+      logger.info(
+        "Writing parsed and desugared input program back to file " +
+          s"${config.outputParsedProgramFileName()}")
+
+      FileUtils.writeStringToFile(outputFile, program.pretty, UTF_8)
+    })
+  }
+
+  private def potentiallyReportExcludedProcedures(config: Config, program: PProgram): Unit = {
+    if (config.include.supplied) {
+      val excludedProcedures: Vector[String] =
+        program.procedures
+          .map(_.id.name)
+          .filterNot(config.include().contains)
+
+      if (excludedProcedures.nonEmpty) {
+        logger.warn(
+          "The following procedures have been excluded from verification: " +
+            excludedProcedures.mkString(", "))
+      }
+    }
+  }
+
+  private def abortIfTreeHasPositionProblems(tree: VoilaTree, positions: Positions): Unit = {
+    var stop = false
+
+    tree.nodes foreach (n => {
+      positions.getStart(n) match {
+        case Some(_) => /* OK, nothing to do */
+        case None =>
+          stop = true
+          logger.error(s"### NO POSITION FOR ${n.getClass.getSimpleName}:\n  $n")
+      }
+    })
+
+    if (stop) exitWithError("Position problems!", 10)
+  }
+
+  /* Pretty-print the generated Viper program to a file, if requested. */
+  private def potentiallyPrettyPrintViperProgramToFile(config: Config, programToVerify: silver.ast.Program): Unit = {
+    config.outputFileName.map(new File(_)).foreach(outputFile => {
+      logger.debug(s"Writing generated program to file ${config.outputFileName()}")
+
+      FileUtils.writeStringToFile(
+        outputFile,
+        silver.ast.pretty.FastPrettyPrinter.pretty(programToVerify),
+        UTF_8)
+    })
   }
 
   private def getNumberOfErrors(verificationResult: silver.verifier.VerificationResult): Int = {
