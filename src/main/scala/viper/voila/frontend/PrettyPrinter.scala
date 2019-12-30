@@ -408,6 +408,7 @@ class DefaultPrettyPrinter
       case PSeqSize(seq) => "size" <> parens(toDoc(seq))
       case PSeqHead(seq) => "head" <> parens(toDoc(seq))
       case PSeqTail(seq) => "tail" <> parens(toDoc(seq))
+      case PSeqConcat(left, right) => parens(toDoc(left) <+> "concat" <+> toDoc(right))
       case PTupleGet(tuple,index) => s"get$index" <> parens(toDoc(tuple))
       case PMapUnion(left, right) => "uni" <> parens(toDoc(left) <> comma <+> toDoc(right))
       case PMapDisjoint(left, right) => "disj" <> parens(toDoc(left) <> comma <+> toDoc(right))

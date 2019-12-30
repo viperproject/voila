@@ -443,6 +443,8 @@ case class PSeqSize(seq: PExpression) extends PSeqExp
 case class PSeqHead(seq: PExpression) extends PSeqExp
 case class PSeqTail(seq: PExpression) extends PSeqExp
 
+case class PSeqConcat(left: PExpression, right: PExpression) extends PSeqExp with PBinOp
+
 
 sealed trait PTupleExp extends PExpression
 

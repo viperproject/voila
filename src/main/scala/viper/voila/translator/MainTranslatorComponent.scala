@@ -1592,6 +1592,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PSeqSize(seq) => vpr.SeqLength(go(seq))().withSource(expression)
       case PSeqHead(seq) => vpr.SeqIndex(go(seq), vpr.IntLit(0)())().withSource(expression)
       case PSeqTail(seq) => vpr.SeqDrop(go(seq), vpr.IntLit(1)())().withSource(expression)
+      case PSeqConcat(left, right) => vpr.SeqAppend(go(left), go(right))().withSource(expression)
       case nPairExp: PTupleExp => translateTupleExpression(nPairExp)
       case mapExp: PMapExp => translateMapExpression(mapExp)
       case PIntSet() => preamble.sets.int.withSource(expression)

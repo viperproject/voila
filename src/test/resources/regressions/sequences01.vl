@@ -21,3 +21,12 @@ procedure test02() returns (int ret)
 
   ret := x;
 }
+
+procedure test03() {
+  seq<int> res;
+
+  res := Seq(1,2,3) concat Seq(3,2,1);
+
+  assert res == Seq(1,2,3,3,2,1);
+  assert res == res concat Seq<int>();
+}

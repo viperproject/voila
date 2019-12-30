@@ -42,7 +42,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "true", "false", "null",
     "div", "mod",
     "Set", "Int", "Nat", "union",
-    "Seq", "size", "head", "tail",
+    "Seq", "size", "head", "tail", "concat",
     "Tuple",
     "Map", "keys", "vals", "lkup", "upd", "disj",
     "unfolding"
@@ -458,6 +458,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     exp50 ~ ("div" ~> exp40) ^^ PDiv |
     exp50 ~ ("mod" ~> exp40) ^^ PMod |
     exp50 ~ ("union" ~> exp40) ^^ PSetUnion |
+    exp50 ~ ("concat" ~> exp40) ^^ PSeqConcat |
     exp40
 
   lazy val exp40: PackratParser[PExpression] = /* Right-associative */

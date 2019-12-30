@@ -1142,6 +1142,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case _: PSeqSize => PIntType()
           case headExp: PSeqHead => typ(headExp.seq).asInstanceOf[PCollectionType].elementType
           case tailExp: PSeqTail => typ(tailExp.seq)
+
+          case PSeqConcat(left, right) =>
+            (typ(left), typ(right)) match {
+              case (seqType1 @ PSeqType(t1), PSeqType(t2)) if isCompatible(t1, t2) => seqType1 // TODO: Return least common supertype
+              case _ => PUnknownType()
+            }
+
           case getExp: PTupleGet =>
             val elementTypes = typ(getExp.tuple).asInstanceOf[PTupleType].elementTypes
             if (elementTypes.isDefinedAt(getExp.index)) {
