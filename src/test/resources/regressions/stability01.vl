@@ -1,0 +1,30 @@
+struct triple {
+  int f1;
+  int f2;
+  int f3;
+}
+
+region Triple(id r, int lvl, triple t; int out1, int out2)
+  guards { unique G; }
+  interpretation {
+    t.f1 |-> ?abs &&
+    t.f2 |-> ?out1 &&
+    t.f3 |-> ?out2
+  }
+  state { abs }
+  actions { G: ?n ~> ?m; }
+
+procedure test01(id r, int lvl, triple t)
+  requires Triple(r, lvl, t, ?out1, ?out2, ?abs) && G@r;
+
+procedure test02(id r, int lvl, triple t, int abs)
+  requires Triple(r, lvl, t, ?out1, ?out2, abs) && G@r;
+
+procedure test03(id r, int lvl, triple t, int abs)
+  requires Triple(r, lvl, t, ?out1, ?out2, abs); // NOT STABLE
+
+procedure test04(id r, int lvl, triple t, int out1)
+  requires Triple(r, lvl, t, out1, ?out2, ?abs) && G@r; // NOT STABLE
+
+procedure test05(id r, int lvl, triple t, int out2)
+  requires Triple(r, lvl, t, ?out1, out2, ?abs) && G@r; // NOT STABLE
