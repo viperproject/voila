@@ -1299,7 +1299,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         val callee = entity(call.procedure).asInstanceOf[ProcedureEntity].declaration
 
         callee.atomicity match {
-          case PNonAtomic() => AtomicityKind.Nonatomic
+          case PNonAtomic() | PMakeAbstractAtomic() => AtomicityKind.Nonatomic
           case PPrimitiveAtomic() | PAbstractAtomic() => AtomicityKind.Atomic
         }
     }
@@ -1321,7 +1321,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case tree.parent(procedure: PProcedure) =>
         /* TODO: Unify with code above */
         procedure.atomicity match {
-          case PNonAtomic() => AtomicityKind.Nonatomic
+          case PNonAtomic() | PMakeAbstractAtomic() => AtomicityKind.Nonatomic
           case PPrimitiveAtomic() | PAbstractAtomic() => AtomicityKind.Atomic
         }
 

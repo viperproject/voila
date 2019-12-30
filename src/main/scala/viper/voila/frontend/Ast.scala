@@ -63,6 +63,7 @@ sealed trait PAtomicityModifier extends PModifier
 case class PNonAtomic() extends PAtomicityModifier
 case class PPrimitiveAtomic() extends PAtomicityModifier
 case class PAbstractAtomic() extends PAtomicityModifier
+case class PMakeAbstractAtomic() extends PAtomicityModifier
 
 sealed trait PGuardModifier extends PModifier
 

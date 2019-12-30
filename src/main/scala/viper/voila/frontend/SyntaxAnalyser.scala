@@ -230,6 +230,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     "abstract_atomic" ^^^ PAbstractAtomic() |
     "primitive_atomic" ^^^ PPrimitiveAtomic() |
     "non_atomic" ^^^ PNonAtomic() |
+    "make_atomic" ^^^ PMakeAbstractAtomic() |
     success(PNonAtomic())
 
   lazy val formalArgsNonEmpty: Parser[Vector[PFormalArgumentDecl]] =

@@ -369,6 +369,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         case PAbstractAtomic() =>
           logger.debug(s"\nTranslating abstract-atomic procedure ${procedure.id.name}")
           translateAbstractlyAtomicProcedure(procedure)
+        case PMakeAbstractAtomic() =>
+          logger.debug(s"\nTranslating make-atomic procedure ${procedure.id.name}")
+          translateMakeAtomicProcedure(procedure)
         case PNonAtomic() =>
           logger.debug(s"\nTranslating non-atomic procedure ${procedure.id.name}")
           translateStandardProcedure(procedure)
@@ -493,7 +496,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprMethodKindSpecificInitialization: vpr.Stmt =
       procedure.atomicity match {
-        case PAbstractAtomic() =>
+        case PAbstractAtomic() | PMakeAbstractAtomic() =>
 
           val regionInterferenceVariables: Map[PIdnUse, Entry] =
             procedure.inters.map(inter => {
@@ -595,7 +598,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def translateAsStub(procedure: PProcedure): vpr.Method = {
     val (vprPres, vprPosts) =
       procedure.atomicity match {
-        case PAbstractAtomic() =>
+        case PAbstractAtomic() | PMakeAbstractAtomic() =>
           val pres =
             procedure.pres.map(pre => translate(pre.assertion)) ++
             procedure.inters.map(translate)
@@ -677,6 +680,301 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
       vpr.Seqn(vprSaveInferenceSets :+ vprMainBody, vprLocals)()
+    }
+
+    val vprStub = translatedProcedureStubs(procedure.id.name)
+
+    vprStub.copy(
+      body = Some(vprBody)
+    )(vprStub.pos, vprStub.info, vprStub.errT)
+  }
+
+  def translateMakeAtomicProcedure(procedure: PProcedure): vpr.Method = {
+    case class Entry(clause: PInterferenceClause,
+                     regionPredicate: PPredicateExp,
+                     atomicityInit: vpr.Inhale,
+                     atomicitySet: vpr.FuncApp,
+                     regionState: vpr.FuncApp)
+
+    val regionInterferenceVariables: Map[PIdnUse, Entry] =
+      procedure.inters.map(inter => {
+        val regionId = semanticAnalyser.interferenceOnRegionId(inter)
+        val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
+
+        val (reg, regionArguments, _, _) = getAndTranslateRegionPredicateDetails(regionPredicate)
+
+        val vprAtomicitySetFootprint = atomicityContextFunctions.inhaleFootprint(reg)(singleWrapper(regionArguments))
+
+        val vprAtomicitySet = atomicityContextFunctions.application(reg, regionArguments)
+
+        val regionState = vpr.FuncApp(regionStateFunction(reg), regionArguments)()
+
+        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicitySetFootprint, vprAtomicitySet, regionState)
+      }).toMap
+
+    // precondition is only permitted to contain one region predicate and one guard
+
+    var foundSingleRegion = false
+    var region: PRegion = null
+    var regionId: PIdnUse = null
+    var preRegion: PPredicateExp = null
+    var regionInArgs: Vector[vpr.Exp] = null
+    var guardList: List[vpr.Exp] = List.empty
+    var preGuards: List[PRegionedGuardExp] = List.empty
+
+    val pre = procedure.pres.map(_.assertion).fold(PTrueLit()){case (l,r) => PAnd(l, r)}
+    def go(exp: PExpression): Unit = exp match {
+      case PTrueLit() =>
+      case PAnd(left, right) => { go(left); go(right) }
+      case predicateExp: PPredicateExp =>
+        assert(
+          !foundSingleRegion,
+          "Only a single region predicate is permitted in make_atomic procedures"
+        )
+        foundSingleRegion = true
+
+        semanticAnalyser.entity(predicateExp.predicate) match {
+          case _: RegionEntity =>
+            preRegion = predicateExp
+            regionId = predicateExp.arguments.head.asInstanceOf[PIdnExp].id
+            val q = getAndTranslateRegionPredicateDetails(predicateExp)
+            region = q._1
+            regionInArgs = q._2
+            vpr.TrueLit()()
+          case _ =>
+            assert(
+              false,
+              "make-atomic procedures does not permit predicates that are not region predicates"
+            )
+        }
+
+      case guard: PRegionedGuardExp =>
+        preGuards ::= guard
+        guardList ::= translate(guard)
+        vpr.TrueLit()()
+
+      // TODO: other non-pure expresions are not permitted. Currently sub expressions (e.g. conditionals) are not checked
+      case _: PPointsTo | _: PDiamond | _: PRegionUpdateWitness =>
+        assert(
+          false,
+          "make-atomic procedures does only permit guards and region assertions"
+        )
+
+      case _ =>
+    }
+    go(pre)
+
+    assert(
+      foundSingleRegion && preGuards.nonEmpty,
+      "Exactly a single region predicate has to occur in the precondition of make_atomic procedures"
+    )
+
+    val guard = viper.silicon.utils.ast.BigAnd(guardList)
+
+    val guardErrorHook = preGuards.head
+
+    val vprLocals = procedure.locals.map(translate)
+
+
+    val vprBody = {
+
+
+      procedure.body match {
+        case Some(stmt) => {
+
+
+          val assignContext =
+            vpr.Seqn(
+              atomicityContextFunctions.inhaleFootprint(region)(singleWrapper(regionInArgs)) +:
+              (regionInterferenceVariables.map { case (_, entry) =>
+                val translatedClauseSet = translate(entry.clause.set)
+
+                vpr.Seqn(
+                  Vector(
+                    vpr.Inhale( /* TODO: Add label */
+                      vpr.EqCmp(
+                        entry.atomicitySet,
+                        translatedClauseSet
+                      )()
+                    )()
+                  ),
+                  Vector.empty
+                )()
+              }(breakOut)),
+              Vector.empty
+            )()
+
+
+          val regionType = semanticAnalyser.typ(region.state)
+          val vprRegionIdArg = regionInArgs.head
+
+          val inhaleDiamond =
+            vpr.Inhale(diamondAccess(translateUseOf(regionId)))()
+
+          val exhaleGuard =
+            vpr.Exhale(guard)().withSource(procedure)
+
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
+              MakeAtomicProcedureError(procedure, InsufficientGuardPermissionError(guardErrorHook))
+          }
+
+          val regionPredicate =
+            vpr.PredicateAccessPredicate(
+              vpr.PredicateAccess(
+                args = regionInArgs,
+                predicateName = region.id.name
+              )(),
+              vpr.FullPerm()()
+            )()
+
+          val guardArgEvaluationLabel = freshLabel("pre_havoc")
+
+          val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
+
+          val havoc2 = stabilizeSingleInstances("after atomic", (region, regionInArgs))
+
+          val ruleBody = translate(stmt)
+
+          val vprAtomicityContextX = atomicityContextFunctions.application(region, regionInArgs)
+
+          val vprStepFrom =
+            stepFromLocation(vprRegionIdArg, regionType).withSource(regionId)
+
+          val vprStepTo =
+            stepToLocation(vprRegionIdArg, regionType).withSource(regionId)
+
+
+          val checkUpdatePermitted = {
+            val vprStepFromAllowed =
+              vpr.AnySetContains(
+                vprStepFrom,
+                vprAtomicityContextX
+              )().withSource(procedure)
+
+            val vprCheckFrom =
+              vpr.Assert(vprStepFromAllowed)().withSource(procedure)
+
+            errorBacktranslator.addErrorTransformer {
+              case e @ vprerr.AssertFailed(_, reason: vprrea.InsufficientPermission, _)
+                if (e causedBy vprCheckFrom) && (reason causedBy vprStepFrom) =>
+
+                MakeAtomicProcedureError(procedure)
+                  .dueTo(InsufficientTrackingResourcePermissionError(preRegion, regionId))
+                  .dueTo(hintAtEnclosingLoopInvariants(regionId))
+                  .dueTo(AdditionalErrorClarification("This could be related to issue #8", regionId))
+
+              case e @ vprerr.AssertFailed(_, reason: vprrea.AssertionFalse, _)
+                if (e causedBy vprCheckFrom) && (reason causedBy vprStepFromAllowed) =>
+
+                MakeAtomicProcedureError(procedure)
+                  .dueTo(IllegalRegionStateChangeError(procedure.body.get))
+                  .dueTo(AdditionalErrorClarification(
+                    "In particular, it cannot be shown that the region is transitioned from a " +
+                      "state that is compatible with the procedure's interference specification",
+                    regionId))
+                  .dueTo(hintAtEnclosingLoopInvariants(regionId))
+            }
+
+            val vprCheckTo =
+              regionStateChangeAllowedByGuard(
+                region,
+                regionInArgs,
+                preGuards.toVector, /* FIXME: only temporal placeholder, guard is going to be a vector itself */
+                vprStepFrom,
+                vprStepTo,
+                guardArgEvaluationLabel
+              ).withSource(procedure)
+
+            errorBacktranslator.addErrorTransformer {
+              case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
+                MakeAtomicProcedureError(procedure)
+                  .dueTo(IllegalRegionStateChangeError(guardErrorHook))
+                  .dueTo(hintAtEnclosingLoopInvariants(regionId))
+            }
+
+            vpr.Seqn(
+              Vector(
+                vprCheckFrom,
+                vprCheckTo),
+              Vector.empty
+            )()
+          }
+
+          val vprRegionState =
+            vpr.FuncApp(
+              regionStateFunction(region),
+              regionInArgs
+            )()
+
+          val assumeCurrentStateIsStepTo =
+            vpr.Inhale(
+              vpr.EqCmp(
+                vprRegionState,
+                stepToLocation(vprRegionIdArg, regionType)
+              )()
+            )()
+
+          val assumeOldStateWasStepFrom =
+            vpr.Inhale(
+              vpr.EqCmp(
+                vpr.Old(vprRegionState)(),
+                stepFromLocation(vprRegionIdArg, regionType)
+              )()
+            )()
+
+          val inhaleGuard = vpr.Inhale(guard)()
+
+          val exhaleTrackingResource = {
+            val stepFrom =
+              stepFromAccess(vprRegionIdArg, regionType).withSource(preRegion)
+
+            val stepTo =
+              stepToAccess(vprRegionIdArg, regionType).withSource(preRegion)
+
+            val exhale =
+              vpr.Exhale(
+                vpr.And(
+                  stepFrom,
+                  stepTo
+                )()
+              )().withSource(preRegion)
+
+            errorBacktranslator.addErrorTransformer {
+              case e: vprerr.ExhaleFailed if e causedBy exhale =>
+                MakeAtomicProcedureError(procedure)
+                  .dueTo(InsufficientTrackingResourcePermissionError(preRegion, regionId))
+                  .dueTo(hintAtEnclosingLoopInvariants(regionId))
+            }
+
+            exhale
+          }
+
+
+          vpr.Seqn(
+            Vector(
+              guardArgEvaluationLabel,
+              exhaleGuard,
+              inhaleDiamond,
+              assignContext,
+              havoc1,
+              ruleBody,
+              checkUpdatePermitted,
+              havoc2,
+              BLANK_LINE,
+              assumeCurrentStateIsStepTo,
+              assumeOldStateWasStepFrom,
+              inhaleGuard,
+              exhaleTrackingResource
+            ),
+            vprLocals
+          )()
+
+        }
+        case None => vpr.Seqn(Vector(vpr.Inhale(vpr.FalseLit()())()), Vector.empty)()
+      }
+
+
     }
 
     val vprStub = translatedProcedureStubs(procedure.id.name)
@@ -1150,7 +1448,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             case PPrimitiveAtomic() =>
               vpr.Assert(vpr.TrueLit()())()
 
-            case PAbstractAtomic() =>
+            case PAbstractAtomic() | PMakeAbstractAtomic() =>
               /* TODO: Inject code comments at various places */
 
               // val vprPreHavocLabel = freshLabel("pre_havoc")

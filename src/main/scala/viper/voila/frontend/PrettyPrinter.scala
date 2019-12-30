@@ -123,6 +123,7 @@ class DefaultPrettyPrinter
       case PNonAtomic() => "non_atomic"
       case PPrimitiveAtomic() => "primitive_atomic"
       case PAbstractAtomic() => "abstract_atomic"
+      case PMakeAbstractAtomic() => "make_atomic"
     }
   }
 

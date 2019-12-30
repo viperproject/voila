@@ -218,6 +218,17 @@ case class MakeAtomicError(offendingNode: PMakeAtomic, detail: Option[Verificati
     copy(offendingNode, detail)
 }
 
+case class MakeAtomicProcedureError(offendingNode: PProcedure, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PProcedure
+  def localId: String = "make-atomic-procedure_error"
+  val localMessage: String = "make-atomic-procedure might fail"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class UpdateRegionError(offendingNode: PUpdateRegion, detail: Option[VerificationError] = None)
     extends AbstractVerificationError {
 
