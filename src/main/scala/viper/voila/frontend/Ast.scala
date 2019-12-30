@@ -137,8 +137,8 @@ case class PInvariantClause(assertion: PExpression) extends PAssertionClause
 case class PAction(binders: Vector[PNamedBinder],
                    condition: PExpression,
                    guards: Vector[PBaseGuardExp],
-                   from: PExpression, to:
-                   PExpression)
+                   from: PExpression, 
+                   to: PExpression)
     extends PAstNode with PBindingContext with PScope {
 
   def binds(binder: PLogicalVariableBinder): Boolean =
