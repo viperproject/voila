@@ -287,7 +287,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val stabilizeFrameRegions =
-      stabilizeAllInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}")
+      havocSingleInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}", (region, vprInArgs))
 
     val ruleBody = translate(updateRegion.body)
 

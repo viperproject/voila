@@ -25,26 +25,49 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   def stabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
-    val stabilizationMessage =
+    val stabilizeMessage =
       s"Stabilising regions ${regions.map(_._1.id.name).mkString(",")} ($reason)"
 
-    outputDebugInfo(stabilizationMessage)
+    outputDebugInfo(stabilizeMessage)
 
-    val preHavocLabel = freshLabel("pre_havoc")
+    val preStabilizeLabel = freshLabel("pre_stabilize")
 
     val stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising single instance of region ${region._1.id.name}",
-          stabilizeSingleInstance(region._1, region._2, preHavocLabel)))
+          stabilizeSingleInstance(region._1, region._2, preStabilizeLabel)))
 
     val result =
       vpr.Seqn(
-        preHavocLabel +: stabilizeInstances,
+        preStabilizeLabel +: stabilizeInstances,
         Vector.empty
       )()
 
-    surroundWithSectionComments(stabilizationMessage, result)
+    surroundWithSectionComments(stabilizeMessage, result)
+  }
+
+  def havocSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*): vpr.Stmt = {
+    val havockingMessage =
+      s"Havocking regions ${regions.map(_._1.id.name).mkString(",")} ($reason)"
+
+    outputDebugInfo(havockingMessage)
+
+    val preHavocLabel = freshLabel("pre_havoc")
+
+    val havocInstances =
+      regions.map(region =>
+        prependComment(
+          s"Havocking single instance of region ${region._1.id.name}",
+          havocSingleInstance(region._1, region._2, preHavocLabel)))
+
+    val result =
+      vpr.Seqn(
+        preHavocLabel +: havocInstances,
+        Vector.empty
+      )()
+
+    surroundWithSectionComments(havockingMessage, result)
   }
 
   def stabilizeAllInstances(reason: String): vpr.Stmt = {
@@ -52,26 +75,26 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   def stabilizeAllInstances(reason: String, regions: PRegion*): vpr.Stmt = {
-    val stabilizationMessage =
+    val stabilizeMessage =
       s"Stabilising regions ${regions.map(_.id.name).mkString(",")} ($reason)"
 
-    outputDebugInfo(stabilizationMessage)
+    outputDebugInfo(stabilizeMessage)
 
-    val preHavocLabel = freshLabel("pre_havoc")
+    val preStabilizeLabel = freshLabel("pre_stabilize")
 
     val stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising all instances of region ${region.id.name}",
-          stabilizeAllInstances(region, preHavocLabel)))
+          stabilizeAllInstances(region, preStabilizeLabel)))
 
     val result =
       vpr.Seqn(
-        preHavocLabel +: stabilizeInstances,
+        preStabilizeLabel +: stabilizeInstances,
         Vector.empty
       )()
 
-    surroundWithSectionComments(stabilizationMessage, result)
+    surroundWithSectionComments(stabilizeMessage, result)
   }
 
   private def beforeNonAtomic(): Unit = {
@@ -83,30 +106,30 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   def nonAtomicStabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*)
                                        : vpr.Stmt = {
 
-    val stabilizationMessage =
+    val stabilizeMessage =
       s"Stabilising regions ${regions.map(_._1.id.name).mkString(",")} ($reason)"
 
     beforeNonAtomic()
 
-    outputDebugInfo(stabilizationMessage)
+    outputDebugInfo(stabilizeMessage)
 
-    val preHavocLabel = freshLabel("pre_havoc")
+    val preStabilizeLabel = freshLabel("pre_stabilize")
 
     val stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising single instance of region ${region._1.id.name}",
-          stabilizeAndInferContextSingleInstance(region._1, region._2, preHavocLabel)))
+          stabilizeAndInferContextSingleInstance(region._1, region._2, preStabilizeLabel)))
 
     val result =
       vpr.Seqn(
-        preHavocLabel +: stabilizeInstances,
+        preStabilizeLabel +: stabilizeInstances,
         Vector.empty
       )()
 
-    afterNonAtomic(preHavocLabel)
+    afterNonAtomic(preStabilizeLabel)
 
-    surroundWithSectionComments(stabilizationMessage, result)
+    surroundWithSectionComments(stabilizeMessage, result)
   }
 
   def nonAtomicStabilizeAllInstances(reason: String): vpr.Stmt = {
@@ -114,57 +137,57 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   def nonAtomicStabilizeAllInstances(reason: String, regions: PRegion*): vpr.Stmt = {
-    val stabilizationMessage =
+    val stabilizeMessage =
       s"Stabilising regions ${regions.map(_.id.name).mkString(",")} ($reason)"
 
     beforeNonAtomic()
 
-    outputDebugInfo(stabilizationMessage)
+    outputDebugInfo(stabilizeMessage)
 
-    val preHavocLabel = freshLabel("pre_havoc")
+    val preStabilizeLabel = freshLabel("pre_stabilize")
 
     val stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising all instances of region ${region.id.name}",
-          stabilizeAndInferContextAllInstances(region, preHavocLabel)))
+          stabilizeAndInferContextAllInstances(region, preStabilizeLabel)))
 
     val result =
       vpr.Seqn(
-        preHavocLabel +: stabilizeInstances,
+        preStabilizeLabel +: stabilizeInstances,
         Vector.empty
       )()
 
-    afterNonAtomic(preHavocLabel)
+    afterNonAtomic(preStabilizeLabel)
 
-    surroundWithSectionComments(stabilizationMessage, result)
+    surroundWithSectionComments(stabilizeMessage, result)
   }
 
   def inferContextSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*)
                                  : vpr.Stmt = {
 
-    val stabilizationMessage =
+    val inferenceMessage =
       s"Inferring interference context ${regions.map(_._1.id.name).mkString(",")} ($reason)"
 
     sequenceStabilizeSubject.nextVersion()
 
-    outputDebugInfo(stabilizationMessage)
+    outputDebugInfo(inferenceMessage)
 
-    val preHavocLabel = freshLabel("pre_havoc")
+    val preInferLabel = freshLabel("pre_infer")
 
-    val stabilizeInstances =
+    val inferInstances =
       regions.map(region =>
         prependComment(
           s"Inferring interference single instance of region ${region._1.id.name}",
-          inferContextSingleInstance(region._1, region._2, preHavocLabel)))
+          inferContextSingleInstance(region._1, region._2, preInferLabel)))
 
     val result =
       vpr.Seqn(
-        preHavocLabel +: stabilizeInstances,
+        preInferLabel +: inferInstances,
         Vector.empty
       )()
 
-    surroundWithSectionComments(stabilizationMessage, result)
+    surroundWithSectionComments(inferenceMessage, result)
   }
 
   def inferContextAllInstances(reason: String): vpr.Stmt = {
@@ -172,28 +195,36 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   def inferContextAllInstances(reason: String, regions: PRegion*): vpr.Stmt = {
-    val stabilizationMessage =
+    val inferenceMessage =
       s"Inferring interference context ${regions.map(_.id.name).mkString(",")} ($reason)"
 
     sequenceStabilizeSubject.nextVersion()
 
-    outputDebugInfo(stabilizationMessage)
+    outputDebugInfo(inferenceMessage)
 
-    val preHavocLabel = freshLabel("pre_havoc")
+    val preInferLabel = freshLabel("pre_infer")
 
-    val stabilizeInstances =
+    val inferInstances =
       regions.map(region =>
         prependComment(
           s"Inferring interference all instances of region ${region.id.name}",
-          inferContextAllInstances(region, preHavocLabel)))
+          inferContextAllInstances(region, preInferLabel)))
 
     val result =
       vpr.Seqn(
-        preHavocLabel +: stabilizeInstances,
+        preInferLabel +: inferInstances,
         Vector.empty
       )()
 
-    surroundWithSectionComments(stabilizationMessage, result)
+    surroundWithSectionComments(inferenceMessage, result)
+  }
+
+  private def havocSingleInstance(region: PRegion,
+                                  args: Vector[vpr.Exp],
+                                  preHavocLabel: vpr.Label)
+                                 : vpr.Stmt = {
+
+    havocSingleRegion(region, singleWrapper(args), preHavocLabel)
   }
 
   private def stabilizeSingleInstance(region: PRegion,
@@ -202,6 +233,15 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
                                      : vpr.Stmt = {
 
     stabilizeSingleRegion(region, singleWrapper(args), preHavocLabel)
+  }
+
+  private def havocSingleRegion(region: PRegion,
+                                wrapper: TranslatorUtils.QuantifierWrapper.Wrapper,
+                                preHavocLabel: vpr.Label)
+                               : vpr.Stmt = {
+
+    val resource = RegionStateFrontResourceWrapper
+    resource.havoc(region, preHavocLabel)(regionAllWrapper(region, dfltPrePermissions(preHavocLabel)))
   }
 
   private def stabilizeAllInstances(region: PRegion,
@@ -219,9 +259,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
                                     preHavocLabel: vpr.Label)
                                    : vpr.Stmt = {
 
-//    val prePermissions = dfltPrePermissions(preHavocLabel)(_)
     val preRegionState = dfltPreRegionState(region, preHavocLabel)(_)
-//    val postRegionState = dfltPostRegionState(region)(_)
     val actionFilter = dfltActionFilter(region)(_)
 
     val resource = RegionStateFrontResourceWrapper
