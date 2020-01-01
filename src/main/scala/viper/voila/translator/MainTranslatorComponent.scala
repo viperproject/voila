@@ -133,7 +133,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         )()
 
     /* TODO: [2018-11-25 Malte] Using interferenceReferenceFunctions.footprintManager.application
-     *       feels like an unnecessary compliated way of getting to the name of a region's
+     *       feels like an unnecessary complicated way of getting to the name of a region's
      *       interference context footprint predicate.
      */
 
