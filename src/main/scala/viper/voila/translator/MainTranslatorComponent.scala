@@ -748,7 +748,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val pre = procedure.pres.map(_.assertion).fold(PTrueLit()){case (l,r) => PAnd(l, r)}
     def go(exp: PExpression): Unit = exp match {
       case PTrueLit() =>
-      case PAnd(left, right) => { go(left); go(right) }
+      case PAnd(left, right) => go(left); go(right)
       case predicateExp: PPredicateExp =>
         assert(
           !foundSingleRegion,
@@ -800,16 +800,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
 
     val vprBody = {
-
-
       procedure.body match {
-        case Some(stmt) => {
-
-
+        case Some(stmt) =>
           val assignContext =
             vpr.Seqn(
               atomicityContextFunctions.inhaleFootprint(region)(singleWrapper(regionInArgs)) +:
-              (regionInterferenceVariables.map { case (_, entry) =>
+              regionInterferenceVariables.map { case (_, entry) =>
                 val translatedClauseSet = translate(entry.clause.set)
 
                 vpr.Seqn(
@@ -823,7 +819,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   ),
                   Vector.empty
                 )()
-              }(breakOut)),
+              }(breakOut),
               Vector.empty
             )()
 
@@ -842,16 +838,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               MakeAtomicProcedureError(procedure, InsufficientGuardPermissionError(guardErrorHook))
           }
 
-          val regionPredicate =
-            vpr.PredicateAccessPredicate(
-              vpr.PredicateAccess(
-                args = regionInArgs,
-                predicateName = region.id.name
-              )(),
-              vpr.FullPerm()()
-            )()
+//          val regionPredicate =
+//            vpr.PredicateAccessPredicate(
+//              vpr.PredicateAccess(
+//                args = regionInArgs,
+//                predicateName = region.id.name
+//              )(),
+//              vpr.FullPerm()()
+//            )()
 
-          val guardArgEvaluationLabel = freshLabel("pre_havoc")
+          val guardArgEvaluationLabel = freshLabel("guard_arg_eval")
 
           val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
 
@@ -993,11 +989,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             vprLocals
           )()
 
-        }
         case None => vpr.Seqn(Vector(vpr.Inhale(vpr.FalseLit()())()), Vector.empty)()
       }
-
-
     }
 
     val vprStub = translatedProcedureStubs(procedure.id.name)
