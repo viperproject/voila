@@ -121,16 +121,38 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def havocAllInstancesMethods(tree: VoilaTree): Vector[vpr.Method] = {
-    val method: String => vpr.Method =
-      suffix =>
-        vpr.Method(
-          name = s"havoc_all_$suffix",
-          formalArgs = Vector.empty,
-          formalReturns = Vector.empty,
-          pres = Vector.empty,
-          posts = Vector.empty,
-          body = None
+    def method(suffix: String, args: Vector[vpr.LocalVarDecl]): vpr.Method = {
+      // Giving each havoc method the precondition [true, forall xs :: false ==> R(xs)]
+      // gets Silicon to use QP algorithms for resource R, which avoids certain
+      // permission-related incompletenesses.
+      val pre =
+        vpr.InhaleExhaleExp(
+          vpr.TrueLit()(),
+          vpr.Forall(
+            args,
+            Vector.empty,
+            vpr.Implies(
+              vpr.FalseLit()(),
+              vpr.PredicateAccessPredicate(
+                vpr.PredicateAccess(
+                  args map (_.localVar),
+                  suffix
+                )(),
+                vpr.NoPerm()()
+              )()
+            )()
+          )()
         )()
+
+      vpr.Method(
+        name = s"havoc_all_$suffix",
+        formalArgs = Vector.empty,
+        formalReturns = Vector.empty,
+        pres = Vector(pre),
+        posts = Vector.empty,
+        body = None
+      )()
+    }
 
     /* TODO: [2018-11-25 Malte] Using interferenceReferenceFunctions.footprintManager.application
      *       feels like an unnecessary complicated way of getting to the name of a region's
@@ -140,12 +162,13 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val fpm = interferenceReferenceFunctions.footprintManager
 
     tree.root.regions flatMap (region => {
-      val vprFormalArguments = region.formalInArgs map translate map (_.localVar)
+      val vprFormalArgumentDecls = region.formalInArgs map translate
+      val vprFormalArguments = vprFormalArgumentDecls map (_.localVar)
       val interferenceContextFootprint = fpm.application(region, vprFormalArguments).loc.predicateName
 
       Vector(
-        method(region.id.name), /* Suffix = R */
-        method(interferenceContextFootprint), /* Suffix = R_interferenceContext_fp */
+        method(region.id.name, vprFormalArgumentDecls), /* Suffix = R */
+        method(interferenceContextFootprint, vprFormalArgumentDecls), /* Suffix = R_interferenceContext_fp */
       )
     })
   }
