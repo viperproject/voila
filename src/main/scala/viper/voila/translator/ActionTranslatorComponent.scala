@@ -556,7 +556,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
                     }
                   )
 
-                case (_: PDivisibleGuard, r +: heldPerm +: haveArgs, requiredPerm +: sollArgs) => /* TODO: Why isn't r used? */
+                case (_: PDivisibleGuard, heldPerm +: haveArgs, requiredPerm +: sollArgs) =>
                   /* perm_required <= perm_held && used_guard_args == action_guard_args */
                   viper.silicon.utils.ast.BigAnd(
                     vpr.PermLeCmp(requiredPerm, heldPerm)() +:
