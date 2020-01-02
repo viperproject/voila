@@ -435,11 +435,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     override def havoc(id: PRegion, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): Stmt = {
       if (!VoilaGlobalState.config.disableSiliconSpecificHavockingCode()) {
-        vpr.MethodCall(
-          methodName = s"havoc_all_${id.id.name}",
-          args = Vector.empty,
-          targets = Vector.empty
-        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+        viper.silicon.rules.executor.hack407_havoc_all_resources_method_call(id.id.name)
       } else {
         val vprRegionArguments = wrapper.args
 

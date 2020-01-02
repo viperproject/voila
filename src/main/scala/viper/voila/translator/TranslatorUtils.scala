@@ -267,11 +267,7 @@ object TranslatorUtils {
 
     override def havoc(id: T, label: vpr.Label)(wrapper: QuantifierWrapper.Wrapper): vpr.Stmt = {
       if (!VoilaGlobalState.config.disableSiliconSpecificHavockingCode()) {
-        vpr.MethodCall(
-          methodName = s"havoc_all_${memberName(idToName(id))}",
-          args = Vector.empty,
-          targets = Vector.empty
-        )(vpr.NoPosition, vpr.NoInfo, vpr.NoTrafos)
+        viper.silicon.rules.executor.hack407_havoc_all_resources_method_call(memberName(idToName(id)))
       } else {
         vpr.Seqn(
           Vector(exhaleFootprint(id)(wrapper), inhaleFootprint(id)(wrapper)),

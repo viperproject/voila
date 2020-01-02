@@ -77,8 +77,8 @@ class Config(arguments: Seq[String])
     name = "disableSiliconSpecificHavockingCode",
     descr =
       "By default, Voila generates special Viper code that allows Silicon to efficiently havoc resources, which " +
-          "can tremendously improve Voila's performance. See also Silicon option --enableHavocHack and Silicon " +
-          "issue #407.",
+          "can tremendously improve Voila's performance. See also Silicon option --disableHavocHack407 and the " +
+          "corresponding Silicon issue #407.",
     default = Some(false),
     noshort = true)
 

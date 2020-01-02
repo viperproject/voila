@@ -145,7 +145,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         )()
 
       vpr.Method(
-        name = s"havoc_all_$suffix",
+        name = viper.silicon.rules.executor.hack407_havoc_all_resources_method_name(suffix),
         formalArgs = Vector.empty,
         formalReturns = Vector.empty,
         pres = Vector(pre),
