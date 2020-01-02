@@ -73,8 +73,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val assignContext = assignAtomicityContext(region, regionInArgs)
-
-    val guardArgEvaluationLabel = freshLabel("pre_havoc")
+    
+    val guardArgEvaluationLabel = freshLabel("guard_arg_eval")
 
     val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
 
