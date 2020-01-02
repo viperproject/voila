@@ -32,11 +32,14 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     val preStabilizeLabel = freshLabel("pre_stabilize")
 
-    val stabilizeInstances =
+    var stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising single instance of region ${region._1.id.name}",
           stabilizeSingleInstance(region._1, region._2, preStabilizeLabel)))
+
+    stabilizeInstances =
+      stabilizeInstances.map(patchPostHavocForallsToForperms(_, regions.map(_._1), preStabilizeLabel))
 
     val result =
       vpr.Seqn(
@@ -82,11 +85,14 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     val preStabilizeLabel = freshLabel("pre_stabilize")
 
-    val stabilizeInstances =
+    var stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising all instances of region ${region.id.name}",
           stabilizeAllInstances(region, preStabilizeLabel)))
+
+    stabilizeInstances =
+      stabilizeInstances.map(patchPostHavocForallsToForperms(_, regions, preStabilizeLabel))
 
     val result =
       vpr.Seqn(
@@ -115,11 +121,14 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     val preStabilizeLabel = freshLabel("pre_stabilize")
 
-    val stabilizeInstances =
+    var stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising single instance of region ${region._1.id.name}",
           stabilizeAndInferContextSingleInstance(region._1, region._2, preStabilizeLabel)))
+
+    stabilizeInstances =
+      stabilizeInstances.map(patchPostHavocForallsToForperms(_, regions.map(_._1), preStabilizeLabel))
 
     val result =
       vpr.Seqn(
@@ -146,11 +155,14 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     val preStabilizeLabel = freshLabel("pre_stabilize")
 
-    val stabilizeInstances =
+    var stabilizeInstances =
       regions.map(region =>
         prependComment(
           s"Stabilising all instances of region ${region.id.name}",
           stabilizeAndInferContextAllInstances(region, preStabilizeLabel)))
+
+    stabilizeInstances =
+      stabilizeInstances.map(patchPostHavocForallsToForperms(_, regions, preStabilizeLabel))
 
     val result =
       vpr.Seqn(
@@ -175,11 +187,14 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     val preInferLabel = freshLabel("pre_infer")
 
-    val inferInstances =
+    var inferInstances =
       regions.map(region =>
         prependComment(
           s"Inferring interference single instance of region ${region._1.id.name}",
           inferContextSingleInstance(region._1, region._2, preInferLabel)))
+
+    inferInstances =
+      inferInstances.map(patchPostHavocForallsToForperms(_, regions.map(_._1), preInferLabel))
 
     val result =
       vpr.Seqn(
@@ -204,11 +219,14 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     val preInferLabel = freshLabel("pre_infer")
 
-    val inferInstances =
+    var inferInstances =
       regions.map(region =>
         prependComment(
           s"Inferring interference all instances of region ${region.id.name}",
           inferContextAllInstances(region, preInferLabel)))
+
+    inferInstances =
+      inferInstances.map(patchPostHavocForallsToForperms(_, regions, preInferLabel))
 
     val result =
       vpr.Seqn(
@@ -626,5 +644,66 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
   trait SequenceStabelizeVersionedSelector[T] extends TranslatorUtils.VersionedSelector[T] {
     sequenceStabilizeSubject.addObserver(this) /* TODO: Probably a very bad idea -> data races */
+  }
+
+  /** [2020-01-02 Malte] A hacky patch that replaces certain foralls with forperms.
+    * TODO: @Felix: I didn't figure out how to construct appropriate forperms in the first place,
+    * so I transform foralls to forperms as a postprocessing step. This should only be a temporary
+    * solution.
+    *
+    * Rewrites the following patterns:
+    * 1. "inhale forall XS :: {TS} none < old[L](perm(R(XS))) ==> RHS"
+    *    is transformed to "inhale forperm XS [R(XS)] :: none < old[L](perm(R(XS))) ==> RHS"
+    * 2. "inhale forall XS, $$_m: Int :: {TS} none < old[L](perm(R(XS))) ==> RHS"
+    *    is transformed to "inhale forperm XS [R(XS)] :: forall $$_m: Int :: none < old[L](perm(R(XS))) ==> RHS"
+    */
+  private def patchPostHavocForallsToForperms[N <: vpr.Node]
+                                             (root: N, regions: Seq[PRegion], preLabel: vpr.Label)
+                                             : N = {
+
+    if (!config.useForpermsInsteadOfQPs())
+      return root
+
+    root.transform {
+      case inhale @ vpr.Inhale(
+              forall @ vpr.Forall(
+                qvars,
+                triggers,
+                implies @ vpr.Implies(
+                  vpr.PermLtCmp(
+                    vpr.NoPerm(),
+                    vpr.LabelledOld(
+                      vpr.CurrentPerm(
+                        predicateAccess @ vpr.PredicateAccess(_, predicateName)),
+                      labelName)),
+                  _ /*rhs*/)))
+            if regions.exists(_.id.name == predicateName) && labelName == preLabel.name =>
+
+//        if (qvars.last.name == "$$_m") println("  FOUND QUANTIFIER TYPE 2")
+//        else println("  FOUND QUANTIFIER TYPE 1")
+//          println(s"  inh = $inhale")
+
+        if (qvars.last.name == "$$_m") {
+          vpr.Inhale(
+            vpr.ForPerm(
+              qvars.init,
+              predicateAccess,
+              vpr.Forall(
+                Vector(qvars.last),
+                triggers,
+                implies // rhs
+              )(forall.pos, forall.info, forall.errT)
+            )(forall.pos, forall.info, forall.errT)
+          )(inhale.pos, inhale.info, inhale.errT)
+        } else {
+          vpr.Inhale(
+            vpr.ForPerm(
+              qvars,
+              predicateAccess,
+              implies // rhs
+            )(forall.pos, forall.info, forall.errT)
+          )(inhale.pos, inhale.info, inhale.errT)
+        }
+    }
   }
 }

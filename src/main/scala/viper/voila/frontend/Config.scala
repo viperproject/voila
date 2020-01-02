@@ -82,6 +82,12 @@ class Config(arguments: Seq[String])
     default = Some(false),
     noshort = true)
 
+  val useForpermsInsteadOfQPs: ScallopOption[Boolean] = opt[Boolean](
+    name = "useForpermsInsteadOfQPs",
+    descr = "Experimental: potentially faster, but less complete.",
+    default = Some(false),
+    noshort = true)
+
   /*
    * Exception handling
    */

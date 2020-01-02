@@ -220,11 +220,16 @@ class Voila extends StrictLogging {
         // Step 4: Checking consistency
         timer.start()
 
-        val consistencyCheckResults = programToVerify.checkTransitively
+        var consistencyCheckResults = programToVerify.checkTransitively
 
         timer.stop()
         durations.consistency = Some(timer.durationMillis)
 
+        if (config.useForpermsInsteadOfQPs()) {
+          consistencyCheckResults =
+            consistencyCheckResults.filterNot(
+              _.message.startsWith("Body of forperm quantifier is not allowed to contain perm expressions"))
+        }
 
         consistencyCheckResults match {
           case Seq() => /* No errors, all good */

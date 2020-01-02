@@ -122,33 +122,40 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def havocAllInstancesMethods(tree: VoilaTree): Vector[vpr.Method] = {
     def method(suffix: String, args: Vector[vpr.LocalVarDecl]): vpr.Method = {
-      // Giving each havoc method the precondition [true, forall xs :: false ==> R(xs)]
-      // gets Silicon to use QP algorithms for resource R, which avoids certain
-      // permission-related incompletenesses.
-      val pre =
-        vpr.InhaleExhaleExp(
-          vpr.TrueLit()(),
-          vpr.Forall(
-            args,
-            Vector.empty,
-            vpr.Implies(
-              vpr.FalseLit()(),
-              vpr.PredicateAccessPredicate(
-                vpr.PredicateAccess(
-                  args map (_.localVar),
-                  suffix
-                )(),
-                vpr.NoPerm()()
+      val pres: Vector[vpr.Exp] =
+        if (config.useForpermsInsteadOfQPs()) {
+          Vector.empty
+        } else {
+          // Giving each havoc method the precondition [true, forall xs :: false ==> R(xs)]
+          // gets Silicon to use QP algorithms for resource R, which avoids certain
+          // permission-related incompletenesses.
+          val pre =
+            vpr.InhaleExhaleExp(
+              vpr.TrueLit()(),
+              vpr.Forall(
+                args,
+                Vector.empty,
+                vpr.Implies(
+                  vpr.FalseLit()(),
+                  vpr.PredicateAccessPredicate(
+                    vpr.PredicateAccess(
+                      args map (_.localVar),
+                      suffix
+                    )(),
+                    vpr.NoPerm()()
+                  )()
+                )()
               )()
             )()
-          )()
-        )()
+
+          Vector(pre)
+        }
 
       vpr.Method(
         name = viper.silicon.rules.executor.hack407_havoc_all_resources_method_name(suffix),
         formalArgs = Vector.empty,
         formalReturns = Vector.empty,
-        pres = Vector(pre),
+        pres = pres,
         posts = Vector.empty,
         body = None
       )()
