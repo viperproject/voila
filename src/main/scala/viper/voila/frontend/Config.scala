@@ -64,13 +64,13 @@ class Config(arguments: Seq[String])
   val enableStabilityChecks: ScallopOption[Boolean] = opt[Boolean](
     name = "enableStabilityChecks",
     descr = "Enables stability checks of pre-/postconditions, region interpretations and invariants",
-    default = Some(false),
+    default = Some(true),
     noshort = true)
 
   val enableTransitivityChecks: ScallopOption[Boolean] = opt[Boolean](
     name = "enableTransitivityChecks",
     descr = "Enables transitivity checks of actions",
-    default = Some(false),
+    default = Some(true),
     noshort = true)
 
   val disableSiliconSpecificHavockingCode: ScallopOption[Boolean] = opt[Boolean](

@@ -1,0 +1,68 @@
+
+struct memcell {
+  int f;
+}
+
+region Counter(id r, int lvl, memcell x)
+  guards { duplicable INCREMENT; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions {
+    ?n, ?m | n < m | INCREMENT: n ~> m;
+  }
+
+procedure makeCounter(id r, int lvl) returns (memcell ret)
+  requires lvl >= 0;
+  ensures Counter(r, lvl, ret) && INCREMENT@r;
+{
+  memcell v;
+
+  // v := new memcell(0);
+  inhale v.f |-> ?w;
+  v.f := 0;
+
+  ret := v;
+
+  // create Counter(r, lvl, ret, 0);
+  inhale INCREMENT@r;
+  fold Counter(r, lvl, ret, 0);
+}
+
+procedure incr(id r, int lvl, memcell x) returns (int ret)
+  requires Counter(r, lvl, x, ?v0) && INCREMENT@r;
+  ensures  Counter(r, lvl, x, ?v1) && INCREMENT@r;
+  ensures  v0 < v1;
+{
+  int v;
+  bool b;
+
+  do
+    invariant Counter(r, lvl, x, ?vi) && INCREMENT@r;
+    invariant b ? v0 < vi : v0 <= vi;
+  {
+    open_region using Counter(r, lvl, x) {
+      v := x.f;
+    }
+    use_atomic using Counter(r, lvl, x) with INCREMENT@r {
+      b := CAS(x, v, v + 1);
+    }
+  } while (!b);
+}
+
+procedure read(id r, int lvl, memcell x) returns (int ret)
+  requires Counter(r, lvl, x, ?v0) && INCREMENT@r;
+  ensures  Counter(r, lvl, x, ?v1) && INCREMENT@r;
+  ensures  ret <= v1;
+{
+  open_region
+    using Counter(r, lvl, x);
+  {
+    ret := x.f;
+  }
+}
+
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;

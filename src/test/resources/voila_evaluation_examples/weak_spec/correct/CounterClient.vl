@@ -1,0 +1,267 @@
+
+primitive_atomic procedure CAS(cell x, int now, int thn) returns (bool ret)
+  requires x.value |-> ?v;
+  ensures  v == now
+              ?  ret && x.value |-> thn
+              : !ret && x.value |-> v;
+
+// ----- Counter Client -----
+
+// Macro thread_incr's precondition such that it can be easily reused when encoding
+// fork statements via exhales
+macro thread_incr_PRE(r, lvl, x, s, alvl, y)
+  Counter(r, lvl, x, _) && AUTH(1)@r && INCR(1/2)@r && Join(s, alvl, y, r, lvl, x, 0) && SET@s && lvl < alvl;
+
+procedure thread_incr(id r, int lvl, cell x, id s, int alvl, fjcell y)
+  requires thread_incr_PRE(r, lvl, x, s, alvl, y);
+  ensures  true;
+{
+  incr(r, lvl, x);
+  set_to_one(s, alvl, y, r, lvl, x);
+}
+
+procedure parallel_incr(int lvl, int alvl, id dummy) returns (id r, cell x)
+  requires LevelDummy(dummy, alvl) && alvl > lvl >= 0;
+  ensures  Counter(r, lvl, x, 2) && CONT(2)@r && AUTH(-1-2)@r && INCR(1f)@r;
+{
+  fjcell y1, y2;
+  id s1, s2;
+  int s1_lvl, s2_lvl;
+
+  assume s1_lvl == alvl && s2_lvl == alvl;
+
+  r, x := makeCounter(lvl);
+
+  // Duplicate Counter region assertion
+  assert Counter(r, lvl, x);
+  inhale Counter(r, lvl, x) && Counter(r, lvl, x) && Counter(r, lvl, x) && Counter(r, lvl, x);
+  // Split off two AUTH(1)
+  use AUTH_split(r, -1-1, 1);
+  use AUTH_split(r, -1-2, 1);
+
+  s1, y1 := make_join(s1_lvl, r, lvl, x);
+  s2, y2 := make_join(s2_lvl, r, lvl, x);
+
+  // Duplicate Join regions
+  assert Join(s1, s1_lvl, y1, r, lvl, x) && Join(s2, s2_lvl, y2, r, lvl, x);
+  inhale Join(s1, s1_lvl, y1, r, lvl, x) && Join(s2, s2_lvl, y2, r, lvl, x);
+
+  // fork thread_incr(x, y1);
+  exhale thread_incr_PRE(r, lvl, x, s1, s1_lvl, y1);
+  // fork thread_incr(x, y2);
+  exhale thread_incr_PRE(r, lvl, x, s2, s2_lvl, y2);
+
+  wait(s1, s1_lvl, y1, r, lvl, x);
+  wait(s2, s2_lvl, y2, r, lvl, x);
+
+  // At this point, we know
+  //   CONT(1)@r && CONT(1)@r && AUTH(-1-2)@r && Counter(r, lvl, x, _)
+  // We want to conclude
+  //   Counter(r, lvl, x, 2)
+  // but that requires applying a few lemmas and using the definition of the Counter region
+  use CONT_join(r, 1, 1); // Apply CONT(1) * CONT(1) ==> CONT(2)
+  unfold Counter(r, lvl, x, ?n);
+  use CONT_max1(r, 2, n); // Apply CONT(2) * CONT(-1-n) ==> 2 <= n
+  use AUTH_max1(r, n, 2); // Apply AUTH(n) * AUTH(-1-2) ==> n <= 2
+  fold Counter(r, lvl, x, 2);
+
+  skip;
+}
+
+// ----- Counter Library -----
+
+region Counter(id r, int lvl, cell x)
+  guards {
+    divisible  INCR; // %INCR
+    duplicable CONT(int n); // |CONT|
+    duplicable AUTH(int n); // |AUTH|
+  }
+  interpretation {
+    x.value |-> ?n && 0 <= n && CONT(-1-n)@r && AUTH(n)@r
+  }
+  state { n }
+  actions {
+    ?n, ?m | INCR(1/2): n ~> m;
+  }
+
+// Encoding of counting guard algebras CONT and AUTH
+
+macro counting_algebra_constraints(n, m)
+  (0 <= n && 0 <= m) ||
+  (n < 0 && 0 <= m && n + m < 0) ||
+  (m < 0 && 0 <= n && n + m < 0);
+
+/* lemma */ procedure CONT_split(id r, int n, int m)
+  requires CONT(n + m)@r;
+  requires counting_algebra_constraints(n, m);
+  ensures  CONT(n)@r && CONT(m)@r;
+
+/* lemma */ procedure CONT_join(id r, int n, int m)
+  requires CONT(n)@r && CONT(m)@r;
+  requires counting_algebra_constraints(n, m);
+  ensures  CONT(n + m)@r;
+
+/* lemma */ procedure CONT_false1(id r, int n) // TODO: Derivable from CONT_split and CONT_join?
+  requires CONT(-1)@r && CONT(n)@r && 0 < n;
+  ensures  false;
+
+/* lemma */ procedure CONT_max1(id r, int n, int m) // TODO: Derivable from CONT_split and CONT_join?
+  requires CONT(n)@r && CONT(-1-m)@r && 0 <= n && 0 <= m;
+  ensures  CONT(n)@r && CONT(-1-m)@r;
+  ensures  n <= m;
+
+/* lemma */ procedure AUTH_split(id r, int n, int m)
+  requires AUTH(n + m)@r;
+  requires counting_algebra_constraints(n, m);
+  ensures  AUTH(n)@r && AUTH(m)@r;
+
+/* lemma */ procedure AUTH_join(id r, int n, int m)
+  requires AUTH(n)@r && AUTH(m)@r;
+  requires counting_algebra_constraints(n, m);
+  ensures  AUTH(n + m)@r;
+
+/* lemma */ procedure AUTH_false1(id r, int n) // TODO: Derivable from AUTH_split and AUTH_join?
+  requires AUTH(-1)@r && AUTH(n)@r && 0 < n;
+  ensures  false;
+
+/* lemma */ procedure AUTH_max1(id r, int n, int m) // TODO: Derivable from AUTH_split and AUTH_join?
+  requires AUTH(n)@r && AUTH(-1-m)@r && 0 <= n && 0 <= m;
+  ensures  AUTH(n)@r && AUTH(-1-m)@r;
+  ensures  n <= m;
+
+// Functionality
+
+procedure makeCounter(int lvl) returns(id r, cell x)
+  requires lvl >= 0;
+  ensures  Counter(r, lvl, x, 0) && INCR(1f)@r && AUTH(-1)@r;
+{
+  // x := new cell(0);
+  inhale x.value |-> _;
+
+  x.value := 0;
+
+  // Create region Counter(r, lvl, x)
+  inhale INCR(1f)@r && CONT(-1)@r && AUTH(-1)@r;
+  use AUTH_split(r, -1, 0); // Apply AUTH(-1) ==> AUTH(-2) * AUTH(1)
+  fold Counter(r, lvl, x);
+}
+
+procedure incr(id r, int lvl, cell x)
+  requires Counter(r, lvl, x, _) && AUTH(1)@r && INCR(1/2)@r;
+  ensures  Counter(r, lvl, x, _) && CONT(1)@r && INCR(1/2)@r;
+{
+  bool b;
+  int v;
+
+  do
+    invariant Counter(r, lvl, x, _) && INCR(1/2)@r;
+    invariant !b ? AUTH(1)@r : CONT(1)@r;
+  {
+    open_region
+      using Counter(r, lvl, x);
+    {
+      v := x.value;
+    }
+
+    use_atomic using Counter(r, lvl, x) with INCR(1/2)@r {
+      b := CAS(x, v, v + 1);
+
+      // ghost
+      if (b) {
+        // Trade with region: AUTH(1) for CONT(1)
+        use AUTH_join(r, v, 1); // Apply AUTH(v) * AUTH(1) ==> AUTH(v + 1)
+        use CONT_split(r, -1-(v+1), 1); // Apply CONT(-1-v) ==> CONT(-1-(v+1)) * CONT(1)
+      }
+    }
+  } while (!b);
+}
+
+// Fork Join Library
+
+struct fjcell {
+  int value;
+  bool _payload; // ghost field to resolve nondeterministic choice (disjunction) in Join's interpretation
+}
+
+region Join(id s, int alvl, fjcell y, id r, int lvl, cell x)
+  guards {
+    unique SET;
+    unique JOIN;
+  }
+  interpretation {
+    y.value |-> ?n && (n == 0 || n == 1) &&
+    y._payload |-> ?loaded &&
+    (n == 1 ==>
+      (loaded ? Counter(r, lvl, x, _) && lvl < alvl && CONT(1)@r && INCR(1/2)@r : JOIN@s))
+  }
+  state { n }
+  actions {
+    SET: 0 ~> 1;
+  }
+
+procedure make_join(int alvl, id r, int lvl, cell x) returns (id s, fjcell y)
+  requires Counter(r, lvl, x, _) && lvl < alvl;
+  ensures  Join(s, alvl, y, r, lvl, x, 0) && SET@s && JOIN@s && alvl > lvl;
+{
+  // y := alloc(1);
+  inhale y.value |-> _;
+
+  y.value := 0;
+
+  // Create region Join(s, alvl, y, r, lvl, x, 0)
+  inhale SET@s && JOIN@s;
+  inhale y._payload |-> true;
+  fold Join(s, alvl, y, r, lvl, x, 0);
+}
+
+procedure set_to_one(id s, int alvl, fjcell y, id r, int lvl, cell x)
+  requires Counter(r, lvl, x, _) && CONT(1)@r && INCR(1/2)@r && Join(s, alvl, y, r, lvl, x, 0) && SET@s && lvl < alvl;
+  ensures  Join(s, alvl, y, r, lvl, x, 1);
+{
+  use_atomic using Join(s, alvl, y, r, lvl, x) with SET@s {
+    y.value := 1;
+
+    // ghost
+    exhale y._payload |-> _;
+    inhale y._payload |-> true;
+  }
+}
+
+procedure wait(id s, int alvl, fjcell y, id r, int lvl, cell x)
+  requires Counter(r, lvl, x, _) && JOIN@s && Join(s, alvl, y, r, lvl, x, _);
+  ensures  Counter(r, lvl, x, _) && CONT(1)@r && INCR(1/2)@r && Join(s, alvl, y, r, lvl, x, 1);
+{
+  int v;
+
+  do
+    invariant Counter(r, lvl, x, _) && Join(s, alvl, y, r, lvl, x, ?j);
+    invariant v == 0 ? JOIN@s : CONT(1)@r && INCR(1/2)@r && j == 1;
+  { 
+    open_region using Join(s, alvl, y, r, lvl, x)  {
+      v := y.value;
+
+      // ghost
+      if (v != 0) {
+        // learn that y._payload |-> true,
+        //       which follows from the uniqueness of JOIN@s.
+        fold Join(s, alvl, y, r, lvl, x);
+        use_region_interpretation Join(s, alvl, y, r, lvl, x);
+        unfold Join(s, alvl, y, r, lvl, x);
+
+        exhale y._payload |-> true;
+        inhale y._payload |-> false;
+      }
+    }
+  } while (v == 0);
+}
+
+
+region LevelDummy(id r, int lvl)
+  guards { duplicable LevelDummyG; }
+  interpretation { true }
+  state { 0 }
+  actions {  }
+
+struct cell {
+  int value;
+}
