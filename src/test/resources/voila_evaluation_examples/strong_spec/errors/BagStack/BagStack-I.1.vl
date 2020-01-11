@@ -72,8 +72,9 @@ make_atomic procedure push(id r, int lvl, entry z, int n)
 
     do
       invariant Bag(r, lvl, z);
-      invariant !b ==> r |=> <D> && x.val |-> n && x.next |-> _ && nextGhost(x, _, _, _);
-      invariant  b ==> r |=> (y_state, Seq<int>(n) concat y_state);
+      //:: ExpectedOutput(invariant_establishment_error)
+      invariant  b ==> r |=> <D> && x.val |-> n && x.next |-> _ && nextGhost(x, _, _, _);
+      invariant !b ==> r |=> (y_state, Seq<int>(n) concat y_state);
     {
       open_region using Bag(r, lvl, z) {
         y := z.next;
