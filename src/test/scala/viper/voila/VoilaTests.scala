@@ -35,6 +35,7 @@ class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
   protected class VoilaUnderTest extends SystemUnderTest with TimingUtils {
     val projectInfo: ProjectInfo = new ProjectInfo(List("Voila"))
     val reportRuntime: Boolean = true
+    val reportOutputs: Boolean = true
 
     protected def adjustCommandLineOptions(options: Vector[CommandLineArgument]): Vector[CommandLineArgument] =
       options
@@ -59,15 +60,20 @@ class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
 
       if (reportRuntime) info(s"Time required: $elapsed")
 
-      result match {
-        case None =>
-          info("Voila failed")
-          Vector.empty
-        case Some(Success) =>
-          Vector.empty
-        case Some(Failure(errors)) =>
-          errors map VoilaTestOutput
-      }
+      val voilaTestOutputs =
+        result match {
+          case None =>
+            info("Voila failed")
+            Vector.empty
+          case Some(Success) =>
+            Vector.empty
+          case Some(Failure(errors)) =>
+            errors map VoilaTestOutput
+        }
+
+      if (reportOutputs) info(s"Outputs obtained: ${voilaTestOutputs.length}")
+
+      voilaTestOutputs
     }
   }
 }
