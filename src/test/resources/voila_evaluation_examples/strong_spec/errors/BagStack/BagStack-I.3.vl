@@ -92,6 +92,7 @@ make_atomic procedure push(id r, int lvl, entry z, int n)
         if (b) {
           // create BagList(c, l, x)
           assume ul < l && l < lvl;
+          //:: ExpectedOutput(precondition_error:permission_error)
           use createBagList(c, l, x, ur, ul, u_state);
 
           // update witnesses of z
