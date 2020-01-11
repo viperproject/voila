@@ -1454,6 +1454,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             targets = vprReturns
           )().withSource(statement)
 
+        val ebt = this.errorBacktranslator /* TODO: Should not be necessary!!!!! */
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.PreconditionInCallFalse if e causedBy vprCall =>
+            PreconditionError(call, ebt.translate(e.reason))
+        }
+
         surroundWithSectionComments(statement.statementName, vprCall)
 
       case call @ PProcedureCall(procedureId, arguments, rhs) =>

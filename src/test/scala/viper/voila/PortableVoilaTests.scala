@@ -44,6 +44,7 @@ class PortableVoilaTests extends VoilaTests with BeforeAndAfterEach {
     private var lastCommandLineOptions: Vector[CommandLineArgument] = _
 
     override val reportRuntime: Boolean = false
+    override val reportOutputs: Boolean = false
 
     override protected def adjustCommandLineOptions(options: Vector[CommandLineArgument]): Vector[CommandLineArgument] = {
       var adjustedOptions = super.adjustCommandLineOptions(options)
