@@ -99,6 +99,31 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         contractMessages ++ atomicityMessages
 
+      case region: PRegion =>
+        if (region.formalInArgs.length < 2) {
+          message(
+            region,
+            s"Region ${region.id.name} must have at least two parameters: id and level")
+        } else {
+          val Vector(firstParam, secondParam) = region.formalInArgs.take(2)
+
+          val idTypeMessage =
+            message(
+              firstParam,
+              s"Region ${region.id.name}'s first parameter must be of type ${PRegionIdType().pretty}, " +
+                  s"but got: ${firstParam.typ.pretty}",
+              firstParam.typ != PRegionIdType())
+
+          val levelTypeMessage =
+            message(
+              secondParam,
+              s"Region ${region.id.name}'s second parameter must be of type ${PIntType().pretty}, " +
+                  s"but got: ${secondParam.typ.pretty}",
+              secondParam.typ != PIntType())
+
+          idTypeMessage ++ levelTypeMessage
+        }
+
       case action: PAction => // TODO: add guard type check and it seems that condition type check is missing
         val typeMessages =
           reportTypeMismatch(action.to, typ(action.from)) ++
