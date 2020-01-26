@@ -1,0 +1,30 @@
+//:: ExpectedOutput(typechecker_error)
+region Reg3(int level3, id r3)
+  guards { unique R3; }
+  interpretation { true }
+  state { 0 }
+  actions {}
+
+//:: ExpectedOutput(typechecker_error)
+region Reg4(id r4, id other4, int lvl4) // 2nd parameter must be an int (level)
+  guards { unique R4; }
+  interpretation { true }
+  state { 0 }
+  actions {}
+
+region RegOK(id r, int lvl)
+  guards { unique ROK; }
+  interpretation { true }
+  state { 0 }
+  actions {}
+
+abstract_atomic procedure foo3(id r3, int lvl3)
+  interference ?s3 in Set(0, 1);
+  //:: ExpectedOutput(typechecker_error)
+  requires Reg3(r3, lvl3, s3);
+{
+  //:: ExpectedOutput(typechecker_error)
+  update_region using Reg3(r3, lvl3) {
+    skip;
+  }
+}
