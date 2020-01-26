@@ -1,0 +1,15 @@
+region Lock(id r, int lvl)
+  guards { unique G; }
+  interpretation { true }
+  state { 0 }
+  actions {}
+
+abstract_atomic procedure lock(id r, int lvl)
+  interference ?s in Set(0, 1);
+  requires Lock(r, lvl, s);
+{
+  update_region using Lock(r, lvl) {
+    //:: ExpectedOutput(typechecker_error)
+    CAS(null, 0, 1); // CAS not declared
+  }
+}
