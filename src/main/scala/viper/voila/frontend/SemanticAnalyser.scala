@@ -295,10 +295,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _rule @ (_: POpenRegion | _: PUpdateRegion | _: PUseAtomic) =>
         val rule = _rule.asInstanceOf[PRuleStatement]
 
-        message(
-          rule.body,
-          s"The body of a ${rule.statementName} block must be atomic",
-          atomicity(rule.body) != AtomicityKind.Atomic)
+        checkWith(atomicity(rule.body))(atomicityKind =>
+          message(
+            rule.body,
+            s"The body of a ${rule.statementName} block must be atomic",
+            atomicityKind != AtomicityKind.Atomic))
 
       case fold: PFold => reportAbstractPredicateUnFoldIng(fold)
       case unfold: PUnfold => reportAbstractPredicateUnFoldIng(unfold)
@@ -1415,6 +1416,22 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _ =>
         Vector.empty
     }
+
+  /** Similar to Kiama's [[checkUse()]]: if provider returns a V, then check(V) is executed.
+    * If provider throws a ClassCastException, the latter is caught and discarded, and check is
+    * not executed.
+    */
+  private def checkWith[V](provider: => V)(check: V => Messages): Messages = {
+    var providedValue: Option[V] = None
+
+    try {
+      providedValue = Some(provider) // Execute provider
+    }catch {
+      case _: ClassCastException => // Do nothing
+    }
+
+    providedValue.fold(noMessages)(check)
+  }
 
   private implicit def defs2UsesSets(xs: ListSet[PIdnDef]): ListSet[PIdnUse] =
     xs.map(idndef => PIdnUse(idndef.name))
