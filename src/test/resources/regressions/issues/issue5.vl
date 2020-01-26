@@ -1,5 +1,3 @@
-//:: IgnoreFile(/voila/issue/5/)
-
 region R(id a, int lvl, bool v)
   guards { unique X; unique Y; }
   interpretation { true }
@@ -9,6 +7,7 @@ region R(id a, int lvl, bool v)
 procedure test03(id a, int lvl, id b)
   requires R(a, lvl, true) && X@b;
 {
+  //:: ExpectedOutput(typechecker_error)
   use_atomic
     using R(a, lvl, true) with X@b;
   {

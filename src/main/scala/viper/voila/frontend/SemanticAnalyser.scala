@@ -317,14 +317,37 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             message(call.procedure, s"Cannot call ${call.procedure}")
         }
 
-      case _rule @ (_: POpenRegion | _: PUpdateRegion | _: PUseAtomic) =>
+      case _rule @ (_: POpenRegion | _: PUpdateRegion) =>
         val rule = _rule.asInstanceOf[PRuleStatement]
 
-        checkWith(atomicity(rule.body))(atomicityKind =>
-          message(
-            rule.body,
-            s"The body of a ${rule.statementName} block must be atomic",
-            atomicityKind != AtomicityKind.Atomic))
+        reportAtomicityMismatch(
+          rule.body,
+          AtomicityKind.Atomic,
+          s"The body of a ${rule.statementName} block must be atomic")
+
+      case useAtomic: PUseAtomic =>
+        val atomicityMessages =
+          reportAtomicityMismatch(
+            useAtomic.body,
+            AtomicityKind.Atomic,
+            s"The body of a ${useAtomic.statementName} block must be atomic")
+
+        val idMessages =
+          reportUsingWithIDMismatch(useAtomic, useAtomic.regionPredicate, useAtomic.guards)
+
+        atomicityMessages ++ idMessages
+
+      case makeAtomic: PMakeAtomic =>
+        val atomicityMessages =
+          reportAtomicityMismatch(
+            makeAtomic.body,
+            AtomicityKind.Atomic,
+            s"The body of a ${makeAtomic.statementName} block must be atomic")
+
+        val idMessages =
+          reportUsingWithIDMismatch(makeAtomic, makeAtomic.regionPredicate, makeAtomic.guards)
+
+        atomicityMessages ++ idMessages
 
       case fold: PFold => reportAbstractPredicateUnFoldIng(fold)
       case unfold: PUnfold => reportAbstractPredicateUnFoldIng(unfold)
@@ -477,6 +500,37 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         message(
           foldUnfold,
           s"Cannot (un)fold ${foldUnfold.predicateExp.pretty} because predicate ${predicate.id.name} is abstract")
+    }
+  }
+
+  def reportAtomicityMismatch(stmt: PStatement, expectedAtomicity: AtomicityKind, text: String): Messages = {
+    checkWith(atomicity(stmt))(atomicityKind =>
+      message(
+        stmt,
+        text,
+        atomicityKind != expectedAtomicity))
+  }
+
+  def reportUsingWithIDMismatch(offendingNode: PRuleStatement,
+                                regionPredicate: PPredicateExp,
+                                guards: Vector[PRegionedGuardExp])
+                               : Messages = {
+
+    val guardIds = guards.map(_.regionId).distinct
+
+    if (guardIds.length > 1) {
+      message(
+        offendingNode,
+        s"The guards used by ${offendingNode.statementName} must all be for the same region, " +
+            s"but got different region IDs: ${guardIds.mkString(", ")}")
+    } else {
+      assert(guardIds.nonEmpty, "Expected at least one region ID, but got zero")
+
+      message(
+        offendingNode,
+        s"Region and guard(s) used by ${offendingNode.statementName} don't share the same region ID: " +
+            s"${regionPredicate.arguments.head} vs. ${guardIds.head}",
+        regionPredicate.arguments.head != guardIds.head)
     }
   }
 
