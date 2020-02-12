@@ -476,7 +476,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     maybeMethodConditionStabilityCheck(procedure)
 
   def maybeMethodConditionStabilityCheck(procedure: PProcedure): Vector[vpr.Method] = {
-    if (!procedure.atomicity.isInstanceOf[PPrimitiveAtomic] && config.enableStabilityChecks()) {
+    if (!procedure.atomicity.isInstanceOf[PPrimitiveAtomic] && !config.disableStabilityChecks()) {
       val preconditionCheck =
         methodConditionStabilityCheck(
           procedure,

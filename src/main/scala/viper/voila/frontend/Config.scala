@@ -61,16 +61,16 @@ class Config(arguments: Seq[String])
     descr = "A space-separated list of procedures to verify",
     noshort = true)
 
-  val enableStabilityChecks: ScallopOption[Boolean] = opt[Boolean](
-    name = "enableStabilityChecks",
+  val disableStabilityChecks: ScallopOption[Boolean] = opt[Boolean](
+    name = "disableStabilityChecks",
     descr = "Enables stability checks of pre-/postconditions, region interpretations and invariants",
-    default = Some(true),
+    default = Some(false),
     noshort = true)
 
-  val enableTransitivityChecks: ScallopOption[Boolean] = opt[Boolean](
-    name = "enableTransitivityChecks",
+  val disableTransitivityChecks: ScallopOption[Boolean] = opt[Boolean](
+    name = "disableTransitivityChecks",
     descr = "Enables transitivity checks of actions",
-    default = Some(true),
+    default = Some(false),
     noshort = true)
 
   val disableSiliconSpecificHavockingCode: ScallopOption[Boolean] = opt[Boolean](
