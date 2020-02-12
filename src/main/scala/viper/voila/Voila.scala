@@ -43,6 +43,12 @@ object VoilaConstants {
   val preambleFile: String  = "preamble.vpr"
 }
 
+object VoilaErrorCodes {
+  val DEFAULT = 1
+  val POSITION_PROBLEMS = 10
+  val OPTION_PROBLEMS = 20
+}
+
 // TODO: Remove global state
 object VoilaGlobalState {
   var config: Config = _
@@ -105,7 +111,10 @@ class Voila extends StrictLogging {
     verify(Paths.get(config.inputFileName()), config)
   }
 
-  def verify(file: Path, config: Config): Option[VoilaResult] = {
+  def verify(file: Path, originalConfig: Config): Option[VoilaResult] = {
+    var config = originalConfig
+
+    VoilaGlobalState.config = config // TODO: Remove global state
     setLogLevelsFromConfig(config)
 
     /* TODO: Code further down alternates between use of `file` and `config.inputFileName`.
@@ -121,7 +130,6 @@ class Voila extends StrictLogging {
 
     val frontend = new Frontend()
 
-    VoilaGlobalState.config = config // TODO: Remove global state
     VoilaGlobalState.positions = frontend.positions // TODO: Remove global state
 
     var timer: Timer = null
@@ -144,6 +152,11 @@ class Voila extends StrictLogging {
 
       case Right(program) =>
         /* TODO: Move semantic analysis to the frontend */
+
+        abortIfConfigOptionToolUnknown(program.options)
+        config = setVoilaConfigOptions(program.options, config.args)
+        setLogLevelsFromConfig(config)
+        VoilaGlobalState.config = config // TODO: Remove global state
 
         logger.info("Parsed")
         logger.info(s"  ${program.regions.length} region(s): ${program.regions.map(_.id.name).mkString(", ")}")
@@ -286,6 +299,68 @@ class Voila extends StrictLogging {
     }
   }
 
+  private def abortIfConfigOptionToolUnknown(configOptions: Vector[PConfigOption]): Unit = {
+    var abort = false
+
+    configOptions foreach (configOption => {
+      if (!Set("voila", "silicon", "carbon").contains(configOption.tool)) {
+        abort = true
+        logger.error(s"### UNRECOGNISED TOOL '${configOption.tool}' IN '$configOption'")
+      }
+    })
+
+    if (abort) exitWithError("Config option problems!", VoilaErrorCodes.OPTION_PROBLEMS)
+  }
+
+  private def setVoilaConfigOptions(configOptions: Vector[PConfigOption], originalArguments: Seq[String]): Config = {
+    assert(configOptions.forall(_.tool == "voila"), s"Expected only options for Voila, but got: $configOptions")
+
+    // The argument filter to come makes the following assumptions:
+    // 1) Each configOption's option denotes the homonymous command line option, prefixed with "--".
+    //    E.g. a configOption "foo" denotes the command line option "--foo".
+    // 2) A configOption's option matches an originalArgument if the latter is the former, prefixed with "--".
+    //    E.g. "foo" matches "--foo", but not "foo", "-foo" or "barfoo".
+    //    This is a best-effort attempt at differentiating between option names and values in the originalArguments
+    //    string sequence.
+    // 3) If a configOption's value is Some(value) and a matching originalArgument option is found, then the next
+    //    string in the originalArgument sequence is the original value.
+    //    E.g. given a configOption with option == "foo" and value == "bar", and an originalArguments sequence
+    //    [..., "--foo", "qux", ...], then the original value must have been "qux". This assumption might not hold if
+    //    an option's value is optional.
+    //
+    // The code is not optimised for efficiency, but that's most likely not necessary.
+
+    val originalArgumentsWithIndices = originalArguments.zipWithIndex
+
+    val acceptedConfigOptions =
+      configOptions.filter(configOption => {
+        val matchingOriginalArgumentWithIndex =
+          originalArgumentsWithIndices.find { case(arg, _) => arg.drop(2) == configOption.option }
+
+        matchingOriginalArgumentWithIndex
+          .foreach { case (originalArgument, originalIndex) =>
+            val original =
+              if (configOption.value.isEmpty) {
+                s"$originalArgument"
+              } else {
+                val originalValue = originalArguments(originalIndex + 1)
+                s"$originalArgument $originalValue"
+              }
+
+            logger.warn(s"'$configOption' will be ignored because '$original' was explicitly provided")
+          }
+
+        matchingOriginalArgumentWithIndex.isEmpty
+      })
+
+    val acceptedArguments =
+      acceptedConfigOptions.flatMap(configOption => s"--${configOption.option}" +: configOption.value.toSeq)
+
+    logger.info(s"Accepted additional options: ${acceptedArguments.mkString(" ")}")
+
+    new Config(originalArguments ++ acceptedArguments)
+  }
+
   /* Pretty-print the parsed and desugared Voila program back to a file, if requested. */
   private def potentiallyPrettyPrintParsedProgramToFile(config: Config, program: PProgram): Unit = {
     config.outputParsedProgramFileName.map(new File(_)).foreach(outputFile => {
@@ -313,18 +388,18 @@ class Voila extends StrictLogging {
   }
 
   private def abortIfTreeHasPositionProblems(tree: VoilaTree, positions: Positions): Unit = {
-    var stop = false
+    var abort = false
 
     tree.nodes foreach (n => {
       positions.getStart(n) match {
         case Some(_) => /* OK, nothing to do */
         case None =>
-          stop = true
+          abort = true
           logger.error(s"### NO POSITION FOR ${n.getClass.getSimpleName}:\n  $n")
       }
     })
 
-    if (stop) exitWithError("Position problems!", 10)
+    if (abort) exitWithError("Position problems!", VoilaErrorCodes.POSITION_PROBLEMS)
   }
 
   /* Pretty-print the generated Viper program to a file, if requested. */
@@ -404,7 +479,7 @@ class Voila extends StrictLogging {
   }
 
 
-  def exitWithError(message: String, exitCode: Int = 1): Unit = {
+  def exitWithError(message: String, exitCode: Int = VoilaErrorCodes.DEFAULT): Unit = {
     logger.error(message)
 
     sys.exit(exitCode)

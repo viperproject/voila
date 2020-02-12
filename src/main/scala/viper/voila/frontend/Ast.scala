@@ -46,7 +46,8 @@ sealed abstract class PAstNode extends Product {
 
 sealed trait PScope
 
-case class PProgram(structs: Vector[PStruct],
+case class PProgram(options: Vector[PConfigOption],
+                    structs: Vector[PStruct],
                     regions: Vector[PRegion],
                     predicates: Vector[PPredicate],
                     procedures: Vector[PProcedure])
@@ -546,3 +547,13 @@ case class PMapType(keyType: PType, valueType: PType) extends PType
  */
 
 case class PLocation(receiver: PIdnExp, field: PIdnUse) extends PAstNode
+
+case class PConfigOption private (tool: String, option: String, value: Option[String]) extends PAstNode
+
+object PConfigOption extends ((String, String, Option[String]) => PConfigOption) {
+  def apply(tool: String, option: String, value: Option[String]): PConfigOption =
+    new PConfigOption(tool.toLowerCase, option, value)
+
+  def unapply(configOption: PConfigOption): Option[(String, String, Option[String])] =
+    Some((configOption.tool, configOption.option, configOption.value))
+}

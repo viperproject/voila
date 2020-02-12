@@ -49,14 +49,16 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   )
 
   val reservedPatterns: Set[Pattern] = Set(
-    """get\d+""".r.pattern
+    """get\d+""".r.pattern,
+    """#option""".r.pattern
   )
 
   def isReservedWord(word: String): Boolean =
     (reservedWords contains word) || (reservedPatterns exists (_.matcher(word).matches()))
 
   lazy val program: Parser[PProgram] =
-    (struct | region | predicate | procedure | makro).* ^^ (allMembers => {
+    option.* ~
+    (struct | region | predicate | procedure | makro).* ^^ { case options ~ allMembers =>
       val (_macros, _members) = allMembers.partition(_.isInstanceOf[PMacro])
       val macros = _macros.asInstanceOf[Vector[PMacro]]
 
@@ -67,7 +69,16 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       val predicates = members collect { case p: PPredicate => p }
       val procedures = members collect { case p: PProcedure => p }
 
-      PProgram(structs, regions, predicates, procedures)
+      PProgram(options, structs, regions, predicates, procedures)
+    }
+
+  lazy val option: Parser[PConfigOption] =
+    ("#option" ~> """\w+""".r) ~ ("." ~> """\w+""".r) ~ potentialOptionValue.? ^^ PConfigOption
+
+  lazy val potentialOptionValue: Parser[String] =
+    """\w+""".r into (word => {
+      if (isReservedWord(word)) failure(s"did not expected keyword '$word' here")
+      else success(word)
     })
 
   lazy val struct: Parser[PStruct] =

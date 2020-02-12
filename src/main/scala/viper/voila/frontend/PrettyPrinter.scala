@@ -73,6 +73,7 @@ class DefaultPrettyPrinter
       case action: PAction => toDoc(action)
       case location: PLocation => toDoc(location)
       case arg: PGuardArg => toDoc(arg)
+      case configOption: PConfigOption => toDoc(configOption)
     }
 
   def toDoc(action: PAction): Doc = {
@@ -147,12 +148,19 @@ class DefaultPrettyPrinter
   }
 
   def toDoc(program: PProgram): Doc = {
-    val PProgram(structs, regions, predicates, procedures) = program
+    val PProgram(options, structs, regions, predicates, procedures) = program
 
+    ssection(vsep, options map toDoc, line) <>
     ssection(vsep, structs map toDoc, line) <>
     ssection(vsep, regions map toDoc, line) <>
     ssection(vsep, predicates map toDoc, line) <>
     ssection(vsep, procedures map toDoc, line)
+  }
+
+  def toDoc(configOption: PConfigOption): Doc = {
+    val PConfigOption(tool, option, value) = configOption
+
+    "#option" <+> tool <> "." <> option <> text(value.getOrElse(""))
   }
 
   def toDoc(declaration: PDeclaration): Doc = {
