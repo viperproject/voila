@@ -477,20 +477,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
   def maybeMethodConditionStabilityCheck(procedure: PProcedure): Vector[vpr.Method] = {
     if (!procedure.atomicity.isInstanceOf[PPrimitiveAtomic] && config.enableStabilityChecks()) {
-
-      val preconditionCheck = methodConditionStabilityCheck(
-        procedure,
-        procedure.pres map (_.assertion),
-        "precondition",
-        MethodPreconditionNotStableError(procedure)
-      )
-
-//      val postconditionCheck = methodConditionStabilityCheck(
-//        procedure,
-//        procedure.posts map (_.assertion),
-//        "postcondition",
-//        MethodPostconditionNotStableError(procedure)
-//      )
+      val preconditionCheck =
+        methodConditionStabilityCheck(
+          procedure,
+          procedure.pres map (_.assertion),
+          "precondition",
+          MethodPreconditionNotStableError(procedure))
 
       Vector(preconditionCheck)
     } else {
@@ -527,7 +519,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val vprMethodKindSpecificInitialization: vpr.Stmt =
       procedure.atomicity match {
         case PAbstractAtomic() | PMakeAbstractAtomic() =>
-
           val regionInterferenceVariables: Map[PIdnUse, Entry] =
             procedure.inters.map(inter => {
               val regionId = semanticAnalyser.interferenceOnRegionId(inter)
@@ -585,7 +576,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     /* TODO: Could be optimized to only havocking regions that occur inside region interpretation */
     val stabilizationCode: vpr.Stmt = stabilizeAllInstances("check stability of method condition")
 
-    val assertCondition: vpr.Stmt = vpr.Assert(viper.silicon.utils.ast.BigAnd(vprConditions))()
+    val assertCondition: vpr.Stmt =
+      vpr.Assert(viper.silicon.utils.ast.BigAnd(vprConditions))().withSource(procedure)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.AssertFailed if e causedBy assertCondition =>
