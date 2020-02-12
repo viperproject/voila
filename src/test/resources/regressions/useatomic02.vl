@@ -32,6 +32,7 @@ region R2(id r, int lvl, memcell x)
   state { v }
   actions { G2: 0 ~> 1; }
 
+//:: ExpectedOutput(method_precondition_not_stable_error)
 procedure test02(id r, int lvl, memcell x)
   requires R2(r, lvl, x, 0) && K2@r;
 {

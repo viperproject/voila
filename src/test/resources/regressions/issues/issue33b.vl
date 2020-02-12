@@ -37,15 +37,16 @@ procedure test02(id r, int lvl, memcell x, id s, memcell y)
   assert Cell(s, lvl, y, 0);
 
   //:: ExpectedOutput(assert_error:assertion_error)
-  //:: MissingOutput(assert_error:assertion_error, /voila/issue/83/)
   assert false;
 }
 
 procedure test03(id r, int lvl, memcell x, id s, memcell y)
   requires Cell(r, lvl, x, 0) && G@r;
-  requires Cell(s, lvl, y, 0);
+  requires Cell(s, lvl, y, 0) && G@s;
   requires r != s;
 {
+  exhale G@s; // Precondition was stable; assertion now isn't anymore
+
   assert Cell(r, lvl, x, 0); // Duplicate the
   inhale Cell(r, lvl, x);    // region assertion
 

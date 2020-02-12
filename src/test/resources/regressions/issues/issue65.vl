@@ -10,9 +10,14 @@ region Cell(id r, int lvl, cell c)
 
 // ***** ***** ***** Minimal example ***** ***** ***** *****
 
-procedure test10(id r, int lvl, cell c)
+//:: ExpectedOutput(method_precondition_not_stable_error)
+procedure test10_instable_pre(id r, int lvl, cell c)
   requires Cell(r, lvl, c, 0);
+
+procedure test10(id r, int lvl, cell c)
+  requires false ==> Cell(r, lvl, c, 0); // Workaround for issue #84
 {
+  inhale Cell(r, lvl, c, 0);
   inhale r |=> <D>;
 
   //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
@@ -24,8 +29,9 @@ procedure test10(id r, int lvl, cell c)
 }
 
 procedure test10Copy(id r, int lvl, cell c)
-  requires Cell(r, lvl, c, 0);
+  requires false ==> Cell(r, lvl, c, 0); // Workaround for issue #84
 {
+  inhale Cell(r, lvl, c, 0);
   inhale r |=> <D>;
 
   //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
@@ -38,9 +44,15 @@ procedure test10Copy(id r, int lvl, cell c)
 
 // ***** ***** ***** ***** Original example ***** ***** ***** *****
 
-procedure test01(id r, int lvl, cell c)
+//:: ExpectedOutput(method_precondition_not_stable_error)
+procedure test01_instable_pre(id r, int lvl, cell c)
   requires Cell(r, lvl, c, 0);
+
+procedure test01(id r, int lvl, cell c)
+  requires false ==> Cell(r, lvl, c, 0); // Workaround for issue #84
 {
+  inhale Cell(r, lvl, c, 0);
+
   //:: ExpectedOutput(update-region_error:diamond_permission_error)
   update_region
     using Cell(r, lvl, c);
@@ -50,8 +62,9 @@ procedure test01(id r, int lvl, cell c)
 }
 
 procedure test02(id r, int lvl, cell c)
-  requires Cell(r, lvl, c, 0);
+  requires false ==> Cell(r, lvl, c, 0); // Workaround for issue #84
 {
+  inhale Cell(r, lvl, c, 0);
   inhale r |=> <D>;
 
   //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)

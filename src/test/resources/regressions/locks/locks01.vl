@@ -2,6 +2,7 @@ struct memcell {
   int f;
 }
 
+//:: UnexpectedOutput(region_actions_not_transitive_error, /voila/issue/95/)
 region Lock(id a, int lvl, memcell x)
   guards { duplicable G; }
   interpretation {
@@ -15,7 +16,8 @@ region Lock(id a, int lvl, memcell x)
 
 predicate Inv()
 
-////:: ExpectedOutput(region_interpretation_not_stable_error)
+//:: UnexpectedOutput(region_actions_not_transitive_error, /voila/issue/95/)
+//:: ExpectedOutput(region_interpretation_not_stable_error)
 region CAPLock(id r, int alvl, id a, int lvl, memcell x)
   guards {
     duplicable Z;
@@ -39,10 +41,18 @@ abstract_atomic procedure unlock(id a, int lvl, memcell x)
   requires Lock(a, lvl, x, s) && G@a;
   ensures Lock(a, lvl, x, 0) && G@a;
 
-procedure non_atomic_unlock01(id r, int alvl, id a, int lvl, memcell x)
+//:: ExpectedOutput(method_precondition_not_stable_error)
+procedure non_atomic_unlock01_bad(id r, int alvl, id a, int lvl, memcell x)
   requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   requires Inv();
+
+procedure non_atomic_unlock01(id r, int alvl, id a, int lvl, memcell x)
+  requires false ==> CAPLock(r, alvl, a, lvl, x); // Workaround for issue #84
 {
+  inhale CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
+  inhale Inv();
+
+  skip;
   skip;
 
   use_atomic
@@ -54,9 +64,11 @@ procedure non_atomic_unlock01(id r, int alvl, id a, int lvl, memcell x)
 }
 
 procedure non_atomic_unlock02(id r, int alvl, id a, int lvl, memcell x)
-  requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
-  requires Inv();
+  requires false ==> CAPLock(r, alvl, a, lvl, x); // Workaround for issue #84
 {
+  inhale CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
+  inhale Inv();
+
   use_atomic
     using CAPLock(r, alvl, a, lvl, x) with K@r;
   {
@@ -68,9 +80,11 @@ procedure non_atomic_unlock02(id r, int alvl, id a, int lvl, memcell x)
 }
 
 procedure non_atomic_unlock03(id r, int alvl, id a, int lvl, memcell x)
-  requires CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
-  requires Inv();
+  requires false ==> CAPLock(r, alvl, a, lvl, x); // Workaround for issue #84
 {
+  inhale CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
+  inhale Inv();
+
   use_atomic
     using CAPLock(r, alvl, a, lvl, x) with K@r;
   {
@@ -78,4 +92,3 @@ procedure non_atomic_unlock03(id r, int alvl, id a, int lvl, memcell x)
     unlock(a, lvl, x);
   }
 }
-

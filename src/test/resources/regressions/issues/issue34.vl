@@ -5,18 +5,16 @@ region Triple(id r, int lvl, triple x; int u, int v)
   actions {}
 
 procedure test01(id r, int lvl, triple x)
-  requires Triple(r, lvl, x, ?u, 0, ?abs);
-  requires 0 < u;
-  ensures  abs;
+  requires Triple(r, lvl, x, ?u, ?v, ?abs);
+  ensures  u + v == 0 ==> abs;
 {
   skip;
 }
 
 procedure test03(id r, int lvl, triple x)
   requires Triple(r, lvl, x, ?u, _, ?abs);
-  requires 0 < u;
   //:: ExpectedOutput(postcondition_error:assertion_error)
-  ensures  abs;
+  ensures 0 < u ==> abs;
 {
   skip;
 }

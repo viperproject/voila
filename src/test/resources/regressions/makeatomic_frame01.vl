@@ -1,3 +1,5 @@
+#option voila.disableTransitivityChecks
+
 struct memcell {
   int val;
 }
@@ -15,11 +17,10 @@ abstract_atomic procedure test1(id r, int lvl, memcell x)
   interference ?n in Set(?k | k < 42) on r;
   requires R(r,lvl,x,n) && G@r && Q@r;
 {
-  make_atomic using R(r,lvl,x) with G@r;
-  {
+  make_atomic using R(r,lvl,x) with G@r {
     assert R(r,lvl,x,?nz);
 
-    skip; // first skip is swallowed for some reason
+    skip;
     skip;
 
     //:: ExpectedOutput(assert_error:assertion_error)

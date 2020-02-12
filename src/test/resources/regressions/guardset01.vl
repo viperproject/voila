@@ -1,11 +1,7 @@
-
-
 struct memcell {
   int next;
   int owner;
 }
-
-// && TICKET|Set( ?k | k >= m )|@r
 
 region TLock(id r, int lvl, memcell x; int m)
   guards { unique TICKET(int n); }
@@ -19,12 +15,14 @@ region TLock(id r, int lvl, memcell x; int m)
 
 
 
-
 procedure test(id r, int lvl, memcell x)
   requires TLock(r, lvl, x, ?m, ?n) && TICKET|Set( ?k | k >= m )|@r;
 {
   assert (m+3) in Set( ?f | f >= m );
   exhale TICKET(m+3)@r;
+
+  //:: ExpectedOutput(assert_error:assertion_error)
+  assert false;
 }
 
 
@@ -90,7 +88,6 @@ procedure test4(id r, int lvl, memcell x) returns (int ret)
 }
 
 
-
 procedure test5(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
@@ -104,7 +101,6 @@ procedure test5(id r, int lvl, memcell x, int d) returns (int ret)
    	x.owner := d;
    }
 }
-
 
 
 procedure test6(id r, int lvl, memcell x, int d) returns (int ret)
@@ -143,7 +139,6 @@ procedure test7(id r, int lvl, memcell x, int d) returns (int ret)
    	x.owner := d-1;
    }
 }
-
 
 procedure test8(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n) && TICKET(d)@r;
