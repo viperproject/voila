@@ -307,7 +307,7 @@ class Voila extends StrictLogging {
 
       if (excludedProcedures.nonEmpty) {
         logger.warn(
-          "The following procedures have been excluded from verification: " +
+          "The following procedures will be excluded from verification: " +
             excludedProcedures.mkString(", "))
       }
     }
