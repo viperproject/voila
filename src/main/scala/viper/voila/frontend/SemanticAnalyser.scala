@@ -338,16 +338,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         atomicityMessages ++ idMessages
 
       case makeAtomic: PMakeAtomic =>
-        val atomicityMessages =
-          reportAtomicityMismatch(
-            makeAtomic.body,
-            AtomicityKind.Atomic,
-            s"The body of a ${makeAtomic.statementName} block must be atomic")
-
-        val idMessages =
-          reportUsingWithIDMismatch(makeAtomic, makeAtomic.regionPredicate, makeAtomic.guards)
-
-        atomicityMessages ++ idMessages
+        reportUsingWithIDMismatch(makeAtomic, makeAtomic.regionPredicate, makeAtomic.guards)
 
       case fold: PFold => reportAbstractPredicateUnFoldIng(fold)
       case unfold: PUnfold => reportAbstractPredicateUnFoldIng(unfold)
