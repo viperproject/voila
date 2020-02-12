@@ -1,0 +1,23 @@
+struct cell {
+  int val;
+}
+
+region Cell(id r, int lvl, cell x)
+  guards { unique G(int n); }
+  interpretation { x.val |-> ?v }
+  state { v }
+  actions {}
+
+procedure test01(id r, int lvl, cell x)
+  requires Cell(r, lvl, x, ?v) && v == 0 && G(v)@r;
+{
+  assert v == 0;
+  assert G(v)@r;
+}
+
+procedure test02(id r, int lvl, cell x) {
+  inhale Cell(r, lvl, x, ?v) && v == 0 && G(v)@r;
+  assert v == 0;
+  //:: UnexpectedOutput(assert_error:guard_permission_error, /voila/issue/101/)
+  assert G(v)@r;
+}

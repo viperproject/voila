@@ -1,0 +1,16 @@
+#option voila.disableStabilityChecks
+#option voila.logLevel INFO
+#option voila.disableTransitivityChecks
+
+struct cell {
+  int val;
+}
+
+region Cell(id r, int lvl, cell x)
+  guards { duplicable G; }
+  interpretation { x.val |-> ?v }
+  state { v }
+  actions { G: ?n ~> ?m; }
+
+procedure test(id r, int lvl, cell x)
+  requires Cell(r, lvl, x, 0);
