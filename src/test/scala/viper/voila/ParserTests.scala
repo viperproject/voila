@@ -30,7 +30,7 @@ class ParserTests extends FunSuite with Matchers {
     val src = ""
 
     frontend.parse(src) should matchPattern {
-      case Right(PProgram(Emp, Emp, Emp, Emp)) =>
+      case Right(PProgram(Emp, Emp, Emp, Emp, Emp)) =>
     }
   }
 
@@ -49,7 +49,7 @@ class ParserTests extends FunSuite with Matchers {
                  PNonAtomic())
 
     frontend.parse(src) should matchPattern {
-      case Right(PProgram(Emp, Emp, Emp, Vector(`proc`))) =>
+      case Right(PProgram(Emp, Emp, Emp, Emp, Vector(`proc`))) =>
     }
   }
 
