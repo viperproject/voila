@@ -1,3 +1,5 @@
+#option voila.useQPsInsteadOfForperms // See issue #105
+
 struct memcell {
   int f;
 }
@@ -79,6 +81,12 @@ abstract_atomic procedure wkincr(id c, int lvl, memcell x)
     open_region using Counter(c, lvl, x) {
       r := x.f;
     }
+
+    // Verifying the next assertion currently requires running Voila with --useQPsInsteadOfForperms:
+    //   assert Counter(c, lvl, x, ?n1) && n1 == n;
+    // As does the make_atomic statement, since it requires knowing that the state of the counter
+    // cannot change in between reading and writing x.f.
+    // See issue #105.
 
     update_region using Counter(c, lvl, x) {
       x.f := r + 1;

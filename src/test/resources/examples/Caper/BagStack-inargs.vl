@@ -164,6 +164,7 @@ procedure popCAS(id r, int lvl, bag x,
       // See also issue #16.
       assume t_r0 == t_r && t_lvl0 == t_lvl &&  t_val0 == v &&  t_nxt0 == t2;
 
+      //:: UnexpectedOutput(assert_error, /voila/issue/107/)
       assert BagList(t_r, t_lvl, t, v, t2, 0); // [DEBUG]
         // Knowing that the region BagList(t_r, t_lvl, t, v, t2), which we got from the precondition,
         // is in state 0 requires knowing that it is a duplicate of the previous head, i.e.

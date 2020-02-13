@@ -122,7 +122,7 @@ procedure push(id r, int alvl, bag x, int v)
   } while (b == 0);
 }
 
-
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/107/)
 procedure popCAS(id r, int alvl, bag x, id t_r, int t_lvl, node t, id t2_r, int t2_lvl, node t2) returns (int success)
   requires Bag(r, alvl, x, 0) && BagList(t_r, t_lvl, t, ?v, t2) && BagList(t2_r, t2_lvl, t2) && t != null && Z@r;
   ensures success == 0 || success == 1;
@@ -147,6 +147,7 @@ procedure popCAS(id r, int alvl, bag x, id t_r, int t_lvl, node t, id t2_r, int 
       assume t_r0 == t_r && t_lvl0 == t_lvl && v0 == v && t2_0 == t2;
         // Provable in Caper, but currently not by Voila. Implied by x.hd |-> t from (right before) the successful CAS.
 
+      //:: UnexpectedOutput(assert_error, /voila/issue/107/)
       assert BagList(t_r, t_lvl, t, v, t2, 0); // [DEBUG]
         // Knowing that the region BagList(t_r, t_lvl, t, v, t2), which we got from the precondition,
         // is in state 0 requires knowing that it is a duplicate of the previous head, i.e.
