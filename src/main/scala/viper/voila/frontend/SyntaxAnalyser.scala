@@ -153,7 +153,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
      *   G(es): ?x ~> e'(x)
      *   G(es): e ~> ?x
      *   G(es): ?x ~> ?y
-     * where G(es) can also just be G.
+     * where
+     *   - G(es) can also just be G
+     *   - e/e' are expected to be binder-free
+     *   - e/e' are expected to denote a single T (with T the region state's type), or a set of Ts
      */
     (guardPrefix <~ ":") ~
     (binderOrExpression <~ "~>") ~ (binderOrExpression <~ ";") ^^ {
@@ -175,11 +178,14 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         val from = desugareBinders(_from)
         val to = desugareBinders(_to)
 
-        sanitizeAction(PAction(binders, condition, guards, from, to))
+        postprocessAction(PAction(binders, condition, guards, from, to))
     } |
     /* Matches
      *   ?xs | c(xs) | G(g(xs)): e(xs) ~> e'(xs)
-     * where the components ?xs and c(xs) are optional, and where G(g(xs)) can also just be G.
+     * where
+     *   - the components ?xs and c(xs) are optional
+     *   - G(g(xs)) can also just be G
+     *   - constraints on e/e' as above
      */
     (listOfBinders <~ "|").? ~
     (expression <~ "|").? ~
@@ -189,7 +195,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         val binders = optBinders.getOrElse(Vector.empty)
         val condition = optCondition.getOrElse(PTrueLit().at(guards.head))
 
-        sanitizeAction(PAction(binders, condition, guards, from, to))
+        postprocessAction(PAction(binders, condition, guards, from, to))
     }
 
   lazy val predicate: Parser[PPredicate] =
@@ -624,6 +630,41 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     def range(from: PAstNode, to: PAstNode): N = {
       positions.dupRangePos(from, to, node)
     }
+  }
+
+  private def postprocessAction(action: PAction): PAction = {
+    // Desugares actions with sets of values in from/to position as follows: an action of shape
+    //   ?xs | c(xs) | G(g(xs)): S(xs) ~> S'(xs)
+    // where S/S' are set-typed expressions, is desugared into
+    //   ?xs,?y,?z | c(xs) && y in S(xs) && z in S'(xs) | G(g(xs)): y ~> z
+    // If neither from nor to is a set-expressions, nothing is changed.
+    def desugareSetExp(binders: Vector[PNamedBinder], condition: PExpression, expToDesugare: PExpression)
+                      : (Vector[PNamedBinder], PExpression, PExpression) = {
+
+      expToDesugare match {
+        case setExp: PSetExp =>
+          val optTypeAnnotation =
+            setExp match {
+              case e: PExplicitSet => e.typeAnnotation
+              case e: PSetComprehension => e.typeAnnotation
+              case _ => None
+            }
+
+          val binder = PNamedBinder(PIdnDef(AstUtils.uniqueName("from")).at(setExp), optTypeAnnotation).at(setExp)
+          val boundVariable = PIdnExp(PIdnUse(binder.id.name).at(setExp)).at(setExp)
+          val condition = PSetContains(boundVariable, setExp).at(setExp)
+
+          (binders :+ binder, PAnd(condition, condition).at(setExp), boundVariable)
+
+        case _ => // Nothing to desugare
+          (binders, condition, expToDesugare)
+      }
+    }
+
+    val (binders1, conditions1, desugaredFrom) = desugareSetExp(action.binders, action.condition, action.from)
+    val (binders2, conditions2, desugaredTo) = desugareSetExp(binders1, conditions1, action.to)
+
+    sanitizeAction(PAction(binders2, conditions2, action.guards, desugaredFrom, desugaredTo).at(action))
   }
 
   private def sanitizeAction(action: PAction): PAction = {
