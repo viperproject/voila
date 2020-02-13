@@ -61,14 +61,14 @@ class Config(arguments: Seq[String])
     descr = "A space-separated list of procedures to verify",
     noshort = true)
 
-  val enableStabilityChecks: ScallopOption[Boolean] = opt[Boolean](
-    name = "enableStabilityChecks",
+  val disableStabilityChecks: ScallopOption[Boolean] = opt[Boolean](
+    name = "disableStabilityChecks",
     descr = "Enables stability checks of pre-/postconditions, region interpretations and invariants",
     default = Some(false),
     noshort = true)
 
-  val enableTransitivityChecks: ScallopOption[Boolean] = opt[Boolean](
-    name = "enableTransitivityChecks",
+  val disableTransitivityChecks: ScallopOption[Boolean] = opt[Boolean](
+    name = "disableTransitivityChecks",
     descr = "Enables transitivity checks of actions",
     default = Some(false),
     noshort = true)
@@ -82,9 +82,9 @@ class Config(arguments: Seq[String])
     default = Some(false),
     noshort = true)
 
-  val useForpermsInsteadOfQPs: ScallopOption[Boolean] = opt[Boolean](
-    name = "useForpermsInsteadOfQPs",
-    descr = "Experimental: potentially faster, but less complete.",
+  val useQPsInsteadOfForperms: ScallopOption[Boolean] = opt[Boolean](
+    name = "useQPsInsteadOfForperms",
+    descr = "Using Viper's quantified permissions instead of forperm expressions is slower, but more complete.",
     default = Some(false),
     noshort = true)
 

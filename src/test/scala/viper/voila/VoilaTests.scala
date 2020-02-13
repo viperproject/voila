@@ -15,7 +15,11 @@ import viper.silver.testing._
 import viper.silver.utility.TimingUtils
 
 class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
-  val testDirectories: Vector[String] = Vector("regressions", "examples")
+  val testDirectories: Vector[String] =
+    Vector(
+      "regressions", "examples",
+      "voila_evaluation_examples")
+
   override val defaultTestPattern: String = ".*\\.vl"
 
   var voilaInstance: Voila = _

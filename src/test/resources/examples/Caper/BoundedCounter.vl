@@ -10,9 +10,16 @@ region BCounter(id r, int lvl, memcell x)
   }
   state { v }
   actions {
-    // TODO: Are these action definitions transitively closed?
-    ?n, ?m | n < m <= 2 | INCREMENT: n ~> m;
-    INCREMENT: 2 ~> 0;
+    // Intended actions (not transitively closed):
+    //   INCREMENT: ?n ~> n + 1;
+    //   INCREMENT: 2 ~> 0;
+    // Transitively closed action:
+    //   INCREMENT: ?n ~> ?m;
+    // However, it is currently to effectively repeat the state constraints from the interpretation.
+    // Otherwise, Voila computes a too large interference context at, e.g. call site of incrAA in
+    // the body of incrNA1.
+    // The final action thus is:
+    ?n, ?m | 0 <= n <= 2 && 0 <= m <= 2 | INCREMENT: n ~> m;
   }
 
 // TODO: implement makeCounter()

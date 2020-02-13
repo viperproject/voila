@@ -92,6 +92,7 @@ procedure acquire2(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cel
     invariant TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, ?mii, ?nii) && TICKET(t)@r;
     invariant t >= nii && nii >= v;
   {
+    //:: UnexpectedOutput(open-region_error:assertion_error, /voila/issue/106/)
     open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
     {
       v := read(rx, xlvl, x);

@@ -21,6 +21,7 @@ region SLock(id r, int lvl, memcell x)
   actions {
     LOCK:   0 ~> 1;
     UNLOCK: 1 ~> 0;
+    LOCK && UNLOCK: Set(0,1) ~> Set(0,1); // Make actions transitively closed
   }
 
 // TODO: Implement; but see issue #23
@@ -41,7 +42,7 @@ abstract_atomic procedure acquire(id r, int lvl, memcell x)
   {
     do
       invariant SLock(r, lvl, x);
-      invariant !b ==> r |=> <D>; // TODO: Why isn't it necessary to specify LOCK@r here?
+      invariant !b ==> r |=> <D>;
       invariant  b ==> r |=> (0, 1) && UNLOCK@r;
     {
       update_region
@@ -58,11 +59,6 @@ abstract_atomic procedure release1(id r, int lvl, memcell x)
   requires SLock(r, lvl, x, 1) && UNLOCK@r;
   ensures  SLock(r, lvl, x, 0) && LOCK@r;
 {
-  /* PROBLEM: Rule make-atomic temporarily consumes the used guard, which thus
-   *          isn't available in the body. There, folding SLock(r, lvl, x, 0) fails.
-   *
-   *          This seems to be a limitation of/design decision made by TaDA.
-   */
   make_atomic
     using SLock(r, lvl, x) with UNLOCK@r;
   {

@@ -20,11 +20,14 @@ procedure test01(id r, int lvl, triple t)
 procedure test02(id r, int lvl, triple t, int abs)
   requires Triple(r, lvl, t, ?out1, ?out2, abs) && G@r;
 
+//:: ExpectedOutput(method_precondition_not_stable_error)
 procedure test03(id r, int lvl, triple t, int abs)
-  requires Triple(r, lvl, t, ?out1, ?out2, abs); // NOT STABLE
+  requires Triple(r, lvl, t, ?out1, ?out2, abs);
 
+//:: ExpectedOutput(method_precondition_not_stable_error)
 procedure test04(id r, int lvl, triple t, int out1)
-  requires Triple(r, lvl, t, out1, ?out2, ?abs) && G@r; // NOT STABLE
+  requires Triple(r, lvl, t, out1, ?out2, ?abs) && G@r;
 
+//:: ExpectedOutput(method_precondition_not_stable_error)
 procedure test05(id r, int lvl, triple t, int out2)
-  requires Triple(r, lvl, t, ?out1, out2, ?abs) && G@r; // NOT STABLE
+  requires Triple(r, lvl, t, ?out1, out2, ?abs) && G@r;

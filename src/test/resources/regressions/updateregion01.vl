@@ -8,6 +8,7 @@ region Cell(id r, int lvl, cell c)
   state { v }
   actions { G: ?n ~> ?m; }
 
+//:: ExpectedOutput(method_precondition_not_stable_error)
 procedure test01(id r, int lvl, cell c)
   requires Cell(r, lvl, c, 0);
 {
@@ -19,6 +20,7 @@ procedure test01(id r, int lvl, cell c)
   }
 }
 
+//:: ExpectedOutput(method_precondition_not_stable_error)
 procedure test02(id r, int lvl, cell c)
   requires Cell(r, lvl, c, 0);
 {

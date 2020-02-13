@@ -2,6 +2,7 @@ struct memcell {
   int f;
 }
 
+//:: UnexpectedOutput(region_actions_not_transitive_error, /voila/issue/95/)
 region Lock(id a, int lvl, memcell x)
   guards { unique G; }
   interpretation {
@@ -15,6 +16,7 @@ region Lock(id a, int lvl, memcell x)
 
 predicate Inv() /* Invariant of CAP lock (left abstract) */
 
+//:: UnexpectedOutput(region_actions_not_transitive_error, /voila/issue/95/)
 region CAPLock(id r, int alvl, id a, int lvl, memcell x)
   guards {
     duplicable Z;

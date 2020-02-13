@@ -1,3 +1,5 @@
+#option voila.disableStabilityChecks
+
 struct node {
   int val;
   node next;

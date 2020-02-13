@@ -1,0 +1,99 @@
+//:: IgnoreFile(/voila/issue/100/)
+
+struct cell {
+  int val;
+}
+
+region Cell(id r, int lvl, cell x)
+  guards { unique GC; }
+  interpretation { x.val |-> ?v }
+  state { v }
+  actions {}
+
+procedure test1(id r, int lvl, cell x)
+  requires Cell(r, lvl, x);
+
+procedure test2(id r, int lvl, cell x)
+  requires Cell(r, lvl, x, _);
+
+procedure test3(id r, int lvl, cell x)
+  requires Cell(r, lvl, x, ?v);
+
+procedure test4(id r, int lvl, cell x)
+  requires Cell(r, lvl, x, ?v);
+  requires v == 0;
+
+
+struct ocell {
+  int val;
+}
+
+region OCell(id r, int lvl, ocell x; int v)
+  guards { unique GO; }
+  interpretation { x.val |-> ?v }
+  state { v != 0}
+  actions {}
+
+procedure test11(id r, int lvl, ocell x)
+  requires OCell(r, lvl, x);
+
+procedure test12(id r, int lvl, ocell x)
+  requires OCell(r, lvl, x, _);
+
+procedure test13(id r, int lvl, ocell x)
+  requires OCell(r, lvl, x, ?v);
+
+procedure test14(id r, int lvl, ocell x)
+  requires OCell(r, lvl, x, ?v);
+  requires v == 0;
+
+procedure test22(id r, int lvl, ocell x)
+  requires OCell(r, lvl, x, ?v, _);
+  requires v == 0;
+
+procedure test23(id r, int lvl, ocell x)
+  requires OCell(r, lvl, x, ?v, ?s);
+  requires v == 0;
+
+procedure test24(id r, int lvl, ocell x)
+  requires OCell(r, lvl, x, ?v, ?s);
+  requires v == 0;
+  requires s;
+
+
+struct pair {
+  int first;
+  int second;
+}
+
+region Pair(id r, int lvl, pair x; int fst, int snd)
+  guards { unique GP; }
+  interpretation { x.first |-> ?fst && x.second |-> ?snd }
+  state { fst < snd}
+  actions {}
+
+procedure test31(id r, int lvl, pair x)
+  requires Pair(r, lvl, x);
+
+procedure test32(id r, int lvl, pair x)
+  requires Pair(r, lvl, x, _);
+
+procedure test33(id r, int lvl, pair x)
+  requires Pair(r, lvl, x, ?fst);
+
+procedure test34(id r, int lvl, pair x)
+  requires Pair(r, lvl, x, ?fst);
+
+procedure test42(id r, int lvl, pair x)
+  requires Pair(r, lvl, x, ?fst, _);
+
+procedure test43(id r, int lvl, pair x)
+  requires Pair(r, lvl, x, ?fst, ?snd);
+
+procedure test44(id r, int lvl, pair x)
+  requires Pair(r, lvl, x, ?fst, ?snd);
+  requires snd == 0;
+
+procedure test45(id r, int lvl, pair x)
+  requires Pair(r, lvl, x, ?fst, ?snd);
+  requires fst == 0;

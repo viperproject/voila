@@ -1,0 +1,105 @@
+
+struct memcell {
+  int val;
+}
+
+region IncDec(id r, int lvl, memcell x)
+  guards {
+    duplicable INC;
+    duplicable DEC;
+  }
+  interpretation {
+    x.val |-> ?n
+  }
+  state { n }
+  actions {
+    ?n, ?m | n < m | INC: n ~> m;
+    ?n, ?m | m < n | DEC: n ~> m;
+    INC && DEC : ?n ~> ?m;
+  }
+
+
+procedure makeCounter(int lvl, id r) returns (memcell ret)
+  requires lvl >= 0;
+  ensures IncDec(r, lvl, ret) && INC@r && DEC@r;
+{
+  memcell v;
+
+  // v := new memcell(0);
+  inhale v.val |-> ?w;
+  v.val := 0;
+
+  ret := v;
+
+  // create IncDec(r, lvl, ret, 0);
+  inhale INC@r && DEC@r;
+  fold IncDec(r, lvl, ret, 0);
+}
+
+make_atomic procedure increment(id r, int lvl, memcell x, int k) returns (int ret)
+  interference ?n in Int;
+  requires IncDec(r, lvl, x, n) && INC@r && k > 0;
+  ensures  IncDec(r, lvl, x, n + k) && INC@r;
+{
+  bool b;
+  int v;
+
+  do
+    invariant IncDec(r, lvl, x) && k > 0;
+    invariant !b ==> r |=> <D>;
+    invariant  b ==> r |=> (v, v + k);
+  {
+    open_region using IncDec(r, lvl, x) {
+      v := x.val;
+    }
+
+    update_region using IncDec(r, lvl, x) {
+      b := CAS(x, v, v + k);
+    }
+  } while (!b);
+
+  ret := v;
+}
+
+
+make_atomic procedure decrement(id r, int lvl, memcell x, int k) returns (int ret)
+  interference ?n in Int;
+  requires IncDec(r, lvl, x, n) && DEC@r && k > 0;
+  ensures  IncDec(r, lvl, x, n - k) && DEC@r;
+{
+  bool b;
+  int v;
+
+  do
+    invariant IncDec(r, lvl, x) && k > 0;
+    invariant !b ==> r |=> <D>;
+    invariant  b ==> r |=> (v, v - k);
+  {
+    open_region using IncDec(r, lvl, x) {
+      v := x.val;
+    }
+
+    update_region using IncDec(r, lvl, x) {
+      b := CAS(x, v, v - k);
+    }
+  } while (!b);
+
+  ret := v;
+}
+
+
+procedure read(id r, int lvl, memcell x) returns (int ret)
+  requires IncDec(r, lvl, x, ?v0);
+  ensures  IncDec(r, lvl, x);
+{
+  open_region using IncDec(r, lvl, x) {
+    ret := x.val;
+  }
+}
+
+
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
+  requires x.val |-> ?v;
+  ensures  v == now
+              ? ret && x.val |-> thn
+              : !ret && x.val |-> v;

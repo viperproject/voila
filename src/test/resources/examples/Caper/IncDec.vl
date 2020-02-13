@@ -18,8 +18,7 @@ region IncDec(id r, int lvl, memcell x)
   actions {
     ?n, ?m | n < m | INC: n ~> m;
     ?n, ?m | m < n | DEC: n ~> m;
-    // not supported yet, but not needed here:
-    //INC * DEC : n ~> m;
+    INC && DEC: ?n ~> ?m;
   }
 
 

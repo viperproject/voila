@@ -31,6 +31,7 @@ region Qu(id q_r, int q_lvl, queue q)
   state { 0 }
   actions {}
 
+//:: UnexpectedOutput(region_actions_not_transitive_error, /voila/issue/41/)
 region QL(id r, int lvl, node x/*, int v */) // TODO: Add v as an in-argument, see also BagStack-inargs.vl
   ghost_fields {
     int _absstate;
@@ -307,6 +308,7 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
       success := false;
     } else {
 //      r := CAS(q, sentinel, hd);
+      //:: UnexpectedOutput(use-atomic_error:guard_permission_error, /voila/issue/41/)
       use_atomic
         using Qu(q_r, q_lvl, q) with G@q_r;
       {

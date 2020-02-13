@@ -238,7 +238,7 @@ class Voila extends StrictLogging {
         timer.stop()
         durations.consistency = Some(timer.durationMillis)
 
-        if (config.useForpermsInsteadOfQPs()) {
+        if (!config.useQPsInsteadOfForperms()) {
           consistencyCheckResults =
             consistencyCheckResults.filterNot(
               _.message.startsWith("Body of forperm quantifier is not allowed to contain perm expressions"))
@@ -266,6 +266,7 @@ class Voila extends StrictLogging {
 //        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
         siliconOptions ++= Vector("--logLevel", "ERROR")
         siliconOptions ++= Vector("--disableCatchingExceptions")
+        siliconOptions ++= Vector("--disableMostStateConsolidations")
 
         if (config.disableSiliconSpecificHavockingCode())
           // Disabling Silicon's support for this hack isn't strictly necessary, but can't hurt, either

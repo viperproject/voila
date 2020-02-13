@@ -1,0 +1,171 @@
+About to execute sbt with the following arguments: 
+  test:runMain 
+  -DVOILATESTS_TARGET=tmp/_bagstacks
+  -DVOILATESTS_REPETITIONS=10 
+  -DVOILATESTS_CSV=benchmark_2019-12-30_21-52.csv
+  -DVOILATESTS_VLOPTS=--enableStabilityChecks,--enableTransitivityChecks
+  org.scalatest.tools.Runner 
+  -o -s 
+  viper.voila.PortableVoilaTests
+
+
+[info] Loading global plugins from C:\Users\malte\.sbt\1.0\plugins
+[info] Updating ProjectRef(uri("file:/C:/Users/malte/.sbt/1.0/plugins/"), "global-plugins")...
+[info] Done updating.
+[info] Loading settings for project voila-build from plugins.sbt ...
+[info] Loading project definition from D:\Develop\Viper\voila\voila\project
+[info] Updating ProjectRef(uri("file:/D:/Develop/Viper/voila/voila/project/"), "voila-build")...
+[info] Done updating.
+[warn] There may be incompatibilities among your library dependencies.
+[warn] Run 'evicted' to see detailed eviction warnings
+[info] Loading settings for project voila from build.sbt ...
+[info] Loading settings for project carbon from build.sbt ...
+[info] Loading settings for project silicon from build.sbt ...
+[info] Loading settings for project silver from build.sbt ...
+[info] Loading settings for project silver from build.sbt ...
+[info] Set current project to Voila (in build file:/D:/Develop/Viper/voila/voila/)
+[info] Compiling 1 Scala source to D:\Develop\Viper\voila\voila\silicon\target\scala-2.12\classes ...
+[info] Done compiling.
+[info] Packaging D:\Develop\Viper\voila\voila\silicon\target\scala-2.12\silicon_2.12-1.1-SNAPSHOT.jar ...
+[info] Compiling 1 Scala source to D:\Develop\Viper\voila\voila\target\scala-2.12\classes ...
+[info] Done compiling.
+[info] Compiling 1 Scala source to D:\Develop\Viper\voila\voila\target\scala-2.12\test-classes ...
+[info] Done packaging.
+[info] Packaging D:\Develop\Viper\voila\voila\target\scala-2.12\voila_2.12-0.1-SNAPSHOT.jar ...
+[info] Done packaging.
+[info] Done compiling.
+[info] Packaging D:\Develop\Viper\voila\voila\target\scala-2.12\voila_2.12-0.1-SNAPSHOT-tests.jar ...
+[info] Done packaging.
+[info] Running (fork) -DVOILATESTS_TARGET=tmp/_bagstacks -DVOILATESTS_REPETITIONS=10 -DVOILATESTS_CSV=benchmark_2019-12-30_21-52.csv -DVOILATESTS_VLOPTS=--enableStabilityChecks,--enableTransitivityChecks org.scalatest.tools.Runner -o -s viper.voila.PortableVoilaTests
+[info] Run starting. Expected test count is: 4
+[info] PortableVoilaTests:
+[info] Failed to back-translate a Viper error
+[info]   Precondition of function Bag_state might not hold. There might be insufficient permission to access Bag($r, $lvl, $z). (<no position>)
+[info] Failed to back-translate a Viper error
+[info]   Precondition of function Bag_state might not hold. There might be insufficient permission to access Bag($r, $lvl, $z). (<no position>)
+[info] - tmp/_bagstacks/felix_map_BagStack-I.vl [Voila]
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 105023 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 45638 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 57746 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 47137 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 54512 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 30716 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 80463 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 43622 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 43106 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_map_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 80354 
+[info]   + [Voila benchmark] Dropped best and worst test repetition runtime (i.e. 2/10. 
+[info]   + [Voila benchmark] Mean /  8 runs:    537 msec (Parsing),      3 msec (Typechecking),    271 msec (Translating),    349 msec (Consistency checking),  55,38 sec  (Verifying). 
+[info]   + [Voila benchmark] Stddevs:            46 msec (Parsing),      6 msec (Typechecking),     44 msec (Translating),     10 msec (Consistency checking),  14,62 sec  (Verifying). 
+[info]   + [Voila benchmark] Rel. stddev:         8 %    (Parsing),    200 %    (Typechecking),     16 %    (Translating),      2 %    (Consistency checking),     26 %    (Verifying). 
+[info]   + [Voila benchmark] Best run:          500 msec (Parsing),     15 msec (Typechecking),    250 msec (Translating),    344 msec (Consistency checking),  41,98 sec  (Verifying). 
+[info]   + [Voila benchmark] Median run:        562 msec (Parsing),      0 msec (Typechecking),    250 msec (Translating),    359 msec (Consistency checking),  53,31 sec  (Verifying). 
+[info]   + [Voila benchmark] Worst run:         547 msec (Parsing),      0 msec (Typechecking),    234 msec (Translating),    344 msec (Consistency checking),  79,32 sec  (Verifying). 
+[info] - tmp/_bagstacks/felix_reg_BagStack-I.vl [Voila]
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 101227 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 91853 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 94899 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 93415 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 93665 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 97150 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 97649 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 94157 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 88994 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\felix_reg_BagStack-I.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 93055 
+[info]   + [Voila benchmark] Dropped best and worst test repetition runtime (i.e. 2/10. 
+[info]   + [Voila benchmark] Mean /  8 runs:    627 msec (Parsing),      2 msec (Typechecking),    234 msec (Translating),    375 msec (Consistency checking),  93,22 sec  (Verifying). 
+[info]   + [Voila benchmark] Stddevs:            31 msec (Parsing),      5 msec (Typechecking),     22 msec (Translating),      7 msec (Consistency checking),   1,88 sec  (Verifying). 
+[info]   + [Voila benchmark] Rel. stddev:         4 %    (Parsing),    250 %    (Typechecking),      9 %    (Translating),      1 %    (Consistency checking),      2 %    (Verifying). 
+[info]   + [Voila benchmark] Best run:          594 msec (Parsing),      0 msec (Typechecking),    235 msec (Translating),    375 msec (Consistency checking),  90,63 sec  (Verifying). 
+[info]   + [Voila benchmark] Median run:        641 msec (Parsing),      0 msec (Typechecking),    203 msec (Translating),    375 msec (Consistency checking),  92,92 sec  (Verifying). 
+[info]   + [Voila benchmark] Worst run:         609 msec (Parsing),      0 msec (Typechecking),    218 msec (Translating),    360 msec (Consistency checking),  96,45 sec  (Verifying). 
+[info] - tmp/_bagstacks/upstream__BagStack-inargs.vl [Voila]
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 9250 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 8765 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 8577 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7906 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7734 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7593 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7737 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7983 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7801 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack-inargs.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 9272 
+[info]   + [Voila benchmark] Dropped best and worst test repetition runtime (i.e. 2/10. 
+[info]   + [Voila benchmark] Mean /  8 runs:    699 msec (Parsing),      5 msec (Typechecking),    177 msec (Translating),    328 msec (Consistency checking),   6,97 sec  (Verifying). 
+[info]   + [Voila benchmark] Stddevs:            29 msec (Parsing),      7 msec (Typechecking),     29 msec (Translating),     15 msec (Consistency checking),    520 msec (Verifying). 
+[info]   + [Voila benchmark] Rel. stddev:         4 %    (Parsing),    140 %    (Typechecking),     16 %    (Translating),      4 %    (Consistency checking),      7 %    (Verifying). 
+[info]   + [Voila benchmark] Best run:          687 msec (Parsing),     16 msec (Typechecking),    156 msec (Translating),    344 msec (Consistency checking),   6,50 sec  (Verifying). 
+[info]   + [Voila benchmark] Median run:        719 msec (Parsing),      0 msec (Typechecking),    172 msec (Translating),    313 msec (Consistency checking),   6,75 sec  (Verifying). 
+[info]   + [Voila benchmark] Worst run:         688 msec (Parsing),     15 msec (Typechecking),    235 msec (Translating),    359 msec (Consistency checking),   7,91 sec  (Verifying). 
+[info] - tmp/_bagstacks/upstream__BagStack.vl [Voila] *** FAILED ***
+[info]   1 errors
+[info]   
+[info]   The following output occurred during testing, but should not have according to the test annotations:
+[info]     [method_precondition_not_stable_error] VoilaTestOutput(The precondition of method popCAS might not be stable. (126:1)) (AnnotationBasedTestSuite.scala:63)
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 9619 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7723 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7241 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7012 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 6798 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 8182 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 6743 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 6756 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7652 
+[info]   + [Voila benchmark] Voila arguments: --logLevel ERROR -i D:\Develop\Viper\voila\voila\tmp\_bagstacks\upstream__BagStack.vl --enableStabilityChecks --enableTransitivityChecks 
+[info]   + [Voila benchmark] Total test runtime: 7728 
+[info]   + [Voila benchmark] Dropped best and worst test repetition runtime (i.e. 2/10. 
+[info]   + [Voila benchmark] Mean /  8 runs:    722 msec (Parsing),      4 msec (Typechecking),    177 msec (Translating),    323 msec (Consistency checking),   6,14 sec  (Verifying). 
+[info]   + [Voila benchmark] Stddevs:            28 msec (Parsing),      4 msec (Typechecking),     15 msec (Translating),     16 msec (Consistency checking),    483 msec (Verifying). 
+[info]   + [Voila benchmark] Rel. stddev:         3 %    (Parsing),    100 %    (Typechecking),      8 %    (Translating),      4 %    (Consistency checking),      7 %    (Verifying). 
+[info]   + [Voila benchmark] Best run:          672 msec (Parsing),     16 msec (Typechecking),    172 msec (Translating),    297 msec (Consistency checking),   5,57 sec  (Verifying). 
+[info]   + [Voila benchmark] Median run:        738 msec (Parsing),      3 msec (Typechecking),    152 msec (Translating),    317 msec (Consistency checking),   6,42 sec  (Verifying). 
+[info]   + [Voila benchmark] Worst run:         697 msec (Parsing),      0 msec (Typechecking),    203 msec (Translating),    297 msec (Consistency checking),   6,97 sec  (Verifying). 
+[info] + [Voila benchmark] Recording verification times in benchmark_2019-12-30_21-52.csv. 
+[info] Info Provided - [Voila benchmark] Recorded verification times in benchmark_2019-12-30_21-52.csv.
+[info] Run completed in 28 minutes, 12 seconds.
+[info] Total number of tests run: 4
+[info] Suites: completed 1, aborted 0
+[info] Tests: succeeded 3, failed 1, canceled 0, ignored 0, pending 0
+[info] *** 1 TEST FAILED ***
+[error] Nonzero exit code returned from runner: 1
+[error] (Test / runMain) Nonzero exit code returned from runner: 1
+[error] Total time: 1703 s, completed 30 Dec 2019, 22:21:42

@@ -30,6 +30,8 @@ abstract_atomic procedure spinIncBy(id s, int lvl, memcell x, int k, set<int> fr
         using Cell(s, lvl, x);
       {
         v := x.val;
+        //:: UnexpectedOutput(assert_error:assertion_error, /voila/issue/104/)
+        assert v in from; // Unexpectedly fails, as would the third loop invariant
       }
 
       update_region
@@ -55,8 +57,7 @@ region IncDec(id r, int alvl, id s, int lvl, memcell x)
   actions {
     ?n, ?m | n < m | INC: n ~> m;
     ?n, ?m | m < n | DEC: n ~> m;
-    // not supported yet, but not needed here:
-    //INC * DEC : n ~> m;
+    INC && DEC: ?n ~> ?m;
   }
 
 // TODO: Should return the return value of spinIncBy, see comment above

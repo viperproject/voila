@@ -1,7 +1,10 @@
+#option voila.useQPsInsteadOfForperms // See issue #105
+
 struct memcell {
   int f;
 }
 
+//:: UnexpectedOutput(region_actions_not_transitive_error, /voila/issue/95/)
 region Lock(id a, int lvl, memcell x)
   guards { unique G; }
   interpretation {
