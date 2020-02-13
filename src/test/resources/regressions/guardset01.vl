@@ -14,7 +14,7 @@ region TLock(id r, int lvl, memcell x; int m)
   }
 
 
-
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test(id r, int lvl, memcell x)
   requires TLock(r, lvl, x, ?m, ?n) && TICKET|Set( ?k | k >= m )|@r;
 {
@@ -87,7 +87,7 @@ procedure test4(id r, int lvl, memcell x) returns (int ret)
 
 }
 
-
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test5(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
@@ -102,7 +102,7 @@ procedure test5(id r, int lvl, memcell x, int d) returns (int ret)
    }
 }
 
-
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test6(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
@@ -122,6 +122,7 @@ procedure test6(id r, int lvl, memcell x, int d) returns (int ret)
   assert TICKET(d-1)@r; // is required
 }
 
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test7(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
@@ -140,6 +141,7 @@ procedure test7(id r, int lvl, memcell x, int d) returns (int ret)
    }
 }
 
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test8(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n) && TICKET(d)@r;
   requires n < d;
@@ -150,6 +152,7 @@ procedure test8(id r, int lvl, memcell x, int d) returns (int ret)
 	skip;
 }
 
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test9(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
@@ -170,6 +173,7 @@ procedure test9(id r, int lvl, memcell x, int d) returns (int ret)
    }
 }
 
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test10(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n+1 < d;
