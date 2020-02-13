@@ -123,7 +123,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   def havocAllInstancesMethods(tree: VoilaTree): Vector[vpr.Method] = {
     def method(suffix: String, args: Vector[vpr.LocalVarDecl]): vpr.Method = {
       val pres: Vector[vpr.Exp] =
-        if (config.useForpermsInsteadOfQPs()) {
+        if (!config.useQPsInsteadOfForperms()) {
           Vector.empty
         } else {
           // Giving each havoc method the precondition [true, forall xs :: false ==> R(xs)]

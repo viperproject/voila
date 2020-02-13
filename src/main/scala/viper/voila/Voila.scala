@@ -238,7 +238,7 @@ class Voila extends StrictLogging {
         timer.stop()
         durations.consistency = Some(timer.durationMillis)
 
-        if (config.useForpermsInsteadOfQPs()) {
+        if (!config.useQPsInsteadOfForperms()) {
           consistencyCheckResults =
             consistencyCheckResults.filterNot(
               _.message.startsWith("Body of forperm quantifier is not allowed to contain perm expressions"))

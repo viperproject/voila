@@ -661,7 +661,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
                                              (root: N, regions: Seq[PRegion], preLabel: vpr.Label)
                                              : N = {
 
-    if (!config.useForpermsInsteadOfQPs())
+    if (config.useQPsInsteadOfForperms())
       return root
 
     root.transform {

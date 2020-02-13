@@ -82,10 +82,10 @@ class Config(arguments: Seq[String])
     default = Some(false),
     noshort = true)
 
-  val useForpermsInsteadOfQPs: ScallopOption[Boolean] = opt[Boolean](
-    name = "useForpermsInsteadOfQPs",
-    descr = "Experimental: potentially faster, but less complete.",
-    default = Some(true),
+  val useQPsInsteadOfForperms: ScallopOption[Boolean] = opt[Boolean](
+    name = "useQPsInsteadOfForperms",
+    descr = "Using Viper's quantified permissions instead of forperm expressions is slower, but more complete.",
+    default = Some(false),
     noshort = true)
 
   /*
