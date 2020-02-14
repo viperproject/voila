@@ -1067,14 +1067,20 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         val region =
           entity(id) match {
-            case regionEntity: RegionEntity => regionEntity.declaration
-            case _ => sys.error(s"Logical variables cannot yet be bound by a non-region predicate: $predicateExp")
+            case regionEntity: RegionEntity =>
+              regionEntity.declaration
+            case _ =>
+              sys.error(
+                s"Logical variables cannot yet be bound by a non-region predicate. " +
+                    s"Offending node is ${predicateExp.pretty} at ${predicateExp.position}.")
           }
 
         val idx = arguments.indices.find(arguments(_) == binder).get
 
-        assert(idx >= region.formalInArgs.length,
-               s"Logical variables can only be bound by out-arguments")
+        assert(
+          idx >= region.formalInArgs.length,
+          s"Logical variables can only be bound by out-arguments. Offending node " +
+              s"${predicateExp.pretty} has illegal binder ${binder.pretty} at ${binder.position}.")
 
         predicateExp
     }
@@ -1087,8 +1093,12 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     paramAttr[PPredicateExp, PLogicalVariableBinder, Option[Int]](exp => binder => {
       val region =
         entity(exp.predicate) match {
-          case regionEntity: RegionEntity => regionEntity.declaration
-          case _ => sys.error(s"Logical variables cannot yet be bound by a non-region predicate: $exp")
+          case regionEntity: RegionEntity =>
+            regionEntity.declaration
+          case _ =>
+              sys.error(
+                s"Logical variables cannot yet be bound by a non-region predicate. " +
+                    s"Offending node is ${exp.pretty} at ${exp.position}.")
         }
 
       val args = exp.arguments
@@ -1096,8 +1106,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       val idx =
         args.indices.find(args(_) eq binder).get - region.formalInArgs.length
 
-      assert(0 <= idx && idx < region.formalOutArgs.length + 1,
-             s"Logical variables can only be bound by out-arguments")
+      assert(
+        0 <= idx && idx < region.formalOutArgs.length + 1,
+        s"Logical variables can only be bound by out-arguments. Offending node " +
+            s"${exp.pretty} has illegal binder ${binder.pretty} at ${binder.position}.")
 
       if (idx < region.formalOutArgs.length) Some(idx) /* Regular out-argument */
       else None /* Region state out-argument */
