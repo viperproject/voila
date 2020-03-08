@@ -58,7 +58,7 @@ class ViperPreamble(preamble: Program) {
           )()
         }
 
-        DomainAxiom(
+        ViperAstUtils.DomainAxiom(
           name = s"getter_over_tuple$arity",
           exp = Forall(
             decls,
@@ -73,7 +73,7 @@ class ViperPreamble(preamble: Program) {
           DomainFuncApp(f, Seq(domainVar), typVarMap)()
         )
 
-        DomainAxiom(
+        ViperAstUtils.DomainAxiom(
           name = s"tuple${arity}_over_getter",
           exp = Forall(
             Seq(domainDecl),

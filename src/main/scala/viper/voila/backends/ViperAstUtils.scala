@@ -20,6 +20,16 @@ object ViperAstUtils {
     vpr.Seqn(ss, Vector.empty)(pos, info, errT)
   }
 
+  def DomainAxiom(name: String, exp: vpr.Exp)
+                 (pos: vpr.Position = vpr.NoPosition,
+                  info: vpr.Info = vpr.NoInfo,
+                  domainName: String,
+                  errT: vpr.ErrorTrafo = vpr.NoTrafos)
+                 : vpr.NamedDomainAxiom = {
+
+    vpr.NamedDomainAxiom(name, exp)(pos, info, domainName, errT)
+  }
+
   def sanitizeBoundVariableNames[N <: vpr.Node](node: N): N = {
     val rename: String => String = name => s"$$$name"
 
