@@ -16,7 +16,6 @@ region SLock(id r, int lvl, memcell x)
   actions {
     LOCK:   0 ~> 1;
     UNLOCK: 1 ~> 0;
-    LOCK && UNLOCK: ?n ~> ?m;
   }
 
 procedure makeLock(int lvl) returns (memcell ret, id r)

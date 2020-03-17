@@ -314,6 +314,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     }
   }
 
+  /** generates a method checking that the region's transition system is transitive */
   def regionActionTransitivityCheck(region: PRegion): vpr.Method = {
     val methodName = s"$$_${region.id.name}_action_transitivity_check"
 
@@ -321,6 +322,8 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val guardIds = guards.map{_.id.name}
 
+    // For the check, guards are encoded as variables:
+    // argument-less guards to booleans, indexed guards to a set, and fractional guard to fractions
     val guardDecls = guards.map{g => g.modifier match {
       case _: PUniqueGuard | _: PDuplicableGuard =>
         g.formalArguments.length match {
@@ -344,15 +347,18 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.LocalVarDecl(g.id.name, vpr.Perm)()
     }}
 
+    // map guard name to variable and modifier, respectively
     val guardVarMap = guardIds.zip(guardDecls map (_.localVar)).toMap
     val guardModifierMap = guardIds.zip(guards map (_.modifier)).toMap
 
+    // aggregates guards for each action to deal with "&&" guard
     val actionMaps: Map[Int, Map[String, TranslatedPGuardArg]] =
       region.actions.zipWithIndex.map { case (a,i) =>
         i -> groupGuards(a.guards)
       }(breakOut)
 
-    def actionApplication(action: PAction,
+    /** encodes single action to: (1) use variables, (2) condition, (3) from, (4) to, (5) guard constraints */
+    def applyAction(action: PAction,
                           index: Int,
                           postfix: String)
     : (Vector[vpr.LocalVarDecl], vpr.Exp, vpr.Exp, vpr.Exp, vpr.Exp) = {
@@ -363,6 +369,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       val formalDecls = initialDecls.map{v => vpr.LocalVarDecl(s"${v.name}_${index}_$postfix", v.typ)()}
       val vars = formalDecls map (_.localVar)
 
+      // action binders are substituted by fresh variables
       val renaming = initialVars.zip(vars).toMap
 
       val condition = translate(action.condition).replace(renaming)
@@ -371,6 +378,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
       val guards = actionMaps(index).toVector
 
+      // encode guard resource order on variables
       val guardConstraints = guards map { case (name, arg) => (guardModifierMap(name), arg) match {
         case (_: PUniqueGuard | _: PDuplicableGuard, TranslatedPStandardGuardArg(args, _)) =>
           args.length match {
@@ -391,11 +399,12 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
       (formalDecls, condition, from, to, viper.silicon.utils.ast.BigAnd(guardConstraints).replace(renaming))
     }
 
-    def allActionApplication(from: vpr.Exp, to: vpr.Exp, postfix: String)
+    /** encodes arbitrary transition step from 'from' to 'to'. 'postfix' is used for naming variables */
+    def applyArbitraryAction(from: vpr.Exp, to: vpr.Exp, postfix: String)
                             : (Vector[vpr.LocalVarDecl], vpr.Exp) = {
 
       val (declss, constraints) = region.actions.zipWithIndex.map { case (a,i) =>
-        val (decls, aCondition, aFrom, aTo, aGuardConstraint) = actionApplication(a, i, postfix)
+        val (decls, aCondition, aFrom, aTo, aGuardConstraint) = applyAction(a, i, postfix)
 
         val constraint = viper.silicon.utils.ast.BigAnd(
           Vector(
@@ -409,10 +418,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         (decls, constraint)
       }.unzip
 
-      (declss.flatten, viper.silicon.utils.ast.BigOr(constraints))
+      val orSame = vpr.EqCmp(from, to)()
+
+      (declss.flatten, viper.silicon.utils.ast.BigOr(orSame +: constraints))
     }
 
-    def allActionApplication2(from: vpr.Exp, to: vpr.Exp, postfix: String): vpr.Exp = {
+    /** encodes condition to check if a transition from 'from' to 'to' is possible */
+    def checkAnyAction(from: vpr.Exp, to: vpr.Exp, postfix: String): vpr.Exp = {
       val constraints = region.actions.zipWithIndex.map { case (a,i) =>
         val (fromBound, notFromBound) = a.binders.partition(isBoundExpExtractableFromPoint(_, a.from))
         val (toBound, restBinders) = notFromBound.partition(isBoundExpExtractableFromPoint(_, a.to))
@@ -479,7 +491,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         }
       }
 
-      viper.silicon.utils.ast.BigOr(constraints)
+      val orSame = vpr.EqCmp(from, to)()
+
+      viper.silicon.utils.ast.BigOr(orSame +: constraints)
     }
 
     val stateType = translate(semanticAnalyser.typ(region.state))
@@ -487,9 +501,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
     val bStateDecl = vpr.LocalVarDecl("bState", stateType)()
     val cStateDecl = vpr.LocalVarDecl("cState", stateType)()
 
-    val (xDecls, xConstraint) = allActionApplication(aStateDecl.localVar, bStateDecl.localVar, "x")
-    val (yDecls, yConstraint) = allActionApplication(bStateDecl.localVar, cStateDecl.localVar, "y")
-    val zConstraint = allActionApplication2(aStateDecl.localVar, cStateDecl.localVar, "z")
+    val (xDecls, xConstraint) = applyArbitraryAction(aStateDecl.localVar, bStateDecl.localVar, "x")
+    val (yDecls, yConstraint) = applyArbitraryAction(bStateDecl.localVar, cStateDecl.localVar, "y")
+    val zConstraint = checkAnyAction(aStateDecl.localVar, cStateDecl.localVar, "z")
 
     val body = {
       val xInhale = vpr.Inhale(xConstraint)()
