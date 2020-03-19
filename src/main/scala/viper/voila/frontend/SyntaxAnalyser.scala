@@ -85,15 +85,84 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     ("struct" ~> idndef) ~
     ("{" ~> (formalArg <~ ";").* <~ "}") ^^ PStruct
 
-  lazy val region: Parser[PRegion] =
+
+  lazy val region: Parser[PRegion] = {
+
+    sealed trait RegionClause
+    case class GhostFieldsClause(fields: Vector[PFormalArgumentDecl]) extends RegionClause
+    case class GuardClause(guards: Vector[PGuardDecl]) extends RegionClause
+    case class InterpretationClause(interp: PExpression) extends RegionClause
+    case class StateClause(state: PExpression) extends RegionClause
+    case class ActionsClause(actions: Vector[PAction]) extends RegionClause
+
+    lazy val regionClause: Parser[RegionClause] =
+      ("ghost_fields" ~> "{" ~> (formalArg <~ ";").* <~ "}") ^^ GhostFieldsClause |
+      ("guards" ~> "{" ~> guard.+ <~ "}") ^^ GuardClause |
+      ("interpretation" ~> "{" ~> expression <~ "}") ^^ InterpretationClause |
+      ("state" ~> "{" ~> expression <~ "}") ^^ StateClause |
+      ("actions" ~> "{" ~> action.* <~ "}") ^^ ActionsClause
+
+
+    lazy val regionClauses: Parser[(
+        Option[Vector[PFormalArgumentDecl]],
+        Vector[PGuardDecl],
+        PExpression,
+        PExpression,
+        Vector[PAction]
+      )] = wrap(regionClause.*, (clauses: Vector[RegionClause]) => {
+
+        val ghostFields = clauses.collect{ case x: GhostFieldsClause => x.fields }
+        val guards = clauses.collect{ case x: GuardClause => x.guards }
+        val interpretation = clauses.collect{ case x: InterpretationClause => x.interp }
+        val state = clauses.collectFirst{ case x: StateClause => x.state }
+        val actions = clauses.collectFirst{ case x: ActionsClause => x.actions }
+
+        if (ghostFields.size <= 1 &&
+            guards.size <= 1 &&
+            interpretation.size == 1 &&
+            state.size == 1 &&
+            actions.size <= 1
+            ) {
+
+          Left((
+            ghostFields.headOption,
+            guards.headOption.getOrElse(Vector.empty),
+            interpretation.head, state.head,
+            actions.getOrElse(Vector.empty)
+          ))
+        } else {
+          // exact error message
+          var errorMsg = List.empty[String]
+
+          if (ghostFields.size > 1) {
+            errorMsg ::= s"expected at most one clause defining ghost fields, but got ${ghostFields.size}"
+          }
+
+          if (guards.size > 1) {
+            errorMsg ::= s"expected at most one clause defining guards, but got ${guards.size}"
+          }
+
+          if (interpretation.size != 1) {
+            errorMsg ::= s"expected one interpretation clause, but got ${interpretation.size}"
+          }
+
+          if (state.size != 1) {
+            errorMsg ::= s"expected one state clause, but got ${state.size}"
+          }
+
+          if (actions.size > 1) {
+            errorMsg ::= s"expected at most one action clause, but got ${actions.size}"
+          }
+
+          Right(errorMsg.mkString("\n"))
+        }
+      })
+
     ("region" ~> idndef) ~
     ("(" ~> formalArgsNonEmpty) ~ ((";" ~> formalArgsNonEmpty).? <~ ")") ~
-    ("ghost_fields" ~> "{" ~> (formalArg <~ ";").* <~ "}").? ~
-    ("guards" ~> "{" ~> guard.+ <~ "}") ~
-    ("interpretation" ~> "{" ~> expression <~ "}") ~
-    ("state" ~> "{" ~> expression <~ "}") ~
-    ("actions" ~> "{" ~> action.* <~ "}") ^^ {
-      case id ~ inArgs ~ optOutArgs ~ optGhostFields ~ guards ~ interpretation ~ state ~ actions =>
+    regionClauses ^^ {
+      case id ~ inArgs ~ optOutArgs ~ clauses =>
+        val (optGhostFields, guards, interpretation, state, actions) = clauses
         val outArgs = optOutArgs.getOrElse(Vector.empty)
 
         PRegion(
@@ -106,6 +175,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
           actions,
           optGhostFields.getOrElse(Vector.empty))
     }
+  }
+
+
 
   lazy val guard: Parser[PGuardDecl] =
     /* The mandatory region id argument is not Setly declared; e.g. G(int n) actually

@@ -1,0 +1,40 @@
+// Corresponds to:
+//   https://github.com/caper-tool/caper/blob/master/examples/iterative/CASCounter.t
+//
+
+struct memcell {
+  int f;
+}
+
+region Counter1(id r, int lvl, memcell x)
+  guards { duplicable INCREMENT1; }
+  interpretation { x.f |-> ?v }
+  state { v }
+  actions {
+    ?n, ?m | n < m | INCREMENT1: n ~> m;
+  }
+
+region Counter2(id r, int lvl, memcell x)
+  state { v }
+  guards { duplicable INCREMENT2; }
+  actions {
+    ?n, ?m | n < m | INCREMENT2: n ~> m;
+  }
+  interpretation { x.f |-> ?v }
+
+region Counter3(id r, int lvl, memcell x)
+  actions {
+    ?n, ?m | n < m | INCREMENT3: n ~> m;
+  }
+  interpretation { x.f |-> ?v }
+  state { v }
+  guards { duplicable INCREMENT3; }
+
+region Counter4(id r, int lvl, memcell x)
+  actions {
+    ?n, ?m | n < m | INCREMENT4: n ~> m;
+  }
+  state { v }
+  interpretation { x.f |-> ?v }
+  guards { duplicable INCREMENT4; }
+
