@@ -1,0 +1,60 @@
+struct cell {
+  int f;
+}
+
+region Counter(id c, int lvl, cell x)
+  guards { unique G; }
+  interpretation { x.f |-> ?n }
+  state { n }
+  actions { G: ?n ~> ?m; }
+
+abstract_atomic procedure read(id c, int lvl, cell x) returns (int ret)
+  interference ?n in Int on c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n) && G@c;
+  ensures ret == n;
+
+
+procedure test1() returns (int ret)
+    level 42;
+    ensures ret >= ret;
+{
+  id c;
+  cell x;
+  int r;
+
+  x := new cell(33);
+  c := new Counter(41, x) with G;
+
+  ret := read(c, 41, x);
+}
+
+//:: ExpectedOutput(method_level_negative_error)
+procedure test2(int i) returns (int ret)
+    level i;
+    ensures ret >= ret;
+{
+  id c;
+  cell x;
+  int r;
+
+  x := new cell(33);
+  c := new Counter(41, x) with G;
+
+  ret := read(c, 41, x);
+}
+
+procedure test3(int i) returns (int ret)
+    level i;
+    requires 2 * i >= 84;
+    ensures ret >= ret;
+{
+  id c;
+  cell x;
+  int r;
+
+  x := new cell(33);
+  c := new Counter(41, x) with G;
+
+  ret := read(c, 41, x);
+}

@@ -200,7 +200,7 @@ class DefaultPrettyPrinter
           "state" <+> block(line <> toDoc(state)) <@>
           "actions" <+> block(lterm(actions map toDoc, semi)))
 
-      case PProcedure(id, formalArgs, formalReturns, inters, pres, posts, locals, optBody, atomicity) =>
+      case PProcedure(id, formalArgs, formalReturns, inters, level, pres, posts, locals, optBody, atomicity) =>
         toDoc(atomicity) <+> "procedure" <+>
         toDoc(id) <> asFormalArguments(formalArgs) <> (
           if (formalReturns.isEmpty)
@@ -208,7 +208,12 @@ class DefaultPrettyPrinter
           else
             space <> "returns" <+> asFormalReturns(formalReturns)
         ) <>
-        nest(lterm(inters map toDoc, semi)) <>
+        nest(lterm(inters map toDoc, semi)) <> (
+          if (level.isEmpty)
+            emptyDoc
+          else
+            nest("level" <+> toDoc(level.get))
+        ) <>
         nest(lterm(pres map toDoc, semi)) <>
         nest(lterm(posts map toDoc, semi)) <> (
         optBody match {

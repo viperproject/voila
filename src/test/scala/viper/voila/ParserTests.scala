@@ -42,6 +42,7 @@ class ParserTests extends FunSuite with Matchers {
                  Emp,
                  Emp,
                  Emp,
+                 None,
                  Emp,
                  Emp,
                  Emp,

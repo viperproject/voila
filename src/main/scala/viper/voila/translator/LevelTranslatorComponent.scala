@@ -23,6 +23,10 @@ trait LevelTranslatorComponent { this: PProgramToViperTranslator =>
 
     def getCurrentLevelToken: LevelToken = currentToken
 
+    def level: vpr.Exp = {
+      currentToken.levelVar
+    }
+
     def levelHigherThanOccurringRegionLevels(exp: PExpression): vpr.Exp = {
       val collectedLevels = collectLevels(exp).distinct
 
@@ -32,13 +36,20 @@ trait LevelTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     def levelHigherOrEqualToProcedureLevel(procedure: PProcedure): vpr.Exp = {
-      val collectedLevels = procedure.pres
-        .flatMap{ pre => collectLevels(pre.assertion) }.distinct
+      procedure.level match {
+        case Some(lvl) =>
+          // if level clause is provided, then the clause provides the method level
+          vpr.EqCmp(currentToken.levelVar, translate(lvl))()
+        case None =>
+          // otherwise,
+          val collectedLevels = procedure.pres
+            .flatMap{ pre => collectLevels(pre.assertion) }.distinct
 
-      viper.silicon.utils.ast.BigAnd(
-        vpr.GeCmp(currentToken.levelVar, vpr.IntLit(0)())() +:
-        (collectedLevels map {l => vpr.GtCmp(currentToken.levelVar, translate(l))()})
-      )
+          viper.silicon.utils.ast.BigAnd(
+            vpr.GeCmp(currentToken.levelVar, vpr.IntLit(0)())() +:
+              (collectedLevels map {l => vpr.GtCmp(currentToken.levelVar, translate(l))()})
+          )
+      }
     }
 
     def assignLevel(rhs: vpr.Exp): vpr.Stmt = {

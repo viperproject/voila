@@ -217,10 +217,11 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     idndef ~ ("(" ~> formalArgs <~ ")") ~
     ("returns" ~> ("(" ~> formalArgs <~ ")")).? ~
     interference.* ~
+    methodLvl.? ~
     requires.* ~
     ensures .* ~
     procedureBody.? ^^ {
-      case mod ~ id ~ args ~ optReturns ~ inters ~ pres ~ posts ~ optBraces =>
+      case mod ~ id ~ args ~ optReturns ~ inters ~ lvl ~ pres ~ posts ~ optBraces =>
         val (locals, body) =
           optBraces match {
             case None =>
@@ -234,7 +235,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         val returns =
           optReturns.getOrElse(Vector.empty).map(fa => PFormalReturnDecl(fa.id, fa.typ).at(fa))
 
-        PProcedure(id, args, returns, inters, pres, posts, locals, body, mod)
+        PProcedure(id, args, returns, inters, lvl, pres, posts, locals, body, mod)
     }
 
   private lazy val procedureBody: Parser[~[Vector[PLocalVariableDecl], PStatement]] =
@@ -258,6 +259,9 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val formalArg: Parser[PFormalArgumentDecl] =
     typ ~ idndef ^^ { case tpe ~ id => PFormalArgumentDecl(id, tpe) }
+
+  lazy val methodLvl: Parser[PExpression] =
+    "level" ~> expression <~ ";"
 
   lazy val interference: Parser[PInterferenceClause] =
     "interference" ~> binder ~

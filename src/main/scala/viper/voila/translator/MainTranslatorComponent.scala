@@ -394,6 +394,14 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val initializeLvl =
       vpr.Inhale(LevelManager.levelHigherOrEqualToProcedureLevel(procedure))()
 
+    val assertLvlPositive = // checks that the level is non-negative
+      vpr.Assert(vpr.GeCmp(LevelManager.level, vpr.IntLit(0)())())()
+
+    errorBacktranslator.addErrorTransformer {
+      case e: vprerr.AssertFailed if e causedBy assertLvlPositive =>
+        MethodLevelNegativeError(procedure)
+    }
+
     val vprMethod =
       procedure.atomicity match {
         case PAbstractAtomic() =>
@@ -450,6 +458,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         actualBody.copy(
           ss =
             initializeLvl +:
+            assertLvlPositive +:
             inhaleSkolemizationFunctionFootprints +:
             initializeFootprints ++:
             actualBody.ss,

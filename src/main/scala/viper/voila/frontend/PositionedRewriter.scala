@@ -234,13 +234,13 @@ class PositionedRewriter(override val positions: Positions)
             instantiateMacroBody(
               formals, arguments, Map.empty, makro.body, makro.id.name, exp.position)
 
-          case proc @ PProcedure(name, ins, outs, inters, pres, posts, locals, body, atomicity) =>
+          case proc @ PProcedure(name, ins, outs, inters, level, pres, posts, locals, body, atomicity) =>
             /* Reached a procedure declaration. Add new local variables introduced by expanding
              * macros to the procedure's list of local variables
              */
 
             val newChildren: Array[AnyRef] =
-              Array(name, ins, outs, inters, pres, posts, locals ++ additionalLocals, body, atomicity)
+              Array(name, ins, outs, inters, level, pres, posts, locals ++ additionalLocals, body, atomicity)
 
             dup(proc, newChildren)
         })

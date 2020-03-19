@@ -79,7 +79,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               s"${regionPredicateExpressions.map(_.predicate.name).mkString(", ")}",
           regionPredicateExpressions.nonEmpty)
 
-      case PProcedure(_, _, _, _, pres, posts, _, optBody, atom) =>
+      case PProcedure(_, _, _, _, _, pres, posts, _, optBody, atom) =>
         val contractMessages =
           (pres.map(_.assertion) ++ posts.map(_.assertion))
               .flatMap(exp => reportTypeMismatch(exp, PBoolType()))
@@ -1339,6 +1339,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       // case tree.parent(_: PMapDisjoint | _: PMapUnion) => /* TODO: Return map<T1, T2> */
       // case tree.parent(_: PMapKeys) => /* TODO: Return set<T> */
       // case tree.parent(_: PMapLookup) => /* TODO: Return map<key-type, T> */
+
+      case lvl @ tree.parent(proc: PProcedure) if proc.level.contains(lvl) =>
+        Set(PIntType())
 
       case _ =>
         /* Returning unknown expresses that no particular type is expected */

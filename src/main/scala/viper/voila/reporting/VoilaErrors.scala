@@ -352,6 +352,17 @@ case class RegionInterpretationNotStableError(offendingNode: PRegion, detail: Op
     copy(offendingNode, detail)
 }
 
+case class MethodLevelNegativeError(offendingNode: PProcedure, detail: Option[VerificationError] = None)
+  extends AbstractVerificationError {
+
+  type OffendingNode = PProcedure
+  def localId: String = "method_level_negative_error"
+  val localMessage: String = s"The level clause expression of method ${offendingNode.id.name} might not be positive"
+
+  protected def dup(offendingNode: OffendingNode, detail: Option[VerificationError]): VerificationError =
+    copy(offendingNode, detail)
+}
+
 case class MethodPreconditionNotStableError(offendingNode: PProcedure, detail: Option[VerificationError] = None)
   extends AbstractVerificationError {
 
