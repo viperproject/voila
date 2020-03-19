@@ -32,7 +32,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   val reservedWords: Set[String] = Set(
     "true", "false",
     "int", "bool", "id", "set", "frac", "seq", "tuple", "map",
-    "region", "guards", "unique", "duplicable", "divisible", "interpretation", "abstraction", "actions",
+    "region", "guards", "unique", "manual", "duplicable", "divisible", "interpretation", "abstraction", "actions",
     "predicate", "struct", "procedure", "macro",
     "returns", "interference", "in", "on", "requires", "ensures", "invariant",
     "abstract_atomic", "primitive_atomic", "non_atomic",
@@ -129,6 +129,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
   lazy val guardModifier: Parser[PGuardModifier] =
     "unique" ^^^ PUniqueGuard() |
+    "manual" ^^^ PDuplicableGuard() |
     "duplicable" ^^^ PDuplicableGuard() |
     "divisible" ^^^ PDivisibleGuard() |
     success(PUniqueGuard())
