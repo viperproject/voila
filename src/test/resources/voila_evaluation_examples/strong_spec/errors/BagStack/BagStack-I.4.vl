@@ -178,7 +178,7 @@ make_atomic procedure pop(id r, int lvl, entry z) returns (int v)
 
 /** Lemma Methods */
 
-procedure updateEntryGhost(entry x, id c, int l)
+lemma updateEntryGhost(entry x, id c, int l)
   requires x.next |-> ?y && BagList(c, l, y, ?vs) && nextGhost(x, _, _, _);
   ensures  x.next |->  y && BagList(c, l, y, vs)  && nextGhost(x, c, l, vs);
 {
@@ -187,7 +187,7 @@ procedure updateEntryGhost(entry x, id c, int l)
   assume hr == c && hl == l && h_state == vs;
 }
 
-procedure updateLinkGhost(link x, id c, int l)
+lemma updateLinkGhost(link x, id c, int l)
   requires x.next |-> ?y && BagList(c, l, y, ?vs) && nextGhost(x, _, _, _);
   ensures  x.next |->  y && BagList(c, l, y, vs)  && nextGhost(x, c, l, vs);
 {
@@ -196,7 +196,7 @@ procedure updateLinkGhost(link x, id c, int l)
   assume hr == c && hl == l && h_state == vs;
 }
 
-procedure createBagList(id r, int lvl, link x, id c, int l, seq<int> vs)
+lemma createBagList(id r, int lvl, link x, id c, int l, seq<int> vs)
   requires x.val |-> ?v && x.next |-> ?y && nextGhost(x, _, _, _) && (x != null ==> BagList(c, l, y, vs) && G@c && l < lvl);
   ensures  BagList(r, lvl, x, Seq<int>(v) concat vs) && G@r;
 {

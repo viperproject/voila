@@ -286,7 +286,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val procedure: Parser[PProcedure] =
-    (atomicityModifier <~ "procedure") ~
+    (atomicityModifier ~ ("lemma" ^^^ PLemmaModifier(true) | "procedure" ^^^ PLemmaModifier(false))) ~
     idndef ~ ("(" ~> formalArgs <~ ")") ~
     ("returns" ~> ("(" ~> formalArgs <~ ")")).? ~
     interference.* ~
@@ -294,7 +294,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     requires.* ~
     ensures .* ~
     procedureBody.? ^^ {
-      case mod ~ id ~ args ~ optReturns ~ inters ~ lvl ~ pres ~ posts ~ optBraces =>
+      case mod ~ proc ~ id ~ args ~ optReturns ~ inters ~ lvl ~ pres ~ posts ~ optBraces =>
         val (locals, body) =
           optBraces match {
             case None =>
@@ -308,7 +308,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
         val returns =
           optReturns.getOrElse(Vector.empty).map(fa => PFormalReturnDecl(fa.id, fa.typ).at(fa))
 
-        PProcedure(id, args, returns, inters, lvl, pres, posts, locals, body, mod)
+        PProcedure(id, args, returns, inters, lvl, pres, posts, locals, body, mod, proc)
     }
 
   private lazy val procedureBody: Parser[~[Vector[PLocalVariableDecl], PStatement]] =

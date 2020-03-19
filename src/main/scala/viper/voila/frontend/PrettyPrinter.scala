@@ -114,6 +114,7 @@ class DefaultPrettyPrinter
 
   def toDoc(modifier: PModifier): Doc = {
     modifier match {
+      case PLemmaModifier(lemma) => if (lemma) "lemma" else "procedure"
       case modifier: PAtomicityModifier => toDoc(modifier)
       case modifier: PGuardModifier => toDoc(modifier)
     }
@@ -200,8 +201,13 @@ class DefaultPrettyPrinter
           "state" <+> block(line <> toDoc(state)) <@>
           "actions" <+> block(lterm(actions map toDoc, semi)))
 
-      case PProcedure(id, formalArgs, formalReturns, inters, level, pres, posts, locals, optBody, atomicity) =>
-        toDoc(atomicity) <+> "procedure" <+>
+      case PProcedure(id, formalArgs, formalReturns, inters, level, pres, posts, locals, optBody, atomicity, lemma) =>
+        toDoc(atomicity) <+> (
+          if (lemma.flag)
+            "lemma"
+          else
+            "procedure"
+        ) <+>
         toDoc(id) <> asFormalArguments(formalArgs) <> (
           if (formalReturns.isEmpty)
             emptyDoc

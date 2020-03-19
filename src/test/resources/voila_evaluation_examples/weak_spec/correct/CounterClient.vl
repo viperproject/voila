@@ -91,40 +91,40 @@ macro counting_algebra_constraints(n, m)
   (n < 0 && 0 <= m && n + m < 0) ||
   (m < 0 && 0 <= n && n + m < 0);
 
-/* lemma */ procedure CONT_split(id r, int n, int m)
+lemma CONT_split(id r, int n, int m)
   requires CONT(n + m)@r;
   requires counting_algebra_constraints(n, m);
   ensures  CONT(n)@r && CONT(m)@r;
 
-/* lemma */ procedure CONT_join(id r, int n, int m)
+lemma CONT_join(id r, int n, int m)
   requires CONT(n)@r && CONT(m)@r;
   requires counting_algebra_constraints(n, m);
   ensures  CONT(n + m)@r;
 
-/* lemma */ procedure CONT_false1(id r, int n) // TODO: Derivable from CONT_split and CONT_join?
+lemma CONT_false1(id r, int n) // TODO: Derivable from CONT_split and CONT_join?
   requires CONT(-1)@r && CONT(n)@r && 0 < n;
   ensures  false;
 
-/* lemma */ procedure CONT_max1(id r, int n, int m) // TODO: Derivable from CONT_split and CONT_join?
+lemma CONT_max1(id r, int n, int m) // TODO: Derivable from CONT_split and CONT_join?
   requires CONT(n)@r && CONT(-1-m)@r && 0 <= n && 0 <= m;
   ensures  CONT(n)@r && CONT(-1-m)@r;
   ensures  n <= m;
 
-/* lemma */ procedure AUTH_split(id r, int n, int m)
+lemma AUTH_split(id r, int n, int m)
   requires AUTH(n + m)@r;
   requires counting_algebra_constraints(n, m);
   ensures  AUTH(n)@r && AUTH(m)@r;
 
-/* lemma */ procedure AUTH_join(id r, int n, int m)
+lemma AUTH_join(id r, int n, int m)
   requires AUTH(n)@r && AUTH(m)@r;
   requires counting_algebra_constraints(n, m);
   ensures  AUTH(n + m)@r;
 
-/* lemma */ procedure AUTH_false1(id r, int n) // TODO: Derivable from AUTH_split and AUTH_join?
+lemma AUTH_false1(id r, int n) // TODO: Derivable from AUTH_split and AUTH_join?
   requires AUTH(-1)@r && AUTH(n)@r && 0 < n;
   ensures  false;
 
-/* lemma */ procedure AUTH_max1(id r, int n, int m) // TODO: Derivable from AUTH_split and AUTH_join?
+lemma AUTH_max1(id r, int n, int m) // TODO: Derivable from AUTH_split and AUTH_join?
   requires AUTH(n)@r && AUTH(-1-m)@r && 0 <= n && 0 <= m;
   ensures  AUTH(n)@r && AUTH(-1-m)@r;
   ensures  n <= m;

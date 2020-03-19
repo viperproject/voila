@@ -50,17 +50,17 @@ macro counting_algebra_constraints(n, m)
   (n < 0 && 0 <= m && n + m < 0) ||
   (m < 0 && 0 <= n && n + m < 0);
 
-/* lemma */ procedure ARC_split(id r, int n, int m)
+lemma ARC_split(id r, int n, int m)
   requires ARC(n + m)@r;
   requires counting_algebra_constraints(n, m);
   ensures  ARC(n)@r && ARC(m)@r;
 
-/* lemma */ procedure ARC_join(id r, int n, int m)
+lemma ARC_join(id r, int n, int m)
   requires ARC(n)@r && ARC(m)@r;
   requires counting_algebra_constraints(n, m);
   ensures  ARC(n + m)@r;
 
-/* lemma */ procedure ARC_false1(id r, int n) // TODO: Provable from ARC_split and Arc_join?
+lemma ARC_false1(id r, int n) // TODO: Provable from ARC_split and Arc_join?
   requires ARC(-1)@r && ARC(n)@r && 0 < n;
   ensures  false;
 

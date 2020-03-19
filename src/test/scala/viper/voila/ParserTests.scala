@@ -47,7 +47,8 @@ class ParserTests extends FunSuite with Matchers {
                  Emp,
                  Emp,
                  Some(PSkip()),
-                 PNonAtomic())
+                 PNonAtomic(),
+                 PLemmaModifier(false))
 
     frontend.parse(src) should matchPattern {
       case Right(PProgram(Emp, Emp, Emp, Emp, Vector(`proc`))) =>

@@ -59,6 +59,9 @@ case class PProgram(options: Vector[PConfigOption],
 
 sealed trait PModifier extends PAstNode
 
+// required b.c. procedures must have PNode as children
+case class PLemmaModifier(flag: Boolean) extends PModifier
+
 sealed trait PAtomicityModifier extends PModifier
 
 case class PNonAtomic() extends PAtomicityModifier
@@ -139,7 +142,7 @@ case class PInvariantClause(assertion: PExpression) extends PAssertionClause
 case class PAction(binders: Vector[PNamedBinder],
                    condition: PExpression,
                    guards: Vector[PBaseGuardExp],
-                   from: PExpression, 
+                   from: PExpression,
                    to: PExpression)
     extends PAstNode with PBindingContext with PScope {
 
@@ -183,7 +186,8 @@ case class PProcedure(id: PIdnDef,
                       posts: Vector[PPostconditionClause],
                       locals: Vector[PLocalVariableDecl],
                       body: Option[PStatement],
-                      atomicity: PAtomicityModifier)
+                      atomicity: PAtomicityModifier,
+                      lemma: PLemmaModifier)
     extends PMember with PDeclaration
 
 case class PPredicate(id: PIdnDef,

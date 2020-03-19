@@ -79,7 +79,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               s"${regionPredicateExpressions.map(_.predicate.name).mkString(", ")}",
           regionPredicateExpressions.nonEmpty)
 
-      case PProcedure(_, _, _, _, _, pres, posts, _, optBody, atom) =>
+      case PProcedure(_, _, _, _, _, pres, posts, _, optBody, atom, _) =>
         val contractMessages =
           (pres.map(_.assertion) ++ posts.map(_.assertion))
               .flatMap(exp => reportTypeMismatch(exp, PBoolType()))
@@ -310,7 +310,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                reportArgumentLengthMismatch(call, decl.id, decl.formalArgs.length, call.arguments.length)
             ++ reportArgumentLengthMismatch(call, decl.id, decl.formalReturns.length, call.rhs.length)
             ++ reportTypeMismatch(call.arguments, decl.formalArgs)
-            ++ call.rhs.zip(decl.formalReturns).flatMap { case (rhs, formal) => reportTypeMismatch(rhs, formal.typ) })
+            ++ call.rhs.zip(decl.formalReturns).flatMap { case (rhs, formal) => reportTypeMismatch(rhs, formal.typ) }
+            ++ { call match {
+                   case tree.parent(_: PLemmaApplication) =>
+                     message(call, "only lemma methods are invoked with 'use'", !decl.lemma.flag)
+                   case _ =>
+                     message(call, "lemma methods can only be invoked with 'use'", decl.lemma.flag)
+               }}
+            )
 //            ++ reportTypeMismatch(call.rhs, decl.formalReturns)) /* TODO: See comment for reportTypeMismatch */
 
           case _ =>

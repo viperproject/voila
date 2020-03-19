@@ -71,31 +71,31 @@ region CClient(id a, int alvl, id c, int lvl, cell x)
     ?n, ?m, ?k, ?p | 0f < p && n < m | INC(k, p): n ~> m;
   }
 
-/* Model complex guard algebra via lemma procedures *
+/* Model complex guard algebra via lemma procedures */
 
-/* lemma */ procedure INC_split(id a, int k1, int k2, frac p1, frac p2)
+lemma INC_split(id a, int k1, int k2, frac p1, frac p2)
   requires INC(k1 + k2, p1 + p2)@a;
   requires 0f < p1 && 0f < p2;
   ensures  INC(k1, p1)@a && INC(k2, p2)@a;
 
-/* lemma */ procedure INC_join(id a, int k1, int k2, frac p1, frac p2)
+lemma INC_join(id a, int k1, int k2, frac p1, frac p2)
   requires INC(k1, p1)@a && INC(k2, p2)@a;
   requires 0f < p1 && 0f < p2;
   ensures  INC(k1 + k2, p1 + p2)@a;
 
-/* lemma */ procedure TOTAL_INC_equality(id a, int n, int k)
+lemma TOTAL_INC_equality(id a, int n, int k)
   requires TOTAL(n)@a && INC(k, 1f)@a;
 //  requires TODO: ... and the composition must be defined
   ensures  TOTAL(n)@a && INC(k, 1f)@a;
   ensures  n == k;
 
-/* lemma */ procedure TOTAL_INC_update(id a, int n, int k0, int k1, frac p)
+lemma TOTAL_INC_update(id a, int n, int k0, int k1, frac p)
   requires TOTAL(n + k0)@a && INC(k0, p)@a;
   requires 0f < p;
   ensures  TOTAL(n + k1)@a && INC(k1, p)@a;
 
 /* Specialised version of (i.e. derived from) TOTAL_INC_update */
-/* lemma */ procedure TOTAL_INC_inc(id a, int n, int k, frac p)
+lemma TOTAL_INC_inc(id a, int n, int k, frac p)
   requires TOTAL(n)@a && INC(k, p)@a && 0 <= n - k;
   requires 0f < p;
   ensures  TOTAL(n + 1)@a && INC(k + 1, p)@a;

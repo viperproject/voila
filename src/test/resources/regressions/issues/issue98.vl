@@ -1,0 +1,42 @@
+struct cell {
+  int f;
+}
+
+lemma foo(cell x)
+  requires x.f |-> _;
+  ensures true;
+
+procedure bar(cell x)
+  requires x.f |-> _;
+  ensures true;
+
+procedure test1() {
+  cell x;
+  x := new cell(42);
+
+  bar(x);
+}
+
+procedure test2() {
+  cell x;
+  x := new cell(42);
+
+  //:: ExpectedOutput(typechecker_error)
+  foo(x);
+}
+
+procedure test3() {
+  cell x;
+  x := new cell(42);
+
+  //:: ExpectedOutput(typechecker_error)
+  use bar(x);
+}
+
+procedure test4() {
+  cell x;
+  x := new cell(42);
+
+  use foo(x);
+}
+
