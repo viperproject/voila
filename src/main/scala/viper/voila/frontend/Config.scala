@@ -88,6 +88,12 @@ class Config(arguments: Seq[String])
     default = Some(false),
     noshort = true)
 
+  val useCarbon: ScallopOption[Boolean] = opt[Boolean](
+  name = "useCarbon",
+  descr = "By default, Voila uses Silicon as the backend. Set this flag to use Carbon instead.",
+  default = Some(false),
+  noshort = true)
+
   /*
    * Exception handling
    */
