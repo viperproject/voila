@@ -264,7 +264,7 @@ class Voila extends StrictLogging {
         }
 
         // Step 5: Verification
-        var backend : ViperVerifier = null
+        var backend: ViperVerifier = null
         if(!config.useCarbon()) {
           var siliconOptions: Vector[String] = Vector.empty
           //        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
@@ -272,9 +272,10 @@ class Voila extends StrictLogging {
           siliconOptions ++= Vector("--disableCatchingExceptions")
           siliconOptions ++= Vector("--disableMostStateConsolidations")
 
-          if (config.disableSiliconSpecificHavockingCode())
-          // Disabling Silicon's support for this hack isn't strictly necessary, but can't hurt, either
+          if (config.disableSiliconSpecificHavockingCode()) {
+            // Disabling Silicon's support for this hack isn't strictly necessary, but can't hurt, either
             siliconOptions ++= Vector("--disableHavocHack407")
+          }
 
           logger.info("Encoded Voila program in Viper")
 
