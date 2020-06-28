@@ -284,7 +284,6 @@ class Voila extends StrictLogging {
           logger.info("Verifying encoding using Silicon ...")
           backend = new Silicon(siliconOptions)
         } else {
-           // NOTE: When using Carbon, run Voila with --disableSiliconSpecificHavockingCode --useQPsInsteadOfForperms
           logger.info("Encoded Voila program in Viper")
 
           timer.start()
