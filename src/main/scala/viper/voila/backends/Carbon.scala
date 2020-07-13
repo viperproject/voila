@@ -18,6 +18,10 @@ class Carbon(commandLineArguments: Seq[String], voilaConfig: Config) extends Vip
     "Using Carbon as Voila's backend requires running Voila with " +
       s"--${voilaConfig.disableSiliconSpecificHavockingCode.name}")
 
+  assert(voilaConfig.useQPsInsteadOfForperms(),
+       "Using Carbon as Voila's backend requires running Voila with " +
+      s"--${voilaConfig.useQPsInsteadOfForperms.name}")
+
   def start(): Unit = {
     require(backend == null)
 
