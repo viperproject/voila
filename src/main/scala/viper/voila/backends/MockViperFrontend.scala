@@ -21,7 +21,7 @@ class MockViperFrontend extends SilFrontend {
     _state = DefaultStates.Initialized
 
     reset(viperFile)
-    runTo("Translation")
+    runTo(Translation)
 
     (_program, _errors)
   }
