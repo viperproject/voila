@@ -9,6 +9,7 @@ package viper.voila
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path, Paths}
+
 import scala.collection.breakOut
 import scala.util.{Left, Right}
 import ch.qos.logback.classic.{Level, Logger}
@@ -17,7 +18,7 @@ import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
-import viper.voila.backends.{MockViperFrontend, Silicon, /*Carbon,*/ ViperNameSanitizer, ViperPreamble}
+import viper.voila.backends.{MockViperFrontend, Silicon, Carbon, ViperVerifier, ViperNameSanitizer, ViperPreamble}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
@@ -262,29 +263,34 @@ class Voila extends StrictLogging {
             }
         }
 
-        var siliconOptions: Vector[String] = Vector.empty
-//        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
-        siliconOptions ++= Vector("--logLevel", "ERROR")
-        siliconOptions ++= Vector("--disableCatchingExceptions")
-        siliconOptions ++= Vector("--disableMostStateConsolidations")
-
-        if (config.disableSiliconSpecificHavockingCode())
-          // Disabling Silicon's support for this hack isn't strictly necessary, but can't hurt, either
-          siliconOptions ++= Vector("--disableHavocHack407")
-
-        logger.info("Encoded Voila program in Viper")
-
-
         // Step 5: Verification
-        timer.start()
+        var backend: ViperVerifier = null
+        if(!config.useCarbon()) {
+          var siliconOptions: Vector[String] = Vector.empty
+          //        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
+          siliconOptions ++= Vector("--logLevel", "ERROR")
+          siliconOptions ++= Vector("--disableCatchingExceptions")
+          siliconOptions ++= Vector("--disableMostStateConsolidations")
 
-        logger.info("Verifying encoding using Silicon ...")
-        val backend = new Silicon(siliconOptions)
+          if (config.disableSiliconSpecificHavockingCode()) {
+            // Disabling Silicon's support for this hack isn't strictly necessary, but can't hurt, either
+            siliconOptions ++= Vector("--disableHavocHack407")
+          }
 
-        // NOTE: When using Carbon, run Voila with --disableSiliconSpecificHavockingCode
-        //
-        // logger.info("Verifying encoding using Carbon ...")
-        // val backend = new Carbon(Vector.empty)
+          logger.info("Encoded Voila program in Viper")
+
+          timer.start()
+
+          logger.info("Verifying encoding using Silicon ...")
+          backend = new Silicon(siliconOptions)
+        } else {
+          logger.info("Encoded Voila program in Viper")
+
+          timer.start()
+
+          logger.info("Verifying encoding using Carbon ...")
+          backend = new Carbon(Vector.empty, config)
+        }
 
         backend.start()
         val verificationResult = backend.handle(programToVerify)
