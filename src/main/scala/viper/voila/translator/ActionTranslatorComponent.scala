@@ -143,7 +143,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
   def guardTriggerFunctionAxiom(guard: PGuardDecl, region: PRegion): Option[vpr.NamedDomainAxiom] =
     guardTriggerFunction(guard, region) map { function =>
-      val formalArgs = function.formalArgs.toVector
+      val formalArgs = function.formalArgs.map(_.asInstanceOf[vpr.LocalVarDecl]).toVector
       val actualArgs = formalArgs.map(_.localVar)
 
       val application = guardTriggerFunctionApplication(guard, actualArgs, region).get
