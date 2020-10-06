@@ -62,9 +62,11 @@ abstract_atomic procedure acquire(id r, int alvl, id rx, int xlvl, cell x, id ry
       invariant v <  t ==> r |=> <D>;
       invariant v == t ==> r |=> (nii, nii);
     {
-      open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
+      open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y); // THIS OPEN_REGION IS FAILING
       {
         v := read(rx, xlvl, x);
+        assert Counter(rx, xlvl, x, ?xv) && Counter(ry, ylvl, y, ?yv);
+        assert xv <= yv && xv <= t; // before closing the region, the property is correctly known.
       }
       assert TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, ?nf);
       exhale v == t ==> r |=> <D>;
@@ -74,7 +76,7 @@ abstract_atomic procedure acquire(id r, int alvl, id rx, int xlvl, cell x, id ry
   }
 }
 
-
+/*
 procedure acquire2(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y)
   requires TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, _) && Z@r;
   ensures  TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, ?n) && Z@r && TICKET(n)@r;
@@ -86,12 +88,17 @@ procedure acquire2(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cel
   open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
   {
     t := incr(ry, ylvl, y);
+    // use_guard_uniqueness TICKET(t)@r;
+    // assert Counter(ry, ylvl, y, ?yv) && Counter(rx, xlvl, x, ?xv);
+    // assert yv == t+1 && xv < yv;
+    // assert xv <= t && TICKET(t)@r;
   }
 
   do
     invariant TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, ?mii, ?nii) && TICKET(t)@r;
     invariant t >= nii && nii >= v;
   {
+
     //:: UnexpectedOutput(open-region_error:assertion_error, /voila/issue/106/)
     open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
     {
@@ -100,7 +107,7 @@ procedure acquire2(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cel
   }
   while(v < t);
 }
-
+*/
 
 abstract_atomic procedure release(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y)
   interference ?n in Set<int>(n) on r;
