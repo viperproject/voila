@@ -150,14 +150,17 @@ procedure single_client(id a, int alvl, id c, int lvl, cell x, frac p) returns (
 /*
  * Main code of Fig. 7.3
  */
-procedure client() {
+procedure client()
+  level 2;
+{
   id a, c;
   int alvl, lvl;
   cell x;
   int k1;
   int k2;
 
-  assume alvl > lvl >= 0;
+  lvl := 0;
+  alvl := 1;
 
   // x := makeCounter();
   x := new cell(0);
@@ -172,6 +175,12 @@ procedure client() {
   // Split guard INC
   use INC_split(a, 0, 0, 1/2, 1/2);
 
+  parallel {
+    k1 := single_client(a, alvl, c, lvl, x, 1/2),
+    k2 := single_client(a, alvl, c, lvl, x, 1/2)
+  };
+
+/*
   // Fork two instances of single_client(a, alvl, c, lvl, x, 1/2)
   exhale single_client_Pre(a, alvl, c, lvl, x, 1/2);
   exhale single_client_Pre(a, alvl, c, lvl, x, 1/2);
@@ -183,7 +192,7 @@ procedure client() {
   inhale single_client_Post(a, alvl, c, lvl, x, 1/2, k1);
   havoc k2;
   inhale single_client_Post(a, alvl, c, lvl, x, 1/2, k2);
-
+*/
   // Join guard INC
   use INC_join(a, k1, k2, 1/2, 1/2);
   // Transform CClient assertion according to guard algebra (view shift?)

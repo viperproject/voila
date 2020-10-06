@@ -376,6 +376,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     openRegion |
     "(" ~> statements <~ ")" <~ ";" |
     procedureCall |
+    "fork" ~> procedureCall ^^ PFork |
+    "parallel" ~> ("{" ~> repsep(procedureCall, ",") <~ "}" <~ ";") ^^ PParallelCall |
     newStmt |
     idnuse ~ (":=" ~> location) <~ ";" ^^ { case lhs ~ rhs => PHeapRead(lhs, rhs) } |
     location ~ (":=" ~> expression <~ ";") ^^ PHeapWrite |
@@ -393,7 +395,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
       }
 
   lazy val procedureCall: Parser[PProcedureCall] =
-    (repsep(idnuse, ",") <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";" ^^ {
+    (repsep(idnuse, ",") <~ ":=").? ~ idnuse ~ ("(" ~> listOfExpressions <~ ")") <~ ";".? ^^ {
       case optRhs ~ proc ~ args => PProcedureCall(proc, args, optRhs.getOrElse(Vector.empty))
     }
 

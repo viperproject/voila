@@ -303,6 +303,9 @@ class DefaultPrettyPrinter
 
         if (rhs.isEmpty) lhsDoc
         else ssep(rhs map toDoc, comma <> space) <+> ":=" <+> lhsDoc
+
+      case PFork(call) => "fork" <+> toDoc(call)
+      case PParallelCall(calls) => "parallel" <> braces(nest(ssep(calls map toDoc, comma <> line)))
     }
 
   def toDoc(statement: PGhostStatement): Doc = {

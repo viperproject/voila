@@ -294,6 +294,16 @@ case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rh
   val statementName = s"call:${procedure.name}"
 }
 
+case class PFork(call: PProcedureCall) extends PCompoundStatement {
+  val statementName = "fork"
+  val components: Vector[PStatement] = Vector(call)
+}
+
+case class PParallelCall(calls: Vector[PProcedureCall]) extends PCompoundStatement {
+  val statementName = "parallel"
+  val components: Vector[PStatement] = calls
+}
+
 sealed trait PGhostStatement extends PStatement
 
 sealed trait PFoldUnfold extends PAstNode {

@@ -324,6 +324,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             message(call.procedure, s"Cannot call ${call.procedure}")
         }
 
+      case fork: PFork =>
+        message(fork.call, s"expected non-atomic call, but got ${fork.call}", atomicity(fork.call) != AtomicityKind.Nonatomic)
+
+      case parallelCall: PParallelCall =>
+        parallelCall.calls.flatMap { call =>
+          message(call, s"expected non-atomic call, but got $call", atomicity(call) != AtomicityKind.Nonatomic)
+        }
+
       case _rule @ (_: POpenRegion | _: PUpdateRegion) =>
         val rule = _rule.asInstanceOf[PRuleStatement]
 
@@ -1395,11 +1403,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           case PNonAtomic() | PMakeAbstractAtomic() => AtomicityKind.Nonatomic
           case PPrimitiveAtomic() | PAbstractAtomic() => AtomicityKind.Atomic
         }
+
+      case _: PFork | _: PParallelCall => AtomicityKind.Nonatomic
     }
 
   lazy val expectedAtomicity: PStatement => AtomicityKind =
     attr[PStatement, AtomicityKind ] {
-      case tree.parent(_: PIf | _: PWhile) => AtomicityKind.Nonatomic
+      case tree.parent(_: PIf | _: PWhile | _: PFork | _: PParallelCall ) => AtomicityKind.Nonatomic
 
       case tree.parent(PSeqComp(first, second)) =>
         if (isGhost(first)) atomicity(second)

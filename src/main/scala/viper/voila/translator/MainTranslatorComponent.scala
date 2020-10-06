@@ -1094,6 +1094,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             case _: PUpdateRegion => false
             case _: PUseAtomic => false
             case _: POpenRegion => false
+            case _: PFork => true
+            case _: PParallelCall => true
             case _: PCompoundStatement => ??? /* Forgot about a particular compound statement */
             case _ => false
           }
@@ -1688,6 +1690,178 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           )()
 
         surroundWithSectionComments(statement.statementName, result)
+
+      case fork: PFork =>
+        // same as call to non-atomic function with empty postcondition
+
+        val callee =
+          semanticAnalyser.entity(fork.call.procedure).asInstanceOf[ProcedureEntity].declaration
+
+        val vprArguments = fork.call.arguments map translate
+
+        val vprStub = translatedProcedureStubs(fork.call.procedure.name)
+
+        val vprLvlConstraint =
+          vpr.utility.Expressions.instantiateVariables(
+            LevelManager.levelHigherOrEqualToProcedureLevel(callee),
+            vprStub.formalArgs,
+            vprArguments,
+            Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+          )
+
+        val vprAtomicityContextConstraint =
+          vpr.utility.Expressions.instantiateVariables(
+            AtomicityContextLevelManager.callIsPossible(callee),
+            vprStub.formalArgs,
+            vprArguments,
+            Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+          )
+
+        val vprPre =
+          vpr.utility.Expressions.instantiateVariables(
+            viper.silicon.utils.ast.BigAnd(vprStub.pres),
+            vprStub.formalArgs,
+            vprArguments,
+            Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+          )
+
+        val vprAssertLvlConstraint = vpr.Assert(vprLvlConstraint)()
+
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.AssertFailed if e causedBy vprAssertLvlConstraint =>
+            PreconditionError(fork.call, CalleeLevelTooHighError(fork.call))
+        }
+
+        val vprAssertAtomicityContextConstraint = vpr.Assert(vprAtomicityContextConstraint)()
+
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.AssertFailed if e causedBy vprAssertAtomicityContextConstraint =>
+            PreconditionError(fork.call, CalleeAtomicityContextError(fork.call))
+        }
+
+        val vprExhalePres = vpr.Exhale(vprPre)()
+
+        val ebt = this.errorBacktranslator /* TODO: Should not be necessary!!!!! */
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.ExhaleFailed if e causedBy vprExhalePres =>
+            PreconditionError(fork.call, ebt.translate(e.reason))
+        }
+
+        vpr.Seqn(
+          Vector(
+            vprAssertLvlConstraint,
+            vprAssertAtomicityContextConstraint,
+            vprExhalePres
+          ),
+          Vector.empty
+        )()
+
+
+      case parallel: PParallelCall =>
+
+        val vprPreCallLabel = freshLabel("pre_call")
+
+        val beforeAndAfter = parallel.calls.map{ call =>
+
+          // same as call to non-atomic function without the stabilization
+
+          val callee =
+            semanticAnalyser.entity(call.procedure).asInstanceOf[ProcedureEntity].declaration
+
+          val vprArguments = call.arguments map translate
+          val vprReturns = call.rhs map (id => translateUseOf(id).asInstanceOf[vpr.LocalVar])
+
+          val vprStub = translatedProcedureStubs(call.procedure.name)
+
+          val vprLvlConstraint =
+            vpr.utility.Expressions.instantiateVariables(
+              LevelManager.levelHigherOrEqualToProcedureLevel(callee),
+              vprStub.formalArgs,
+              vprArguments,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            )
+
+          val vprAtomicityContextConstraint =
+            vpr.utility.Expressions.instantiateVariables(
+              AtomicityContextLevelManager.callIsPossible(callee),
+              vprStub.formalArgs,
+              vprArguments,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            )
+
+          val vprPre =
+            vpr.utility.Expressions.instantiateVariables(
+              viper.silicon.utils.ast.BigAnd(vprStub.pres),
+              vprStub.formalArgs,
+              vprArguments,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            )
+
+          val vprPost =
+            vpr.utility.Expressions.instantiateVariables(
+              viper.silicon.utils.ast.BigAnd(vprStub.posts),
+              vprStub.formalArgs ++ vprStub.formalReturns,
+              vprArguments ++ vprReturns,
+              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            ).transform(
+              {
+                case old: vpr.Old =>
+                  vpr.LabelledOld(old.exp, vprPreCallLabel.name)(old.pos, old.info, old.errT)
+              },
+              vpr.utility.rewriter.Traverse.TopDown)
+
+          val vprAssertLvlConstraint = vpr.Assert(vprLvlConstraint)()
+
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.AssertFailed if e causedBy vprAssertLvlConstraint =>
+              PreconditionError(call, CalleeLevelTooHighError(call))
+          }
+
+          val vprAssertAtomicityContextConstraint = vpr.Assert(vprAtomicityContextConstraint)()
+
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.AssertFailed if e causedBy vprAssertAtomicityContextConstraint =>
+              PreconditionError(call, CalleeAtomicityContextError(call))
+          }
+
+          val vprExhalePres = vpr.Exhale(vprPre)()
+
+          val ebt = this.errorBacktranslator /* TODO: Should not be necessary!!!!! */
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.ExhaleFailed if e causedBy vprExhalePres =>
+              PreconditionError(call, ebt.translate(e.reason))
+          }
+
+          val vprHavocTargets = vprReturns map havoc
+
+          val vprInhalePosts = vpr.Inhale(vprPost)()
+
+          ( // before:
+            vpr.Seqn(
+              Vector(
+                vprAssertLvlConstraint,
+                vprAssertAtomicityContextConstraint,
+                vprExhalePres
+              ),
+              Vector.empty
+            )(), // after:
+            vpr.Seqn(
+              vprHavocTargets :+ vprInhalePosts,
+              Vector.empty
+            )(),
+          )
+
+        }
+
+        val (before, after) = beforeAndAfter.unzip
+
+        val stabilizeFrameRegions =
+          stabilizeAllInstances(s"within ${parallel.statementName}@${parallel.lineColumnPosition}")
+
+        vpr.Seqn(
+          before ++ Vector(stabilizeFrameRegions) ++ after,
+          Vector.empty
+        )()
 
       case stmt: PMakeAtomic => translate(stmt)
       case stmt: PUpdateRegion => translate(stmt)

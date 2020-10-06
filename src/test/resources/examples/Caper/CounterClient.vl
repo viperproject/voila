@@ -67,10 +67,8 @@ procedure parallel_incr(int lvl, int alvl, id dummy) returns (id r, cell x)
   assert Join(s1, s1_lvl, y1, r, lvl, x) && Join(s2, s2_lvl, y2, r, lvl, x);
   inhale Join(s1, s1_lvl, y1, r, lvl, x) && Join(s2, s2_lvl, y2, r, lvl, x);
 
-  // fork thread_incr(x, y1);
-  exhale thread_incr_PRE(r, lvl, x, s1, s1_lvl, y1);
-  // fork thread_incr(x, y2);
-  exhale thread_incr_PRE(r, lvl, x, s2, s2_lvl, y2);
+  fork thread_incr(x, y1);
+  fork thread_incr(x, y2);
 
   wait(s1, s1_lvl, y1, r, lvl, x);
   wait(s2, s2_lvl, y2, r, lvl, x);
