@@ -335,7 +335,7 @@ case class PMakeAtomic(regionPredicate: PPredicateExp, guards: Vector[PRegionedG
   val components: Vector[PStatement] = Vector(body)
 }
 
-case class PUpdateRegion(regionPredicate: PPredicateExp, body: PStatement)
+case class PUpdateRegion(regionPredicate: PPredicateExp, cond: Option[PExpression], body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "update-region"

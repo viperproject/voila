@@ -21,9 +21,8 @@ abstract_atomic procedure read(id c, int lvl, memcell x) returns (int ret)
   ensures Counter(c, lvl, x, n) && G@c;
   ensures ret == n;
 {
-  //:: UnexpectedOutput(make-atomic_error:tracking_permission_error, /voila/issue/8/)
   make_atomic using Counter(c, lvl, x) with G@c {
-    update_region using Counter(c, lvl, x) {
+    update_region using Counter(c, lvl, x) if true {
       ret := x.f;
     }
   }

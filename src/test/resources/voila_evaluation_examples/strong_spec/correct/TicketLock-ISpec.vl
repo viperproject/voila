@@ -58,15 +58,8 @@ make_atomic procedure acquire(id r, int alvl, id rx, int xlvl, cell x, id ry, in
     invariant v <  t ==> r |=> <D>;
     invariant v == t ==> r |=> (nii, nii);
   {
-    open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) {
+    update_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) if v == t {
       v := read(rx, xlvl, x);
-    }
-
-    if (v == t) {
-      // manual update region if t is the fresh owner
-      assert TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, ?nf);
-      exhale r |=> <D>;
-      inhale r |=> (nf, nf);
     }
   }
   while(v < t);

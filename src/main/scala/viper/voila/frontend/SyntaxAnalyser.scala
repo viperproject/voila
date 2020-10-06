@@ -444,6 +444,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val updateRegion: Parser[PUpdateRegion] =
     "update_region" ~>
     ("using" ~> predicateExp <~ ";".?) ~
+    ("if" ~> expression <~ ";".?).? ~
     ("{" ~> statements <~ "}") ^^ PUpdateRegion
 
   lazy val useAtomic: Parser[PUseAtomic] =

@@ -345,9 +345,12 @@ class DefaultPrettyPrinter
         (   "use_atomic" <> line
          <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> ssep(guards map toDoc, comma <> space) <> semi) <> line
          <> braces(nest(toDoc(body))))
-      case PUpdateRegion(regionPredicate, body) =>
+      case PUpdateRegion(regionPredicate, cond, body) =>
         (   "update_region" <> line
          <> nest("using" <+> toDoc(regionPredicate) <> semi) <> line
+         <> (cond match {
+              case Some(c) => nest("if" <+> toDoc(c) <> semi) <> line
+              case None => emptyDoc })
          <> braces(nest(toDoc(body))))
       case POpenRegion(regionPredicate, body) =>
         (   "open_region" <> line

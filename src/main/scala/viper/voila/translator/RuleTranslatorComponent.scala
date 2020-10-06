@@ -312,7 +312,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         label.name
       )()
 
-    val stateChanged = vpr.NeCmp(currentState, oldState)()
+    val stateChanged = updateRegion.cond match {
+      case Some(c) => vpr.Or(vpr.NeCmp(currentState, oldState)(), translate(c))()
+      case None => vpr.NeCmp(currentState, oldState)()
+    }
 
     val obtainTrackingResource = {
       val stepFrom = stepFromAccess(vprRegionId, regionType)
