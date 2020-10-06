@@ -89,8 +89,8 @@ domain Map[U, V] {
   function Map_empty(): Map[U, V]
 
   axiom Map_empty_1 {
-    forall u: U :: { u in Map_keys(Map_empty()) }
-      !(u in Map_keys(Map_empty()))
+    forall u: U :: { u in Map_keys((Map_empty(): Map[U, V])) }
+      !(u in Map_keys((Map_empty(): Map[U, V])))
   }
 
   axiom Map_empty_2 {
