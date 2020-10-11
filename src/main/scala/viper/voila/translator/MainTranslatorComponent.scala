@@ -161,7 +161,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       )()
     }
 
-    /* TODO: [2018-11-25 Malte] Using interferenceReferenceFunctions.footprintManager.application
+    /* TODO: [2018-11-25 MS] Using interferenceReferenceFunctions.footprintManager.application
      *       feels like an unnecessary complicated way of getting to the name of a region's
      *       interference context footprint predicate.
      */
@@ -1610,7 +1610,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               LevelManager.levelHigherOrEqualToProcedureLevel(callee),
               vprStub.formalArgs,
               vprArguments,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             )
 
           val vprAtomicityContextConstraint =
@@ -1618,7 +1618,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               AtomicityContextLevelManager.callIsPossible(callee),
               vprStub.formalArgs,
               vprArguments,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             )
 
           val vprPre =
@@ -1626,7 +1626,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               viper.silicon.utils.ast.BigAnd(vprStub.pres),
               vprStub.formalArgs,
               vprArguments,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             )
 
           val vprPost =
@@ -1634,7 +1634,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               viper.silicon.utils.ast.BigAnd(vprStub.posts),
               vprStub.formalArgs ++ vprStub.formalReturns,
               vprArguments ++ vprReturns,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             ).transform(
               {
                 case old: vpr.Old =>
@@ -1706,7 +1706,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             LevelManager.levelHigherOrEqualToProcedureLevel(callee),
             vprStub.formalArgs,
             vprArguments,
-            Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            Set.empty /* [MS 2019-10-10] Not sure what to pass here */
           )
 
         val vprAtomicityContextConstraint =
@@ -1714,7 +1714,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             AtomicityContextLevelManager.callIsPossible(callee),
             vprStub.formalArgs,
             vprArguments,
-            Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            Set.empty /* [MS 2019-10-10] Not sure what to pass here */
           )
 
         val vprPre =
@@ -1722,7 +1722,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             viper.silicon.utils.ast.BigAnd(vprStub.pres),
             vprStub.formalArgs,
             vprArguments,
-            Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+            Set.empty /* [MS 2019-10-10] Not sure what to pass here */
           )
 
         val vprAssertLvlConstraint = vpr.Assert(vprLvlConstraint)()
@@ -1778,7 +1778,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               LevelManager.levelHigherOrEqualToProcedureLevel(callee),
               vprStub.formalArgs,
               vprArguments,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             )
 
           val vprAtomicityContextConstraint =
@@ -1786,7 +1786,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               AtomicityContextLevelManager.callIsPossible(callee),
               vprStub.formalArgs,
               vprArguments,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             )
 
           val vprPre =
@@ -1794,7 +1794,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               viper.silicon.utils.ast.BigAnd(vprStub.pres),
               vprStub.formalArgs,
               vprArguments,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             )
 
           val vprPost =
@@ -1802,7 +1802,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               viper.silicon.utils.ast.BigAnd(vprStub.posts),
               vprStub.formalArgs ++ vprStub.formalReturns,
               vprArguments ++ vprReturns,
-              Set.empty /* [Malte 2019-10-10] Not sure what to pass here */
+              Set.empty /* [MS 2019-10-10] Not sure what to pass here */
             ).transform(
               {
                 case old: vpr.Old =>

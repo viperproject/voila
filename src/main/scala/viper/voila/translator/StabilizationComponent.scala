@@ -646,8 +646,8 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     sequenceStabilizeSubject.addObserver(this) /* TODO: Probably a very bad idea -> data races */
   }
 
-  /** [2020-01-02 Malte] A hacky patch that replaces certain foralls with forperms.
-    * TODO: @Felix: I didn't figure out how to construct appropriate forperms in the first place,
+  /** [2020-01-02 MS] A hacky patch that replaces certain foralls with forperms.
+    * TODO: @FW: I didn't figure out how to construct appropriate forperms in the first place,
     * so I transform foralls to forperms as a postprocessing step. This should only be a temporary
     * solution.
     *

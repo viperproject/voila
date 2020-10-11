@@ -25,7 +25,7 @@ import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
 
 object VoilaConstants {
   val toolName: String  = "Voila"
-  val toolCopyright: String  = "(c) Copyright ETH Zurich 2016 - 2019"
+  val toolCopyright: String  = "(c) Anonymous Authors"
 
   val buildRevision = BuildInfo.gitRevision
   val buildBranch = BuildInfo.gitBranch
