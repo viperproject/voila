@@ -27,14 +27,13 @@ object VoilaConstants {
   val toolName: String  = "Voila"
   val toolCopyright: String  = "(c) Copyright ETH Zurich 2016 - 2019"
 
-  val buildVersion: Option[String] = {
-    val buildRevision = BuildInfo.hgRevision
-    val buildBranch = BuildInfo.hgBranch
+  val buildRevision = BuildInfo.gitRevision
+  val buildBranch = BuildInfo.gitBranch
 
+  val buildVersion: Option[String] =
     if (buildRevision.isEmpty && buildBranch.isEmpty) None
-    else if (buildBranch == "default") Some(buildRevision)
+    else if (buildBranch == "master") Some(buildRevision)
     else Some(s"$buildRevision@$buildBranch")
-  }
 
   val toolVersion: String =
     s"${BuildInfo.projectVersion}${buildVersion.fold("")(v => s" ($v)")}"
