@@ -1,6 +1,13 @@
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.{Failure, Success, Try}
 
+// [2020-10-12 MS]
+//   When assembling a fat test JAR (test:assembly), the files under
+//   src/test don't end up in tje JAR if the next line is missing.
+//   I'm not sure why that is, or why exactly the next line helps.
+//   To be investigated.
+Project.inConfig(Test)(baseAssemblySettings ++ Seq(Test / assembly / test := {}))
+
 // Import general settings from Silver
 lazy val silver = project in file("silver")
 
