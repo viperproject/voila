@@ -1078,15 +1078,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprStatement = directlyTranslate(statement)
 
-    /**
-      * We stabilize:
-      * 1) After an atomic statement in a non-atomic context.
-      * 2) Between precondition exhale and postcondition inhale at call.
-      * 3) Between exhaling and inhaling the invariant before a loop.
-      * 4) In encoding of make-atomic.
-      * 5) ~ After a sequence of ghost statement where region state was bound.
-      */
-
+    // We stabilize after an atomic statement in a non-atomic context.
     val optVprHavoc = {
       if (
         !semanticAnalyser.isGhost(statement) && !statement.isInstanceOf[PSeqComp] &&
