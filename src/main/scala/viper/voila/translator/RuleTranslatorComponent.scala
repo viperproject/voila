@@ -569,8 +569,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val unfoldRegionPredicate =
       vpr.Unfold(regionPredicateAccess(region, vprInArgs))()
 
-    val tranitionInterferenceContext
-      = linkInterferenceContext(region, vprInArgs)
+    val tranitionInterferenceContext = linkInterferenceContext(region, vprInArgs)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.UnfoldFailed if e causedBy unfoldRegionPredicate =>

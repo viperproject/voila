@@ -1074,10 +1074,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 s"(@${statement.lineColumnPosition})")
     }
 
-    val necInterferenceContexts = necessaryInterferenceContexts(statement)
-    val optInferContext = if (necInterferenceContexts.nonEmpty) {
-      Some(nonAtomicStabilizeSingleInstances("infer context for first statement", necInterferenceContexts: _*))
-    } else None
+    val inferInterferenceContexts = necessaryInterferenceContexts(statement)
 
     val vprStatement = directlyTranslate(statement)
 
@@ -1141,7 +1138,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     vpr.Seqn(
-      optInferContext.toVector ++ (vprStatement +: optVprHavoc.toVector),
+      inferInterferenceContexts ++ (vprStatement +: optVprHavoc.toVector),
       Vector.empty
     )()
   }
@@ -1149,29 +1146,83 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
   /**
     *
     */
-  lazy val necessaryInterferenceContexts: PStatement => Vector[(PRegion, Vector[vpr.Exp])] =
-    attr[PStatement, Vector[(PRegion, Vector[vpr.Exp])]] { s =>
+  lazy val necessaryInterferenceContexts: PStatement => Vector[vpr.Stmt] =
+    attr[PStatement, Vector[vpr.Stmt]] { s =>
+
+      def checkRegionAccess(r: PRegion, args: Vector[vpr.Exp], src: PStatement): vpr.Stmt = {
+        val regAcc =
+          vpr.PredicateAccessPredicate(
+            vpr.PredicateAccess(
+              args = args,
+              predicateName = r.id.name
+            )(),
+            vpr.FullPerm()()
+          )()
+
+        vpr.Assert(regAcc)().withSource(src)
+      }
+
       if (!s.isInstanceOf[PSeqComp] && semanticAnalyser.expectedAtomicity(s) == AtomicityKind.Nonatomic && semanticAnalyser.isFirstStatement(s)) {
         semanticAnalyser.nextActualNonSeqStatement(s) match {
           case Some(r: POpenRegion) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
-            Vector((region, inArgs map translate))
+            val vArgs = inArgs map translate
+            val regionCheck = checkRegionAccess(region, vArgs, r)
+            errorBacktranslator.addErrorTransformer {
+              case e: vprerr.AssertFailed if e causedBy regionCheck =>
+                OpenRegionError(r, InsufficientRegionPermissionError(r.regionPredicate))
+            }
+            Vector(
+              regionCheck,
+              nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
+            )
+
           case Some(r: PUseAtomic) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
-            Vector((region, inArgs map translate))
+            val vArgs = inArgs map translate
+            val regionCheck = checkRegionAccess(region, vArgs, r)
+            errorBacktranslator.addErrorTransformer {
+              case e: vprerr.AssertFailed if e causedBy regionCheck =>
+                UseAtomicError(r, InsufficientRegionPermissionError(r.regionPredicate))
+            }
+            Vector(
+              regionCheck,
+              nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
+            )
+
           case Some(r: PMakeAtomic) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
-            Vector((region, inArgs map translate))
+            val vArgs = inArgs map translate
+            val regionCheck = checkRegionAccess(region, vArgs, r)
+            errorBacktranslator.addErrorTransformer {
+              case e: vprerr.AssertFailed if e causedBy regionCheck =>
+                MakeAtomicError(r, InsufficientRegionPermissionError(r.regionPredicate))
+            }
+            Vector(
+              regionCheck,
+              nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
+            )
+
           case Some(r: PUpdateRegion) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
-            Vector((region, inArgs map translate))
+            val vArgs = inArgs map translate
+            val regionCheck = checkRegionAccess(region, vArgs, r)
+            errorBacktranslator.addErrorTransformer {
+              case e: vprerr.AssertFailed if e causedBy regionCheck =>
+                UpdateRegionError(r, InsufficientRegionPermissionError(r.regionPredicate))
+            }
+            Vector(
+              regionCheck,
+              nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
+            )
+
           case Some(call: PProcedureCall) =>
             val callee =
               semanticAnalyser.entity(call.procedure).asInstanceOf[ProcedureEntity].declaration
             callee.atomicity match {
               case _: PAbstractAtomic | _: PMakeAbstractAtomic =>
                 val vprArguments = call.arguments map translate
-                callee.inters.map(inter => {
+                val (regAndArgs, regionChecks) = callee.inters.map(inter => {
                   val regionId = semanticAnalyser.interferenceOnRegionId(inter)
                   val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
                   val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
@@ -1182,8 +1233,16 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   val vprRegionArguments =
                     regionArguments map (translate(_).replace(vprFormalsToActuals))
 
-                  (region, vprRegionArguments)
-                }).distinct
+                  val regionCheck = checkRegionAccess(region, vprRegionArguments, call)
+                  errorBacktranslator.addErrorTransformer {
+                    case e: vprerr.AssertFailed if e causedBy regionCheck =>
+                      PreconditionError(call, InterferenceError(inter))
+                  }
+
+                  ((region, vprRegionArguments), regionCheck)
+                }).unzip
+
+                regionChecks :+ nonAtomicStabilizeSingleInstances("infer context for open-region", regAndArgs: _*)
 
               case _ => Vector.empty
             }
@@ -1737,8 +1796,12 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               PreconditionError(call, ebt.translate(e.reason))
           }
 
-          val stabilizeFrameRegions =
-            stabilizeAllInstances(s"within ${call.statementName}@${call.lineColumnPosition}")
+          val stabilizeFrameRegions = {
+            callee.atomicity match {
+              case PPrimitiveAtomic() => vpr.Seqn(Vector.empty, Vector.empty)()
+              case _ => stabilizeAllInstances(s"within ${call.statementName}@${call.lineColumnPosition}")
+            }
+          }
 
           val vprHavocTargets = vprReturns map havoc
 
