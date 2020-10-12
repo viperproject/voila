@@ -82,7 +82,8 @@ procedure test01R4_instable_precondition(id r, int lvl, cell x)
   requires R4(r, lvl, x, ?v0) && G4(v0)@r;
 
 procedure test01R4(id r, int lvl, cell x)
-  requires false ==> R4(r, lvl, x); // Workaround for issue #84
+  level lvl+1;
+  requires lvl >= 0;
   ensures  R4(r, lvl, x, _);
 {
   int n;
@@ -92,7 +93,9 @@ procedure test01R4(id r, int lvl, cell x)
   assume v0 <= n;
 
   assert G4(v0)@r;
+  skip;
 
+  //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
   use_atomic
     using R4(r, lvl, x) with G4(v0)@r;
   {

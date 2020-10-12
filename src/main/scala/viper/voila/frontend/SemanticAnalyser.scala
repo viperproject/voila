@@ -1410,10 +1410,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val expectedAtomicity: PStatement => AtomicityKind =
     attr[PStatement, AtomicityKind ] {
       case tree.parent(_: PIf | _: PWhile | _: PFork | _: PParallelCall ) => AtomicityKind.Nonatomic
+      case tree.parent(_: PNewStmt) => AtomicityKind.Nonatomic
 
-      case tree.parent(PSeqComp(first, second)) =>
-        if (isGhost(first)) atomicity(second)
-        else if (isGhost(second)) atomicity(first)
+      case tree.parent(p@ PSeqComp(first, second)) =>
+        if (isGhost(first) || isGhost(second)) expectedAtomicity(p)
         else AtomicityKind.Nonatomic
 
       case tree.parent(_: PMakeAtomic) => AtomicityKind.Nonatomic
@@ -1432,6 +1432,34 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         sys.error(  s"Unsupported: determining the expected atomicity of '$of' "
                   + s"(class: ${of.getClass.getSimpleName}) in the context of '$parent' "
                   + s"(class: ${parent.getClass.getSimpleName})")
+    }
+
+  lazy val isFirstStatement: PStatement => Boolean =
+    attr[PStatement, Boolean] {
+      case n@ tree.parent(p@ PSeqComp(left, _)) => n == left && isFirstStatement(p)
+      case _ => true
+    }
+
+  lazy val nextStatement: PStatement => Option[PStatement] =
+    attr[PStatement, Option[PStatement]] {
+      case n@ tree.parent(p@ PSeqComp(left, right)) => if (n == left) Some(right) else nextStatement(p)
+      case _ => None
+    }
+
+  lazy val firstStatement: PStatement => PStatement =
+    attr[PStatement, PStatement] {
+      case PSeqComp(left, _) => firstStatement(left)
+      case s => s
+    }
+
+  lazy val nextActualNonSeqStatement: PStatement => Option[PStatement] =
+    attr[PStatement, Option[PStatement]] { s =>
+      val s2 = firstStatement(s)
+      if (isGhost(s2)) {
+        nextStatement(s2).flatMap(nextActualNonSeqStatement)
+      } else {
+        Some(s2)
+      }
     }
 
   lazy val freeVariables: PExpression => ListSet[PIdnUse] =

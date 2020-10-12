@@ -70,7 +70,7 @@ abstract_atomic procedure error2(id r, int alvl, id c, int lvl, memcell x)
   {
     update_region using Client(r,alvl,c,lvl,x);
     {
-      //:: ExpectedOutput(precondition_error:interference_error)
+      //:: ExpectedOutput(precondition_error:callee_level_too_high_error)
       errorCallee(r,alvl,c,lvl,x);
     }
   }

@@ -284,11 +284,16 @@ procedure pop(id x_r, int x_lvl, bag x) returns (int status, int ret)
   inhale status == 1 ==> BagList(t_r, t_lvl, t, v, t2, _) && t_lvl < x_lvl && t != null && Inv(v); // Loop invariant
 
   if (status == 1) {
-//    ret := [t];
-//    return ret;
+    //    ret := [t];
+    //    return ret;
+    // Model memory immutability (as before)
+    assert BagList(t_r, t_lvl, t, ?v_3, ?t2_3);
+    assume v_3 == v && t2_3 == t2;
+    assert BagList(t_r, t_lvl, t, v, t2);
     open_region
       using BagList(t_r, t_lvl, t);
     {
+
       ret := t.value;
     }
   }
