@@ -76,11 +76,11 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     
     val guardArgEvaluationLabel = freshLabel("guard_arg_eval")
 
-    val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
-
-    val havoc2 = stabilizeSingleInstances("after atomic", (region, regionInArgs))
+    val havoc1 = stabilizeSingleInstances("before atomic", (region, regionInArgs)) // used to constrain state of updated region
 
     val ruleBody = translate(makeAtomic.body)
+
+    val havocSingleInstance = havocSingleInstances("after atomic", (region, regionInArgs))
 
     val vprAtomicityContextX = atomicityContextFunctions.application(region, regionInArgs)
 
@@ -214,7 +214,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           havoc1,
           ruleBody,
           checkUpdatePermitted,
-          havoc2,
+          havocSingleInstance,
           BLANK_LINE,
           assumeCurrentStateIsStepTo,
           assumeOldStateWasStepFrom,
@@ -286,7 +286,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UpdateRegionError(updateRegion, InsufficientRegionPermissionError(updateRegion.regionPredicate))
     }
 
-    val stabilizeFrameRegions =
+    val havocRegionCopies =
       havocSingleInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}", (region, vprInArgs))
 
     val ruleBody = translate(updateRegion.body)
@@ -364,7 +364,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
           exhaleAtomicityTracking,
           unfoldRegionPredicate,
           tranitionInterferenceContext,
-          stabilizeFrameRegions,
+          havocRegionCopies,
           ruleBody,
           foldRegionPredicate,
           postRegionUpdate,
@@ -454,13 +454,8 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val inhaleGuard = vpr.Inhale(guard)()
 
-    val stabilizationReason = s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}"
-
-    val stabilizeOtherRegionTypes =
-      stabilizeAllInstances(stabilizationReason, tree.root.regions.filterNot(_ == region): _*)
-
-    val stabilizeCurrentRegionTypes =
-      stabilizeAllInstances(stabilizationReason, region)
+    val havocRegionCopies =
+      havocSingleInstances(s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}", (region, vprInArgs))
 
     val currentState =
       vpr.FuncApp(
@@ -505,11 +500,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
            * I.e. the check is independent of the technical treatment of frame stabilisation.
            */
           exhaleGuard,
-          stabilizeOtherRegionTypes,
           unfoldRegionPredicate,
           transitionInterferenceContext,
-          stabilizeCurrentRegionTypes,
           inhaleGuard,
+          havocRegionCopies,
           ruleBody,
           foldRegionPredicate,
           stateChangeAllowed,

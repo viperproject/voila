@@ -45,6 +45,7 @@ abstract_atomic procedure read02(id c, int lvl, memcell x) returns (int ret)
 procedure read01_client01(id c, int lvl, memcell x) returns (int ret)
   requires Counter(c, lvl, x, ?n) && G@c;
   ensures Counter(c, lvl, x, ?m) && G@c;
+  //:: ExpectedOutput(postcondition_error:assertion_error)
   ensures ret == n;
 {
   ret := read01(c, lvl, x);
@@ -62,9 +63,9 @@ procedure read01_client02(id c, int lvl, memcell x) returns (int ret)
 
 procedure read01_client03(id c, int lvl, memcell x) returns (int ret)
   requires Counter(c, lvl, x, ?n) && G@c;
-  ensures ret == n;
   //:: ExpectedOutput(postcondition_error:region_state_error)
   ensures Counter(c, lvl, x, n) && G@c;
+  // ensures ret == n;
 {
   int v;
   v := read01(c, lvl, x);

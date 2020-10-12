@@ -87,26 +87,27 @@ procedure test4(id r, int lvl, memcell x) returns (int ret)
 
 }
 
-//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test5(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
   requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  requires n in Set(?k2 | n <= k2 && k2 < d ); // redundant, but required to aid the verifier. See /voila/issue/102/
   ensures TLock(r, lvl, x, ?mf, ?nf);
   ensures nf >= d;
 {
+  assert TLock(r, lvl, x, ?m2, ?n2) && n2 < d;
   use_atomic
-   	using TLock(r, lvl, x) with TICKET|Set(?k3 | n <= k3 && k3 < d)|@r;
+   	using TLock(r, lvl, x) with TICKET|Set(?k3 | n2 <= k3 && k3 < d)|@r;
    {
    	x.owner := d;
    }
 }
 
-//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test6(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
   requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  requires n in Set(?k2 | n <= k2 && k2 < d ); // redundant, but required to aid the verifier. See /voila/issue/102/
   ensures TLock(r, lvl, x, ?mf, ?nf);
   ensures nf == d-1;
 {
@@ -122,11 +123,11 @@ procedure test6(id r, int lvl, memcell x, int d) returns (int ret)
   assert TICKET(d-1)@r; // is required
 }
 
-//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test7(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
   requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  requires n in Set(?k2 | n <= k2 && k2 < d ); // redundant, but required to aid the verifier. See /voila/issue/102/
   ensures TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
   ensures TLock(r, lvl, x, ?mf, ?nf);
   ensures nf >= d-1;
@@ -152,11 +153,11 @@ procedure test8(id r, int lvl, memcell x, int d) returns (int ret)
 	skip;
 }
 
-//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test9(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n < d;
   requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  requires n in Set(?k2 | n <= k2 && k2 < d ); // redundant, but required to aid the verifier. See /voila/issue/102/
   ensures TLock(r, lvl, x, ?mf, ?nf);
   ensures nf >= d;
 {
@@ -173,11 +174,11 @@ procedure test9(id r, int lvl, memcell x, int d) returns (int ret)
    }
 }
 
-//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 procedure test10(id r, int lvl, memcell x, int d) returns (int ret)
   requires TLock(r, lvl, x, ?m, ?n);
   requires n+1 < d;
   requires TICKET|Set(?k2 | n <= k2 && k2 < d )|@r;
+  requires n in Set(?k2 | n <= k2 && k2 < d ); // redundant, but required to aid the verifier. See /voila/issue/102/
   ensures TLock(r, lvl, x, ?mf, ?nf);
   ensures nf == n+1;
 {

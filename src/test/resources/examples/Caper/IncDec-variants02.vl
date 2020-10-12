@@ -30,8 +30,7 @@ abstract_atomic procedure spinIncBy(id s, int lvl, memcell x, int k, set<int> fr
         using Cell(s, lvl, x);
       {
         v := x.val;
-        //:: UnexpectedOutput(assert_error:assertion_error, /voila/issue/104/)
-        assert v in from; // Unexpectedly fails, as would the third loop invariant
+        assert v in from;
       }
 
       update_region

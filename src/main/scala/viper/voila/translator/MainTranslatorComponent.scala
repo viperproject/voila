@@ -6,6 +6,8 @@
 
 package viper.voila.translator
 
+import org.bitbucket.inkytonik.kiama.attribution.UncachedAttribution.attr
+
 import scala.collection.{breakOut, mutable}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
 import viper.silver.{ast => vpr}
@@ -570,7 +572,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           vpr.Seqn(vprSaveInferenceSets, Vector.empty)()
 
         case PNonAtomic() =>
-          inferContextAllInstances("beginning of non atomic procedure")
+          vpr.Seqn(Vector.empty, Vector.empty)()
 
         case other: PPrimitiveAtomic =>
           sys.error(s"$other (${other.getClass.getSimpleName}) should never occur here")
@@ -857,9 +859,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
           val guardArgEvaluationLabel = freshLabel("guard_arg_eval")
 
-          val havoc1 = nonAtomicStabilizeSingleInstances("before atomic", (region, regionInArgs))
+          val havoc1 = stabilizeSingleInstances("before atomic", (region, regionInArgs)) // used to constrain state of updated region
 
-          val havoc2 = stabilizeSingleInstances("after atomic", (region, regionInArgs))
+          val havoc2 = havocSingleInstances("after atomic", (region, regionInArgs))
 
           val ruleBody = translate(stmt)
 
@@ -984,7 +986,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               exhaleGuard,
               inhaleDiamond,
               assignContext,
-              havoc1,
               ruleBody,
               checkUpdatePermitted,
               havoc2,
@@ -1014,7 +1015,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       s"Expected procedure ${procedure.id} to have no interference clause, "
         + s"but found ${procedure.inters}")
 
-    val inferInterferenceSets = inferContextAllInstances("beginning of non atomic procedure")
 
     val vprBody = {
       val mainBody =
@@ -1023,7 +1023,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           case None => vpr.Inhale(vpr.FalseLit()())()
         }
 
-      vpr.Seqn(Vector(inferInterferenceSets, mainBody), procedure.locals map translate)()
+      vpr.Seqn(Vector(mainBody), procedure.locals map translate)()
     }
 
     val vprStub = translatedProcedureStubs(procedure.id.name)
@@ -1074,40 +1074,66 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 s"(@${statement.lineColumnPosition})")
     }
 
+    val necInterferenceContexts = necessaryInterferenceContexts(statement)
+    val optInferContext = if (necInterferenceContexts.nonEmpty) {
+      Some(nonAtomicStabilizeSingleInstances("infer context for first statement", necInterferenceContexts: _*))
+    } else None
+
     val vprStatement = directlyTranslate(statement)
 
-    def mustHavocAfter(s: PStatement): Boolean = {
-      semanticAnalyser.atomicity(s) == AtomicityKind.Nonatomic ||
-        (semanticAnalyser.atomicity(s) == AtomicityKind.Atomic &&
-         !semanticAnalyser.isGhost(s) &&
-         semanticAnalyser.expectedAtomicity(s) == AtomicityKind.Nonatomic)
+    /**
+      * We stabilize:
+      * 1) After an atomic statement in a non-atomic context.
+      * 2) Between precondition exhale and postcondition inhale at call.
+      * 3) Between exhaling and inhaling the invariant before a loop.
+      * 4) In encoding of make-atomic.
+      * 5) ~ After a sequence of ghost statement where region state was bound.
+      */
+
+    val optVprHavoc = {
+      if (
+        !semanticAnalyser.isGhost(statement) && !statement.isInstanceOf[PSeqComp] &&
+          semanticAnalyser.atomicity(statement) == AtomicityKind.Atomic &&
+          semanticAnalyser.expectedAtomicity(statement) == AtomicityKind.Nonatomic
+      ) {
+        Some(nonAtomicStabilizeAllInstances(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
+      }
+      else None
     }
 
-    val optVprHavoc =
-      if (mustHavocAfter(statement)) {
-        val alreadyHavoced =
-          statement match {
-            case PSeqComp(_, second) => mustHavocAfter(second)
-            case PIf(_, thn, els) => mustHavocAfter(thn) && els.fold(true)(mustHavocAfter)
-            case _: PWhile => false
-            case _: PMakeAtomic => false
-            case _: PUpdateRegion => false
-            case _: PUseAtomic => false
-            case _: POpenRegion => false
-            case _: PFork => true
-            case _: PParallelCall => true
-            case _: PCompoundStatement => ??? /* Forgot about a particular compound statement */
-            case _ => false
-          }
 
-        if (alreadyHavoced) {
-          None
-        } else {
-          Some(nonAtomicStabilizeAllInstances(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
-        }
-      } else {
-        None
-      }
+//    def mustHavocAfter(s: PStatement): Boolean = {
+////      semanticAnalyser.atomicity(s) == AtomicityKind.Nonatomic ||
+//        (semanticAnalyser.atomicity(s) == AtomicityKind.Atomic &&
+//         !semanticAnalyser.isGhost(s) &&
+//         semanticAnalyser.expectedAtomicity(s) == AtomicityKind.Nonatomic)
+//    }
+//
+//    val optVprHavoc =
+//      if (mustHavocAfter(statement)) {
+//        val alreadyHavoced =
+//          statement match {
+//            case PSeqComp(_, second) => mustHavocAfter(second)
+//            case PIf(_, thn, els) => mustHavocAfter(thn) && els.fold(true)(mustHavocAfter)
+//            case _: PWhile => false
+//            case _: PMakeAtomic => false
+//            case _: PUpdateRegion => false
+//            case _: PUseAtomic => false
+//            case _: POpenRegion => false
+//            case _: PFork => true
+//            case _: PParallelCall => true
+//            case _: PCompoundStatement => ??? /* Forgot about a particular compound statement */
+//            case _ => false
+//          }
+//
+//        if (alreadyHavoced) {
+//          None
+//        } else {
+//          Some(nonAtomicStabilizeAllInstances(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
+//        }
+//      } else {
+//        None
+//      }
 
     statement match {
       case _: PCompoundStatement => translationIndentation -= 1
@@ -1115,10 +1141,59 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     vpr.Seqn(
-      vprStatement +: optVprHavoc.toVector,
+      optInferContext.toVector ++ (vprStatement +: optVprHavoc.toVector),
       Vector.empty
     )()
   }
+
+  /**
+    *
+    */
+  lazy val necessaryInterferenceContexts: PStatement => Vector[(PRegion, Vector[vpr.Exp])] =
+    attr[PStatement, Vector[(PRegion, Vector[vpr.Exp])]] { s =>
+      if (!s.isInstanceOf[PSeqComp] && semanticAnalyser.expectedAtomicity(s) == AtomicityKind.Nonatomic && semanticAnalyser.isFirstStatement(s)) {
+        semanticAnalyser.nextActualNonSeqStatement(s) match {
+          case Some(r: POpenRegion) =>
+            val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
+            Vector((region, inArgs map translate))
+          case Some(r: PUseAtomic) =>
+            val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
+            Vector((region, inArgs map translate))
+          case Some(r: PMakeAtomic) =>
+            val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
+            Vector((region, inArgs map translate))
+          case Some(r: PUpdateRegion) =>
+            val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
+            Vector((region, inArgs map translate))
+          case Some(call: PProcedureCall) =>
+            val callee =
+              semanticAnalyser.entity(call.procedure).asInstanceOf[ProcedureEntity].declaration
+            callee.atomicity match {
+              case _: PAbstractAtomic | _: PMakeAbstractAtomic =>
+                val vprArguments = call.arguments map translate
+                callee.inters.map(inter => {
+                  val regionId = semanticAnalyser.interferenceOnRegionId(inter)
+                  val regionPredicate = semanticAnalyser.usedWithRegionPredicate(regionId)
+                  val (region, regionArguments, _) = getRegionPredicateDetails(regionPredicate)
+
+                  val vprFormalsToActuals =
+                    callee.formalArgs.map(translate(_).localVar).zip(vprArguments).toMap
+
+                  val vprRegionArguments =
+                    regionArguments map (translate(_).replace(vprFormalsToActuals))
+
+                  (region, vprRegionArguments)
+                }).distinct
+
+              case _ => Vector.empty
+            }
+          case _ => Vector.empty
+        }
+      } else {
+        Vector.empty
+      }
+
+    }
 
   protected def directlyTranslate(statement: PStatement): vpr.Stmt = {
     statement match {
@@ -1194,8 +1269,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           atomicityContextFunctions.refSelect(region, constraint, preAtomicityLabel)(wrapper)
         })
 
-        val inferContext = inferContextAllInstances("infer context inside while")
-
         val previousLvlToken = LevelManager.getCurrentLevelToken
 
         val vprPureBody = translate(body)
@@ -1210,7 +1283,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             inhaleSkolemizationFunctionFootprints +:
               initializeFootprints ++:
               atomicityConstraints ++:
-              Vector(inferContext, vprPureBody, levelCheck),
+              Vector(vprPureBody, levelCheck),
             Vector.empty
           )()
 
@@ -1594,7 +1667,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                       PreconditionError(call, InterferenceError(inter))
                   }
 
-                  vprCheckInterferenceContext
+                  vpr.Seqn(Vector(vprCheckInterferenceContext), Vector.empty)()
                 })
 
               vpr.Seqn(vprCheckInterferences, Vector.empty)()
@@ -1665,7 +1738,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           }
 
           val stabilizeFrameRegions =
-            stabilizeAllInstances(s"before ${call.statementName}@${call.lineColumnPosition}")
+            stabilizeAllInstances(s"within ${call.statementName}@${call.lineColumnPosition}")
 
           val vprHavocTargets = vprReturns map havoc
 

@@ -68,6 +68,7 @@ procedure non_atomic_unlock02(id r, int alvl, id a, int lvl, memcell x)
 {
   inhale CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   inhale Inv();
+  skip;
 
   use_atomic
     using CAPLock(r, alvl, a, lvl, x) with K@r;
@@ -84,6 +85,7 @@ procedure non_atomic_unlock03(id r, int alvl, id a, int lvl, memcell x)
 {
   inhale CAPLock(r, alvl, a, lvl, x, ?v) && v == 1 && K@r;
   inhale Inv();
+  skip;
 
   use_atomic
     using CAPLock(r, alvl, a, lvl, x) with K@r;

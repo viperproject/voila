@@ -30,6 +30,7 @@ procedure test01(id c, int lvl, memcell x)
 {
   int v;
   v := read(c, lvl, x);
+  //:: ExpectedOutput(assert_error:assertion_error)
   assert v == n;
 }
 

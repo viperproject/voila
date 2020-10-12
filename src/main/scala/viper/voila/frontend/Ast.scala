@@ -283,9 +283,11 @@ case class PNewStmt(lhs: PIdnUse,
                     arguments: Vector[PExpression],
                     guards: Option[Vector[PBaseGuardExp]],
                     initializer: Option[PStatement])
-    extends PStatement {
+    extends PCompoundStatement {
 
   val statementName = s"new:${constructor.name}"
+
+  lazy val components: Vector[PStatement] = initializer.toVector
 }
 
 case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Vector[PIdnUse])

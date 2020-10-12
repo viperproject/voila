@@ -34,7 +34,7 @@ procedure test02(id r, int lvl, memcell x, id s, memcell y)
     x.f := 1;
   }
 
-  assert Cell(s, lvl, y, 0);
+  // assert Cell(s, lvl, y, 0); // this was possible before
 
   //:: ExpectedOutput(assert_error:assertion_error)
   assert false;
