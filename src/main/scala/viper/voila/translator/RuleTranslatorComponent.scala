@@ -286,8 +286,24 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         UpdateRegionError(updateRegion, InsufficientRegionPermissionError(updateRegion.regionPredicate))
     }
 
-    val havocRegionCopies =
-      havocSingleInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}", (region, vprInArgs))
+    val havocRegionCopies = {
+      val regionPredicate =
+        vpr.PredicateAccessPredicate(
+          vpr.PredicateAccess(
+            args = vprInArgs,
+            predicateName = region.id.name
+          )(),
+          vpr.CurrentPerm(
+            vpr.PredicateAccess(
+              args = vprInArgs,
+              predicateName = region.id.name
+            )()
+          )()
+        )()
+
+      vpr.Exhale(regionPredicate)()
+      // havocSingleInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}", (region, vprInArgs))
+    }
 
     val ruleBody = translate(updateRegion.body)
 
@@ -454,8 +470,24 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
     val inhaleGuard = vpr.Inhale(guard)()
 
-    val havocRegionCopies =
-      havocSingleInstances(s"before ${useAtomic.statementName}@${useAtomic.lineColumnPosition}", (region, vprInArgs))
+    val havocRegionCopies = {
+      val regionPredicate =
+        vpr.PredicateAccessPredicate(
+          vpr.PredicateAccess(
+            args = vprInArgs,
+            predicateName = region.id.name
+          )(),
+          vpr.CurrentPerm(
+            vpr.PredicateAccess(
+              args = vprInArgs,
+              predicateName = region.id.name
+            )()
+          )()
+        )()
+
+      vpr.Exhale(regionPredicate)()
+      // havocSingleInstances(s"before ${updateRegion.statementName}@${updateRegion.lineColumnPosition}", (region, vprInArgs))
+    }
 
     val currentState =
       vpr.FuncApp(
