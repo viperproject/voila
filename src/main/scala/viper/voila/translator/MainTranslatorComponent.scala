@@ -1143,8 +1143,24 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     )()
   }
 
+  lazy val requiresInterferenceContext: PStatement => Boolean =
+    attr[PStatement, Boolean] {
+      _ => true
+//// The following optimisation leads to an incompleteness, thus it was removed for now.
+//      case call: PProcedureCall =>
+//        val callee =
+//          semanticAnalyser.entity(call.procedure).asInstanceOf[ProcedureEntity].declaration
+//        callee.inters.nonEmpty
+//
+//      case _: PMakeAtomic => true
+//      case r: POpenRegion => requiresInterferenceContext(r.body)
+//      case r: PUpdateRegion => requiresInterferenceContext(r.body)
+//      case r: PUseAtomic => requiresInterferenceContext(r.body)
+//      case _ => false
+    }
+
   /**
-    *
+    * Interference contexts are generated for abstract atomic calls and make-atomic
     */
   lazy val necessaryInterferenceContexts: PStatement => Vector[vpr.Stmt] =
     attr[PStatement, Vector[vpr.Stmt]] { s =>
@@ -1164,7 +1180,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       if (!s.isInstanceOf[PSeqComp] && semanticAnalyser.expectedAtomicity(s) == AtomicityKind.Nonatomic && semanticAnalyser.isFirstStatement(s)) {
         semanticAnalyser.nextActualNonSeqStatement(s) match {
-          case Some(r: POpenRegion) =>
+          case Some(r: POpenRegion) if requiresInterferenceContext(r) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
             val vArgs = inArgs map translate
             val regionCheck = checkRegionAccess(region, vArgs, r)
@@ -1177,7 +1193,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
             )
 
-          case Some(r: PUseAtomic) =>
+          case Some(r: PUseAtomic) if requiresInterferenceContext(r) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
             val vArgs = inArgs map translate
             val regionCheck = checkRegionAccess(region, vArgs, r)
@@ -1187,10 +1203,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             }
             Vector(
               regionCheck,
-              nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
+              nonAtomicStabilizeSingleInstances("infer context for use-atomic", (region, vArgs))
             )
 
-          case Some(r: PMakeAtomic) =>
+          case Some(r: PMakeAtomic) if requiresInterferenceContext(r) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
             val vArgs = inArgs map translate
             val regionCheck = checkRegionAccess(region, vArgs, r)
@@ -1200,10 +1216,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             }
             Vector(
               regionCheck,
-              nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
+              nonAtomicStabilizeSingleInstances("infer context for make-atomic", (region, vArgs))
             )
 
-          case Some(r: PUpdateRegion) =>
+          case Some(r: PUpdateRegion) if requiresInterferenceContext(r) =>
             val (region, inArgs, _) = getRegionPredicateDetails(r.regionPredicate)
             val vArgs = inArgs map translate
             val regionCheck = checkRegionAccess(region, vArgs, r)
@@ -1213,7 +1229,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             }
             Vector(
               regionCheck,
-              nonAtomicStabilizeSingleInstances("infer context for open-region", (region, vArgs))
+              nonAtomicStabilizeSingleInstances("infer context for update-region", (region, vArgs))
             )
 
           case Some(call: PProcedureCall) =>
@@ -1242,7 +1258,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   ((region, vprRegionArguments), regionCheck)
                 }).unzip
 
-                regionChecks :+ nonAtomicStabilizeSingleInstances("infer context for open-region", regAndArgs: _*)
+                regionChecks :+ nonAtomicStabilizeSingleInstances("infer context for abstract-atomic call", regAndArgs: _*)
 
               case _ => Vector.empty
             }
