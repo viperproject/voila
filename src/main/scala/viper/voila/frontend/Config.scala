@@ -41,7 +41,8 @@ class Config(arguments: Seq[String])
 
   val outputFileName: ScallopOption[String] = opt[String](
     name = "output",
-    descr = "Generated Viper program is written to this file")
+    descr = "Generated Viper program is written to this file",
+    hidden = true)
 
   val outputParsedProgramFileName: ScallopOption[String] = opt[String](
     name = "outputParsedProgram",
@@ -53,7 +54,8 @@ class Config(arguments: Seq[String])
     name = "logLevel",
     descr = "One of the log levels ALL, TRACE, DEBUG, INFO, WARN, ERROR, OFF (default: OFF)",
     default = Some("INFO"),
-    noshort = true
+    noshort = true,
+    hidden = true
   )(singleArgConverter(level => level.toUpperCase))
 
   val include: ScallopOption[List[String]] = opt[List[String]](
@@ -80,12 +82,14 @@ class Config(arguments: Seq[String])
           "can tremendously improve Voila's performance. See also Silicon option --disableHavocHack407 and the " +
           "corresponding Silicon issue #407.",
     default = Some(false),
+    hidden = true,
     noshort = true)
 
   val useQPsInsteadOfForperms: ScallopOption[Boolean] = opt[Boolean](
     name = "useQPsInsteadOfForperms",
     descr = "Using Viper's quantified permissions instead of forperm expressions is slower, but more complete.",
     default = Some(false),
+    hidden = true,
     noshort = true)
 
   /*
