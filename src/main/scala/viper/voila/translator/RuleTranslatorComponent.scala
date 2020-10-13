@@ -30,202 +30,479 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val regionType = semanticAnalyser.typ(region.state)
     val vprRegionIdArg = regionInArgs.head
 
-    val storeCurrentLvl = AtomicityContextLevelManager.registerRegionExp(region, regionInArgs)
+    if (makeAtomic.posts.isEmpty) {
+      val storeCurrentLvl = AtomicityContextLevelManager.registerRegionExp(region, regionInArgs)
 
-    val inhaleDiamond =
-      vpr.Inhale(diamondAccess(translateUseOf(regionId)))()
+      val inhaleDiamond =
+        vpr.Inhale(diamondAccess(translateUseOf(regionId)))()
 
-    val guard = viper.silicon.utils.ast.BigAnd(makeAtomic.guards map translate)
+      val guard = viper.silicon.utils.ast.BigAnd(makeAtomic.guards map translate)
 
-    val exhaleGuard =
-      vpr.Exhale(guard)().withSource(makeAtomic.guards.head)
-
-    errorBacktranslator.addErrorTransformer {
-      case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
-        MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guards.head))
-    }
-
-    val regionPredicate =
-      vpr.PredicateAccessPredicate(
-        vpr.PredicateAccess(
-          args = regionInArgs,
-          predicateName = region.id.name
-        )(),
-        vpr.FullPerm()()
-      )()
-
-    val exhaleRegionPredicate = vpr.Exhale(regionPredicate)().withSource(makeAtomic)
-
-    errorBacktranslator.addErrorTransformer {
-      case e: vprerr.ExhaleFailed if e causedBy exhaleRegionPredicate =>
-        MakeAtomicError(makeAtomic, InsufficientRegionPermissionError(makeAtomic.regionPredicate))
-    }
-
-    val (preFrameExhales, postFrameInhales) = completeFrame
-
-    val inhaleRegionPredicate = vpr.Inhale(regionPredicate)()
-
-    val contextCheck = checkAtomicityNotYetCaptured(region, regionInArgs)
-
-    errorBacktranslator.addErrorTransformer {
-      case e: vprerr.AssertFailed if e causedBy contextCheck =>
-        MakeAtomicError(makeAtomic, RegionAtomicityContextTrackingError(makeAtomic.regionPredicate))
-    }
-
-    val assignContext = assignAtomicityContext(region, regionInArgs)
-    
-    val guardArgEvaluationLabel = freshLabel("guard_arg_eval")
-
-    val havoc1 = stabilizeSingleInstances("before atomic", (region, regionInArgs)) // used to constrain state of updated region
-
-    val ruleBody = translate(makeAtomic.body)
-
-    val havocSingleInstance = havocSingleInstances("after atomic", (region, regionInArgs))
-
-    val vprAtomicityContextX = atomicityContextFunctions.application(region, regionInArgs)
-
-    val vprStepFrom =
-      stepFromLocation(vprRegionIdArg, regionType).withSource(regionId)
-
-    val vprStepTo =
-      stepToLocation(vprRegionIdArg, regionType).withSource(regionId)
-
-    val checkUpdatePermitted = {
-      val vprStepFromAllowed =
-        vpr.AnySetContains(
-          vprStepFrom,
-          vprAtomicityContextX
-        )().withSource(makeAtomic)
-
-      val vprCheckFrom =
-        vpr.Assert(vprStepFromAllowed)().withSource(makeAtomic)
+      val exhaleGuard =
+        vpr.Exhale(guard)().withSource(makeAtomic.guards.head)
 
       errorBacktranslator.addErrorTransformer {
-        case e @ vprerr.AssertFailed(_, reason: vprrea.InsufficientPermission, _)
-             if (e causedBy vprCheckFrom) && (reason causedBy vprStepFrom) =>
-
-          MakeAtomicError(makeAtomic)
-            .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
-            .dueTo(hintAtEnclosingLoopInvariants(regionId))
-            .dueTo(AdditionalErrorClarification("This could be related to issue #8", regionId))
-
-        case e @ vprerr.AssertFailed(_, reason: vprrea.AssertionFalse, _)
-             if (e causedBy vprCheckFrom) && (reason causedBy vprStepFromAllowed) =>
-
-          MakeAtomicError(makeAtomic)
-            .dueTo(IllegalRegionStateChangeError(makeAtomic.body))
-            .dueTo(AdditionalErrorClarification(
-                      "In particular, it cannot be shown that the region is transitioned from a " +
-                      "state that is compatible with the procedure's interference specification",
-                      regionId))
-            .dueTo(hintAtEnclosingLoopInvariants(regionId))
+        case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
+          MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guards.head))
       }
 
-      val vprCheckTo =
-        regionStateChangeAllowedByGuard(
-          region,
-          regionInArgs,
-          makeAtomic.guards, /* FIXME: only temporal placeholder, guard is going to be a vector itself */
-          vprStepFrom,
-          vprStepTo,
-          guardArgEvaluationLabel
-        ).withSource(makeAtomic)
+      val regionPredicate =
+        vpr.PredicateAccessPredicate(
+          vpr.PredicateAccess(
+            args = regionInArgs,
+            predicateName = region.id.name
+          )(),
+          vpr.FullPerm()()
+        )()
+
+      val exhaleRegionPredicate = vpr.Exhale(regionPredicate)().withSource(makeAtomic)
 
       errorBacktranslator.addErrorTransformer {
-        case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
-          MakeAtomicError(makeAtomic)
-            .dueTo(IllegalRegionStateChangeError(makeAtomic.guards.head))
-            .dueTo(hintAtEnclosingLoopInvariants(regionId))
+        case e: vprerr.ExhaleFailed if e causedBy exhaleRegionPredicate =>
+          MakeAtomicError(makeAtomic, InsufficientRegionPermissionError(makeAtomic.regionPredicate))
       }
 
-      vpr.Seqn(
-        Vector(
-          vprCheckFrom,
-          vprCheckTo),
-        Vector.empty
-      )()
-    }
+      val (preFrameExhales, postFrameInhales) = completeFrame
 
-    val vprRegionState =
-      vpr.FuncApp(
-        regionStateFunction(region),
-        regionInArgs
-      )()
+      val inhaleRegionPredicate = vpr.Inhale(regionPredicate)()
 
-    val assumeCurrentStateIsStepTo =
-      vpr.Inhale(
-        vpr.EqCmp(
-          vprRegionState,
-          stepToLocation(vprRegionIdArg, regionType)
+      val contextCheck = checkAtomicityNotYetCaptured(region, regionInArgs)
+
+      errorBacktranslator.addErrorTransformer {
+        case e: vprerr.AssertFailed if e causedBy contextCheck =>
+          MakeAtomicError(makeAtomic, RegionAtomicityContextTrackingError(makeAtomic.regionPredicate))
+      }
+
+      val assignContext = assignAtomicityContext(region, regionInArgs)
+
+      val guardArgEvaluationLabel = freshLabel("guard_arg_eval")
+
+      val havoc1 = stabilizeSingleInstances("before atomic", (region, regionInArgs)) // used to constrain state of updated region
+
+      val ruleBody = translate(makeAtomic.body)
+
+      val havocSingleInstance = havocSingleInstances("after atomic", (region, regionInArgs))
+
+      val vprAtomicityContextX = atomicityContextFunctions.application(region, regionInArgs)
+
+      val vprStepFrom =
+        stepFromLocation(vprRegionIdArg, regionType).withSource(regionId)
+
+      val vprStepTo =
+        stepToLocation(vprRegionIdArg, regionType).withSource(regionId)
+
+      val checkUpdatePermitted = {
+        val vprStepFromAllowed =
+          vpr.AnySetContains(
+            vprStepFrom,
+            vprAtomicityContextX
+          )().withSource(makeAtomic)
+
+        val vprCheckFrom =
+          vpr.Assert(vprStepFromAllowed)().withSource(makeAtomic)
+
+        errorBacktranslator.addErrorTransformer {
+          case e @ vprerr.AssertFailed(_, reason: vprrea.InsufficientPermission, _)
+            if (e causedBy vprCheckFrom) && (reason causedBy vprStepFrom) =>
+
+            MakeAtomicError(makeAtomic)
+              .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
+              .dueTo(hintAtEnclosingLoopInvariants(regionId))
+              .dueTo(AdditionalErrorClarification("This could be related to issue #8", regionId))
+
+          case e @ vprerr.AssertFailed(_, reason: vprrea.AssertionFalse, _)
+            if (e causedBy vprCheckFrom) && (reason causedBy vprStepFromAllowed) =>
+
+            MakeAtomicError(makeAtomic)
+              .dueTo(IllegalRegionStateChangeError(makeAtomic.body))
+              .dueTo(AdditionalErrorClarification(
+                "In particular, it cannot be shown that the region is transitioned from a " +
+                  "state that is compatible with the procedure's interference specification",
+                regionId))
+              .dueTo(hintAtEnclosingLoopInvariants(regionId))
+        }
+
+        val vprCheckTo =
+          regionStateChangeAllowedByGuard(
+            region,
+            regionInArgs,
+            makeAtomic.guards, /* FIXME: only temporal placeholder, guard is going to be a vector itself */
+            vprStepFrom,
+            vprStepTo,
+            guardArgEvaluationLabel
+          ).withSource(makeAtomic)
+
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
+            MakeAtomicError(makeAtomic)
+              .dueTo(IllegalRegionStateChangeError(makeAtomic.guards.head))
+              .dueTo(hintAtEnclosingLoopInvariants(regionId))
+        }
+
+        vpr.Seqn(
+          Vector(
+            vprCheckFrom,
+            vprCheckTo),
+          Vector.empty
         )()
-      )()
+      }
 
-    val assumeOldStateWasStepFrom =
-      vpr.Inhale(
-        vpr.EqCmp(
-          vpr.Old(vprRegionState)(),
-          stepFromLocation(vprRegionIdArg, regionType)
+      val vprRegionState =
+        vpr.FuncApp(
+          regionStateFunction(region),
+          regionInArgs
         )()
-      )()
 
-    val inhaleGuard = vpr.Inhale(guard)()
-
-    val exhaleTrackingResource = {
-      val stepFrom =
-        stepFromAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
-
-      val stepTo =
-        stepToAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
-
-      val exhale =
-        vpr.Exhale(
-          vpr.And(
-            stepFrom,
-            stepTo
+      val assumeCurrentStateIsStepTo =
+        vpr.Inhale(
+          vpr.EqCmp(
+            vprRegionState,
+            stepToLocation(vprRegionIdArg, regionType)
           )()
-        )().withSource(makeAtomic.regionPredicate)
+        )()
 
-      errorBacktranslator.addErrorTransformer {
-        case e: vprerr.ExhaleFailed if e causedBy exhale =>
-          MakeAtomicError(makeAtomic)
-            .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
-            .dueTo(hintAtEnclosingLoopInvariants(regionId))
+      val assumeOldStateWasStepFrom =
+        vpr.Inhale(
+          vpr.EqCmp(
+            vpr.Old(vprRegionState)(),
+            stepFromLocation(vprRegionIdArg, regionType)
+          )()
+        )()
+
+      val inhaleGuard = vpr.Inhale(guard)()
+
+      val exhaleTrackingResource = {
+        val stepFrom =
+          stepFromAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
+
+        val stepTo =
+          stepToAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
+
+        val exhale =
+          vpr.Exhale(
+            vpr.And(
+              stepFrom,
+              stepTo
+            )()
+          )().withSource(makeAtomic.regionPredicate)
+
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.ExhaleFailed if e causedBy exhale =>
+            MakeAtomicError(makeAtomic)
+              .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
+              .dueTo(hintAtEnclosingLoopInvariants(regionId))
+        }
+
+        exhale
       }
 
-      exhale
-    }
+      val deselectContext = deselectAtomicityContext(region, regionInArgs)
 
-    val deselectContext = deselectAtomicityContext(region, regionInArgs)
+      AtomicityContextLevelManager.removeLastRegionExp()
 
-    AtomicityContextLevelManager.removeLastRegionExp()
+      val result =
+        vpr.Seqn(
+          Vector(
+            guardArgEvaluationLabel,
+            exhaleGuard,
+            exhaleRegionPredicate,
+            preFrameExhales,
+            inhaleRegionPredicate,
+            inhaleDiamond,
+            storeCurrentLvl,
+            contextCheck,
+            assignContext,
+            havoc1,
+            ruleBody,
+            checkUpdatePermitted,
+            havocSingleInstance,
+            BLANK_LINE,
+            assumeCurrentStateIsStepTo,
+            assumeOldStateWasStepFrom,
+            inhaleGuard,
+            exhaleTrackingResource,
+            deselectContext,
+            postFrameInhales),
+          Vector.empty
+        )()
 
-    val result =
-      vpr.Seqn(
+      surroundWithSectionComments(makeAtomic.statementName, result)
+    } else {
+
+      val guardArgEvaluationLabel = freshLabel("guard_arg_eval")
+
+      val guard = viper.silicon.utils.ast.BigAnd(makeAtomic.guards map translate)
+
+      val regionPredicate =
+        vpr.PredicateAccessPredicate(
+          vpr.PredicateAccess(
+            args = regionInArgs,
+            predicateName = region.id.name
+          )(),
+          vpr.FullPerm()()
+        )()
+
+      val preMakeAtomic: Vector[vpr.Stmt] = {
+
+        val exhaleGuard =
+          vpr.Exhale(guard)().withSource(makeAtomic.guards.head)
+
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.ExhaleFailed if e causedBy exhaleGuard =>
+            MakeAtomicError(makeAtomic, InsufficientGuardPermissionError(makeAtomic.guards.head))
+        }
+
+        val exhaleRegionPredicate = vpr.Exhale(regionPredicate)().withSource(makeAtomic)
+
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.ExhaleFailed if e causedBy exhaleRegionPredicate =>
+            MakeAtomicError(makeAtomic, InsufficientRegionPermissionError(makeAtomic.regionPredicate))
+        }
+
+        val stabilizeFrame = stabilizeAllInstances("stabilizing frame before make-atomic")
+
+        val storeCurrentLvl = AtomicityContextLevelManager.registerRegionExp(region, regionInArgs)
+
+        val contextCheck = checkAtomicityNotYetCaptured(region, regionInArgs)
+
+        errorBacktranslator.addErrorTransformer {
+          case e: vprerr.AssertFailed if e causedBy contextCheck =>
+            MakeAtomicError(makeAtomic, RegionAtomicityContextTrackingError(makeAtomic.regionPredicate))
+        }
+
+        val assignContext = assignAtomicityContext(region, regionInArgs)
+
         Vector(
-          guardArgEvaluationLabel,
           exhaleGuard,
           exhaleRegionPredicate,
-          preFrameExhales,
-          inhaleRegionPredicate,
-          inhaleDiamond,
+          stabilizeFrame,
           storeCurrentLvl,
           contextCheck,
-          assignContext,
+          assignContext
+        )
+      }
+
+      val inhaleSkolemizationFunctionFootprints =
+        vpr.Inhale(
+          viper.silicon.utils.ast.BigAnd(
+            /* TODO: Would benefit from an optimisation similar to issue #47 */
+            tree.root.regions map (region =>
+              actionSkolemizationFunctionFootprintAccess(region.id.name)))
+        )()
+
+      val initializeFootprints = initializingFunctions.flatMap(tree.root.regions map _)
+
+      val preAtomicityLabel = freshLabel("preWhile")
+
+      val atomicityConstraints = tree.root.regions map (region => {
+        val wrapper = atomicityContextAllWrapper(region, preAtomicityLabel)
+        val constraint = atomicityContextEqualsOldConstraint(region, preAtomicityLabel)
+        atomicityContextFunctions.refSelect(region, constraint, preAtomicityLabel)(wrapper)
+      })
+
+      val previousLvlToken = LevelManager.getCurrentLevelToken
+
+      val vprPureBody = {
+        val inhaleRegionPredicate = vpr.Inhale(regionPredicate)()
+        val inhaleDiamond =
+          vpr.Inhale(diamondAccess(translateUseOf(regionId)))()
+        val havoc1 = stabilizeSingleInstances("before atomic", (region, regionInArgs)) // used to constrain state of updated region
+
+        val ruleBody = translate(makeAtomic.body)
+
+        val havocSingleInstance = havocSingleInstances("after atomic", (region, regionInArgs))
+
+        val checkUpdatePermitted = {
+          val vprAtomicityContextX = atomicityContextFunctions.application(region, regionInArgs)
+
+          val vprStepFrom =
+            stepFromLocation(vprRegionIdArg, regionType).withSource(regionId)
+
+          val vprStepTo =
+            stepToLocation(vprRegionIdArg, regionType).withSource(regionId)
+
+          val vprStepFromAllowed =
+            vpr.AnySetContains(
+              vprStepFrom,
+              vprAtomicityContextX
+            )().withSource(makeAtomic)
+
+          val vprCheckFrom =
+            vpr.Assert(vprStepFromAllowed)().withSource(makeAtomic)
+
+          errorBacktranslator.addErrorTransformer {
+            case e @ vprerr.AssertFailed(_, reason: vprrea.InsufficientPermission, _)
+              if (e causedBy vprCheckFrom) && (reason causedBy vprStepFrom) =>
+
+              MakeAtomicError(makeAtomic)
+                .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
+                .dueTo(hintAtEnclosingLoopInvariants(regionId))
+                .dueTo(AdditionalErrorClarification("This could be related to issue #8", regionId))
+
+            case e @ vprerr.AssertFailed(_, reason: vprrea.AssertionFalse, _)
+              if (e causedBy vprCheckFrom) && (reason causedBy vprStepFromAllowed) =>
+
+              MakeAtomicError(makeAtomic)
+                .dueTo(IllegalRegionStateChangeError(makeAtomic.body))
+                .dueTo(AdditionalErrorClarification(
+                  "In particular, it cannot be shown that the region is transitioned from a " +
+                    "state that is compatible with the procedure's interference specification",
+                  regionId))
+                .dueTo(hintAtEnclosingLoopInvariants(regionId))
+          }
+
+          val vprCheckTo =
+            regionStateChangeAllowedByGuard(
+              region,
+              regionInArgs,
+              makeAtomic.guards, /* FIXME: only temporal placeholder, guard is going to be a vector itself */
+              vprStepFrom,
+              vprStepTo,
+              guardArgEvaluationLabel
+            ).withSource(makeAtomic)
+
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.AssertFailed if e causedBy vprCheckTo =>
+              MakeAtomicError(makeAtomic)
+                .dueTo(IllegalRegionStateChangeError(makeAtomic.guards.head))
+                .dueTo(hintAtEnclosingLoopInvariants(regionId))
+          }
+
+          vpr.Seqn(
+            Vector(
+              vprCheckFrom,
+              vprCheckTo),
+            Vector.empty
+          )()
+        }
+
+        val vprRegionState =
+          vpr.FuncApp(
+            regionStateFunction(region),
+            regionInArgs
+          )()
+
+        val assumeCurrentStateIsStepTo =
+          vpr.Inhale(
+            vpr.EqCmp(
+              vprRegionState,
+              stepToLocation(vprRegionIdArg, regionType)
+            )()
+          )()
+
+        val assumeOldStateWasStepFrom =
+          vpr.Inhale(
+            vpr.EqCmp(
+              vpr.Old(vprRegionState)(),
+              stepFromLocation(vprRegionIdArg, regionType)
+            )()
+          )()
+
+        val inhaleGuard = vpr.Inhale(guard)()
+
+        val exhaleTrackingResource = {
+          val stepFrom =
+            stepFromAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
+
+          val stepTo =
+            stepToAccess(vprRegionIdArg, regionType).withSource(makeAtomic.regionPredicate)
+
+          val exhale =
+            vpr.Exhale(
+              vpr.And(
+                stepFrom,
+                stepTo
+              )()
+            )().withSource(makeAtomic.regionPredicate)
+
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.ExhaleFailed if e causedBy exhale =>
+              MakeAtomicError(makeAtomic)
+                .dueTo(InsufficientTrackingResourcePermissionError(makeAtomic.regionPredicate, regionId))
+                .dueTo(hintAtEnclosingLoopInvariants(regionId))
+          }
+
+          exhale
+        }
+
+        Vector(
+          inhaleRegionPredicate,
+          inhaleDiamond,
           havoc1,
           ruleBody,
-          checkUpdatePermitted,
           havocSingleInstance,
-          BLANK_LINE,
+          checkUpdatePermitted,
           assumeCurrentStateIsStepTo,
           assumeOldStateWasStepFrom,
           inhaleGuard,
-          exhaleTrackingResource,
-          deselectContext,
-          postFrameInhales),
-        Vector.empty
+          exhaleTrackingResource
+        )
+      }
+
+      /* This assertion should never fail, because levels are always restored after an action
+       * that changes the level
+       */
+      val levelCheck = vpr.Assert(LevelManager.compareToOldLevel(previousLvlToken))()
+
+      val loopVarDecl = vpr.LocalVarDecl(freshIdentifier("loopVar"), vpr.Bool)()
+      val loopVar = loopVarDecl.localVar
+
+      val setLoopVarTrue = vpr.LocalVarAssign(loopVar, vpr.TrueLit()())()
+
+      val setLoopVarFalse = vpr.LocalVarAssign(loopVar, vpr.FalseLit()())()
+
+      val vprBody =
+        vpr.Seqn(
+          inhaleSkolemizationFunctionFootprints +:
+            initializeFootprints ++:
+            atomicityConstraints ++:
+            (vprPureBody :+ levelCheck :+ setLoopVarFalse),
+          Vector.empty
+        )()
+
+      val vprInvs = {
+        makeAtomic.posts.map { post =>
+          val inv = vpr.Implies(
+            vpr.Not(loopVar)(),
+            translate(post)
+          )().withSource(makeAtomic, overwrite = true)
+
+          val ebt = this.errorBacktranslator
+          errorBacktranslator.addErrorTransformer {
+            case e: vprerr.LoopInvariantNotPreserved if e causedBy inv =>
+              MakeAtomicError(makeAtomic)
+                .dueTo(PostconditionError(post, ebt.translate(e.reason)))
+          }
+
+          inv
+        }
+      }
+
+      var vprWhile =
+        vpr.While(
+          cond = loopVar,
+          invs = vprInvs,
+          body = vprBody
+        )()
+
+      vprWhile = vprWhile.withSource(makeAtomic)
+
+
+
+      val assignOldLevel = LevelManager.assignOldLevel(previousLvlToken)
+
+      val deselectContext = deselectAtomicityContext(region, regionInArgs)
+      AtomicityContextLevelManager.removeLastRegionExp()
+
+      val total = vpr.Seqn(
+        preMakeAtomic ++ Vector(preAtomicityLabel, setLoopVarTrue, vprWhile, assignOldLevel, deselectContext),
+        Vector(loopVarDecl)
       )()
 
-    surroundWithSectionComments(makeAtomic.statementName, result)
+      surroundWithSectionComments(makeAtomic.statementName, total)
+    }
+
+
   }
 
   def translate(updateRegion: PUpdateRegion): vpr.Stmt = {

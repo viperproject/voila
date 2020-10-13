@@ -1,0 +1,218 @@
+
+
+
+struct entry {
+  link next;
+
+  // ghost state for existential quantification
+  id _nextId;
+  int _nextLvl;
+  seq<int> _nextState;
+}
+
+struct link {
+  int val;
+  link next;
+
+  // ghost state for existential quantification
+  id _nextId;
+  int _nextLvl;
+  seq<int> _nextState;
+}
+
+macro nextGhost(x, b1, b2, b3) (
+  x._nextId |-> b1 && x._nextLvl |-> b2 && x._nextState |-> b3
+);
+
+macro nextList(x, b1, b2, b3, b4) (
+  x.next |-> b3
+  && nextGhost(x, b1, b2, b4)
+);
+
+macro let(b1, v1) {
+  havoc b1;
+  assume b1 == v1;
+}
+
+
+region Bag(id r, int lvl, entry z)
+  guards { duplicable Z; }
+  interpretation {
+       nextList(z, ?c, ?l, ?y, ?vs)
+    && BagList(c, l, y, vs) && G@c && l < lvl
+  }
+  state { vs }
+  actions { Z: ?p ~> ?q; }
+
+region BagList(id r, int lvl, link x)
+  guards { unique G; }
+  interpretation {
+       x.val |-> ?v && nextList(x, ?c, ?l, ?y, ?vs)
+    && (x != null ==> BagList(c, l, y, vs) && G@c && l < lvl)
+  }
+  state { x == null ? Seq<int>() : Seq<int>(v) concat vs }
+  actions { G: ?p ~> ?q; }
+
+
+abstract_atomic procedure push(id r, int lvl, entry z, int n)
+  interference ?q in Set<seq<int>>(?u | true);
+  requires Bag(r, lvl, z, q) && Z@r;
+  ensures  Bag(r, lvl, z, Seq<int>(n) concat q) && Z@r;
+{
+  link x;
+  link y;
+  seq<int> y_state;
+  bool b;
+  id c;
+  int l;
+  make_atomic using Bag(r, lvl, z) with Z@r;
+    ensures Bag(r, lvl, z, Seq<int>(n) concat q) && Z@r;
+  {
+    // x := new link(n, null)
+    inhale x.val |-> _ && x.next |-> _ && nextGhost(x, _, _, _);
+    x.val := n;
+
+    do
+      invariant Bag(r, lvl, z);
+      invariant !b ==> r |=> <D> && x.val |-> n && x.next |-> _ && nextGhost(x, _, _, _);
+      invariant  b ==> r |=> (y_state, Seq<int>(n) concat y_state);
+    {
+      open_region using Bag(r, lvl, z) {
+        y := z.next;
+      }
+
+      x.next := y;
+
+      update_region using Bag(r, lvl, z) {
+
+        assert nextList(z, ?ur, ?ul, ?u, ?u_state);
+        // set source of transition
+        let(y_state, u_state);
+
+        b := CAS_entry(z, y, x);
+
+        if (b) {
+          // create BagList(c, l, x)
+          assume ul < l && l < lvl;
+          use createBagList(c, l, x, ur, ul, u_state);
+
+          // update witnesses of z
+          use updateEntryGhost(z, c, l);
+        }
+      }
+    } while (!b);
+  }
+}
+
+// For the following code we use two assumptions:
+// A: If the head is removed, then no one has access to it anymore
+// B: The next node cannot be changed before the current node
+// Both properties could be expressed through a more complicated region specification
+
+make_atomic procedure pop(id r, int lvl, entry z) returns (int v)
+  interference ?q in Set<seq<int>>(?u | true);
+  requires Bag(r, lvl, z, q) && Z@r;
+  ensures  Bag(r, lvl, z, ?w) && Z@r && q == Seq<int>(v) concat w;
+{
+  link t;
+  link tn;
+  bool b;
+
+  seq<int> x_state;
+  int vi;
+
+  b := false;
+
+  do
+    invariant Bag(r, lvl, z);
+    invariant !b  ==> r |=> <D>;
+    invariant  b ==> r |=> (Seq<int>(vi) concat x_state, x_state) && t.val |-> vi;
+  {
+    open_region using Bag(r, lvl, z) {
+      t := z.next;
+
+      // duplicate BagList(jr, jl, t)
+      assert nextList(z, ?jr, ?jl, t, _);
+      assert BagList(jr, jl, t);
+      inhale BagList(jr, jl, t);
+    }
+
+    if (t != null) {
+
+      open_region using BagList(jr, jl, t) {
+        tn := t.next;
+      }
+
+      exhale BagList(jr, jl, t);
+
+      update_region using Bag(r, lvl, z) {
+
+        assert nextList(z, ?ur, ?ul, ?u, ?u_state);
+
+        b := CAS_entry(z, t, tn);
+
+        if (b) {
+          // destroy BagList(ur, ul, t)
+          // Assumption A
+          unfold BagList(ur, ul, t);
+          exhale G@ur;
+
+          assert nextList(t, ?nr, ?nl, ?n, ?n_state);
+
+          // Assumption B
+          assume n == tn;
+
+          use updateEntryGhost(z, nr, nl);
+
+          // set target of transition
+          let(x_state, n_state);
+          assert t.val |-> ?e;
+          let(vi, e);
+        }
+      }
+    }
+  } while (!b);
+
+  v := t.val;
+}
+
+
+/** Lemma Methods */
+
+lemma updateEntryGhost(entry x, id c, int l)
+  requires x.next |-> ?y && BagList(c, l, y, ?vs) && nextGhost(x, _, _, _);
+  ensures  x.next |->  y && BagList(c, l, y, vs)  && nextGhost(x, c, l, vs);
+{
+  exhale nextGhost(x, _, _, _);
+  inhale nextGhost(x, ?hr, ?hl, ?h_state);
+  assume hr == c && hl == l && h_state == vs;
+}
+
+lemma updateLinkGhost(link x, id c, int l)
+  requires x.next |-> ?y && BagList(c, l, y, ?vs) && nextGhost(x, _, _, _);
+  ensures  x.next |->  y && BagList(c, l, y, vs)  && nextGhost(x, c, l, vs);
+{
+  exhale nextGhost(x, _, _, _);
+  inhale nextGhost(x, ?hr, ?hl, ?h_state);
+  assume hr == c && hl == l && h_state == vs;
+}
+
+lemma createBagList(id r, int lvl, link x, id c, int l, seq<int> vs)
+  requires x.val |-> ?v && x.next |-> ?y && nextGhost(x, _, _, _) && (x != null ==> BagList(c, l, y, vs) && G@c && l < lvl);
+  ensures  BagList(r, lvl, x, Seq<int>(v) concat vs) && G@r;
+{
+  inhale G@r;
+  if (x != null) {
+    use updateLinkGhost(x, c, l);
+  }
+  fold BagList(r, lvl, x);
+}
+
+
+
+primitive_atomic procedure CAS_entry(entry x, link now, link thn) returns (bool ret)
+  requires x.next |-> ?v;
+  ensures  v == now
+              ? ret && x.next |-> thn
+              : !ret && x.next |-> v;
+

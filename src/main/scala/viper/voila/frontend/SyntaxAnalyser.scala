@@ -441,7 +441,10 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
     ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";".?) ~
-    ("{" ~> statements <~ "}") ^^ PMakeAtomic
+      ensures .* ~
+      ("{" ~> statements <~ "}") ^^ {
+      case r ~ g ~ posts ~ body => PMakeAtomic(r, g, posts map (_.assertion), body)
+    }
 
   lazy val updateRegion: Parser[PUpdateRegion] =
     "update_region" ~>

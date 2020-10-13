@@ -340,7 +340,7 @@ sealed trait PRuleStatement extends PStatement {
   def body: PStatement
 }
 
-case class PMakeAtomic(regionPredicate: PPredicateExp, guards: Vector[PRegionedGuardExp], body: PStatement)
+case class PMakeAtomic(regionPredicate: PPredicateExp, guards: Vector[PRegionedGuardExp], posts: Vector[PExpression], body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "make-atomic"

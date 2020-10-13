@@ -1091,39 +1091,6 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
 
-//    def mustHavocAfter(s: PStatement): Boolean = {
-////      semanticAnalyser.atomicity(s) == AtomicityKind.Nonatomic ||
-//        (semanticAnalyser.atomicity(s) == AtomicityKind.Atomic &&
-//         !semanticAnalyser.isGhost(s) &&
-//         semanticAnalyser.expectedAtomicity(s) == AtomicityKind.Nonatomic)
-//    }
-//
-//    val optVprHavoc =
-//      if (mustHavocAfter(statement)) {
-//        val alreadyHavoced =
-//          statement match {
-//            case PSeqComp(_, second) => mustHavocAfter(second)
-//            case PIf(_, thn, els) => mustHavocAfter(thn) && els.fold(true)(mustHavocAfter)
-//            case _: PWhile => false
-//            case _: PMakeAtomic => false
-//            case _: PUpdateRegion => false
-//            case _: PUseAtomic => false
-//            case _: POpenRegion => false
-//            case _: PFork => true
-//            case _: PParallelCall => true
-//            case _: PCompoundStatement => ??? /* Forgot about a particular compound statement */
-//            case _ => false
-//          }
-//
-//        if (alreadyHavoced) {
-//          None
-//        } else {
-//          Some(nonAtomicStabilizeAllInstances(s"after ${statement.statementName}@${statement.lineColumnPosition}"))
-//        }
-//      } else {
-//        None
-//      }
-
     statement match {
       case _: PCompoundStatement => translationIndentation -= 1
       case _ =>

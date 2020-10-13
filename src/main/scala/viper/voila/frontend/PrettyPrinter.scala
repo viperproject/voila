@@ -340,9 +340,10 @@ class DefaultPrettyPrinter
 
   def toDoc(rule: PRuleStatement): Doc = {
     rule match {
-      case PMakeAtomic(regionPredicate, guards, body) =>
+      case PMakeAtomic(regionPredicate, guards, posts, body) =>
         (   "make_atomic" <> line
          <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> ssep(guards map toDoc, comma <> space) <> semi) <> line
+         <> nest(lterm(posts map toDoc, semi)) <> line
          <> braces(nest(toDoc(body))))
       case PUseAtomic(regionPredicate, guards, body) =>
         (   "use_atomic" <> line
