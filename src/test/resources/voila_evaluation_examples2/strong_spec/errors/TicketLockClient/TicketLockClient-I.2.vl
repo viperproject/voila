@@ -18,48 +18,45 @@ region Client(id c, int l, dualcell z, id r, int lvl, memcell x)
   actions { Z: ?n ~> ?m; }
 
 
-make_atomic procedure foo(id c, int l, dualcell z, id r, int lvl, memcell x, int w)
+abstract_atomic procedure foo(id c, int l, dualcell z, id r, int lvl, memcell x, int w)
   requires Client(c, l, z, r, lvl, x) && Z@c;
-  //:: ExpectedOutput(postcondition_error:region_state_error)
   ensures  Client(c, l, z, r, lvl, x, w+1) && Z@c;
 {
+  make_atomic using Client(c, l, z, r, lvl, x) with Z@c;
+      //:: ExpectedOutput(postcondition_error:region_state_error)
+      ensures  Client(c, l, z, r, lvl, x, w+1) && Z@c;
+  {
+    open_region using Client(c, l, z, r, lvl, x) {
+      assert TLock(r, lvl, x, _, ?ni);
 
-  open_region using Client(c, l, z, r, lvl, x) {
-    assert TLock(r, lvl, x, _, ?ni);
+      acquire(r, lvl, x);
 
-    acquire(r, lvl, x);
+      // others cannot have held TICKET(ni) because it is unique
+      // manually asserts uniqueness of TICKET
+      use_guard_uniqueness TICKET(ni)@r;
 
-    // others cannot have held TICKET(ni) because it is unique
-    // manually asserts uniqueness of TICKET
-    use_guard_uniqueness TICKET(ni)@r;
+      havoc z._own;
+      assert z._own |-> ?s1;
+      assume s1 == true;
+    }
 
-    havoc z._own;
-    assert z._own |-> ?s1;
-    assume s1 == true;
+    z.left  := w;
+    z.right := w;
+
+    update_region using Client(c, l, z, r, lvl, x) if true {
+      // update witnesses
+      havoc z._val;
+      assert z._val |-> ?a;
+      assume a == w;
+
+      assert TLock(r, lvl, x, _, ?m);
+      havoc z._own;
+      assert z._own |-> ?s2;
+      assume s2 == false;
+
+      release(r, lvl, x);
+    }
   }
-
-  z.left  := w;
-  z.right := w;
-
-  // manuel update region
-  assert Client(c, l, z, r, lvl, x, ?v);
-  unfold Client(c, l, z, r, lvl, x);
-
-    // update witnesses
-    havoc z._val;
-    assert z._val |-> ?a;
-    assume a == w;
-
-    assert TLock(r, lvl, x, _, ?m);
-    havoc z._own;
-    assert z._own |-> ?s2;
-    assume s2 == false;
-
-    release(r, lvl, x);
-
-  fold Client(c, l, z, r, lvl, x);
-  assert Client(c, l, z, r, lvl, x, w);
-  inhale c |=> (v, w);
 }
 
 

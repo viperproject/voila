@@ -42,10 +42,7 @@ abstract_atomic procedure foo(id c, int l, dualcell z, id r, int lvl, memcell x,
     z.left  := w;
     z.right := w;
 
-    // manuel update region
-    assert Client(c, l, z, r, lvl, x, ?v);
-    unfold Client(c, l, z, r, lvl, x);
-
+    update_region using Client(c, l, z, r, lvl, x) if true {
       // update witnesses
       havoc z._val;
       assert z._val |-> ?a;
@@ -57,10 +54,7 @@ abstract_atomic procedure foo(id c, int l, dualcell z, id r, int lvl, memcell x,
       assume s2 == false;
 
       release(r, lvl, x);
-
-    fold Client(c, l, z, r, lvl, x);
-    assert Client(c, l, z, r, lvl, x, w);
-    inhale c |=> (v, w);
+    }
   }
 }
 

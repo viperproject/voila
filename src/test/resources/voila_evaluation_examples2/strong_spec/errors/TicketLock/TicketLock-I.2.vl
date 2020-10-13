@@ -40,37 +40,40 @@ procedure makeLock(int alvl, int xlvl, int ylvl) returns (cell x, cell y, id r, 
 }
 
 
-make_atomic procedure acquire(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y)
+abstract_atomic procedure acquire(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y)
   interference ?n in Int;
   requires TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n) && Z@r;
-  //:: ExpectedOutput(postcondition_error:region_state_error)
   ensures  TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n+1) && Z@r && TICKET(n)@r;
 {
   int t;
   int v;
-
-  open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) {
-    t := incr(ry, ylvl, y);
-  }
-
-  do
-    invariant TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, ?mii, ?nii) && TICKET(t)@r;
-    invariant t >= nii && nii >= v;
-    invariant v <  t ==> r |=> <D>;
-    invariant v == t ==> r |=> (nii, nii);
+  make_atomic using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) with Z@r;
+      //:: ExpectedOutput(postcondition_error:region_state_error)
+      ensures TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n+1) && Z@r && TICKET(n)@r;
   {
     open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) {
-      v := read(rx, xlvl, x);
+      t := incr(ry, ylvl, y);
     }
 
-    if (v == t) {
-      // manual update region if t is the fresh owner
-      assert TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, ?nf);
-      exhale r |=> <D>;
-      inhale r |=> (nf, nf);
+    do
+      invariant TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, ?mii, ?nii) && TICKET(t)@r;
+      invariant t >= nii && nii >= v;
+      invariant v <  t ==> r |=> <D>;
+      invariant v == t ==> r |=> (nii, nii);
+    {
+      open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) {
+        v := read(rx, xlvl, x);
+      }
+
+      if (v == t) {
+        // manual update region if t is the fresh owner
+        assert TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, ?nf);
+        exhale r |=> <D>;
+        inhale r |=> (nf, nf);
+      }
     }
+    while(v < t);
   }
-  while(v < t);
 }
 
 

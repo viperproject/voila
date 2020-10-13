@@ -464,14 +464,13 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
         makeAtomic.posts.map { post =>
           val inv = vpr.Implies(
             vpr.Not(loopVar)(),
-            translate(post)
+            translate(post.assertion)
           )().withSource(makeAtomic, overwrite = true)
 
           val ebt = this.errorBacktranslator
           errorBacktranslator.addErrorTransformer {
             case e: vprerr.LoopInvariantNotPreserved if e causedBy inv =>
-              MakeAtomicError(makeAtomic)
-                .dueTo(PostconditionError(post, ebt.translate(e.reason)))
+              PostconditionError(post.assertion, ebt.translate(e.reason))
           }
 
           inv
