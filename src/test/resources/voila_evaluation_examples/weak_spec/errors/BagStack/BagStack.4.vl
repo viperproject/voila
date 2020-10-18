@@ -1,32 +1,18 @@
-
-
+// This example is motivated by:
+//   https://github.com/caper-tool/caper/blob/master/examples/iterative/BagStack.t
+//
 
 struct entry {
   link next;
-
-  // ghost state for existential quantification
-  id _nextId;
-  int _nextLvl;
-  seq<int> _nextState;
 }
 
 struct link {
   int val;
   link next;
-
-  // ghost state for existential quantification
-  id _nextId;
-  int _nextLvl;
-  seq<int> _nextState;
 }
 
-macro nextGhost(x, b1, b2, b3) (
-  x._nextId |-> b1 && x._nextLvl |-> b2 && x._nextState |-> b3
-);
-
-macro nextList(x, b1, b2, b3, b4) (
-  x.next |-> b3
-  && nextGhost(x, b1, b2, b4)
+macro nextGhost(r, b1, b2, b3) (
+  r._nextId |-> b1 && r._nextLvl |-> b2 && r._nextState |-> b3
 );
 
 macro let(b1, v1) {
@@ -36,9 +22,12 @@ macro let(b1, v1) {
 
 
 region Bag(id r, int lvl, entry z)
+  // We use ghost fields to model existentials in the region interpretation.
+  // The value of the field represents the witness of the existential.
+  ghost_fields { id _nextId; int _nextLvl; seq<int> _nextState; }
   guards { duplicable Z; }
   interpretation {
-       nextList(z, ?c, ?l, ?y, ?vs)
+       z.next |-> ?y && nextGhost(r, ?c, ?l, ?vs)
     && BagList(c, l, y, vs) && G@c && l < lvl
   }
   state { vs }
@@ -46,10 +35,11 @@ region Bag(id r, int lvl, entry z)
 
 //:: ExpectedOutput(region_interpretation_not_stable_error)
 region BagList(id r, int lvl, link x)
+  ghost_fields { id _nextId; int _nextLvl; seq<int> _nextState; }
   guards { unique G; }
   interpretation {
-       x.val |-> ?v && nextList(x, ?c, ?l, ?y, ?vs)
-    && (x != null ==> BagList(c, l, y, vs) && l < lvl)
+       x.val |-> ?v && x.next |-> ?y && nextGhost(r, ?c, ?l, ?vs)
+    && (x != null ==> BagList(c, l, y, vs) && l < lvl) // A necessary guard was removed
   }
   state { x == null ? Seq<int>() : Seq<int>(v) concat vs }
   actions { G: ?p ~> ?q; }
@@ -65,34 +55,44 @@ procedure push(id r, int lvl, entry z, int n)
   id c;
   int l;
 
-  // x := new link(n, null)
-  inhale x.val |-> _ && x.next |-> _ && nextGhost(x, _, _, _);
-  x.val := n;
-
+    
+  x := new link(n, null);
+  
   do
     invariant Bag(r, lvl, z) && Z@r;
-    invariant !b ==> x.val |-> n && x.next |-> _ && nextGhost(x, _, _, _);
+    invariant !b ==> x.val |-> n && x.next |-> _;
   {
     open_region using Bag(r, lvl, z) {
       y := z.next;
     }
-
+      
     x.next := y;
 
     use_atomic using Bag(r, lvl, z) with Z@r {
 
-      assert nextList(z, ?ur, ?ul, ?u, ?u_state);
-      // set source of transition
+      assert z.next |-> ?u && nextGhost(r, ?ur, ?ul, ?u_state);
 
       b := CAS_entry(z, y, x);
 
       if (b) {
         // create BagList(c, l, x)
+        // This constraint requires a dense level order, which by the authors of TaDA is fine.
+        // That means that region levels can be represented as rationals.
+        // However, Voila uses integers to stay close to the original design of TaDA.
         assume ul < l && l < lvl;
-        use createBagList(c, l, x, ur, ul, u_state);
+        
+        c := new BagList(l, x) with G {
+          c._nextId := ur;
+          c._nextLvl := ul;
+          c._nextState := u_state;
+          assert BagList(ur, ul, u, u_state);
+        }
 
-        // update witnesses of z
-        use updateEntryGhost(z, c, l);
+        // update ghost state of r
+        assert BagList(c, l, x, ?c_state);
+        r._nextId := c;
+        r._nextLvl := l;
+        r._nextState := c_state;
       }
     }
   } while (!b);
@@ -101,7 +101,8 @@ procedure push(id r, int lvl, entry z, int n)
 // For the following code we use two assumptions:
 // A: If the head is removed, then no one has access to it anymore
 // B: The next node cannot be changed before the current node
-// Both properties could be expressed through a more complicated region specification
+// Both properties could be expressed through a more complicated region specification.
+// In particular, such a specification requires guards that require a manual encoding in Gobra.
 
 procedure pop(id r, int lvl, entry z) returns (int v)
   requires Bag(r, lvl, z) && Z@r;
@@ -110,7 +111,6 @@ procedure pop(id r, int lvl, entry z) returns (int v)
   link t;
   link tn;
   bool b;
-
   int vi;
 
   b := false;
@@ -123,9 +123,8 @@ procedure pop(id r, int lvl, entry z) returns (int v)
       t := z.next;
 
       // duplicate BagList(jr, jl, t)
-      assert nextList(z, ?jr, ?jl, t, _);
-      assert BagList(jr, jl, t);
-      inhale BagList(jr, jl, t);
+      assert nextGhost(r, ?jr, ?jl, _);
+      duplicate BagList(jr, jl, t);
     }
 
     if (t != null) {
@@ -139,7 +138,7 @@ procedure pop(id r, int lvl, entry z) returns (int v)
       //:: ExpectedOutput(use-atomic_error:illegal_state_change_error)
       use_atomic using Bag(r, lvl, z) with Z@r {
 
-        assert nextList(z, ?ur, ?ul, ?u, ?u_state);
+        assert z.next |-> ?u && nextGhost(r, ?ur, ?ul, ?u_state);
 
         b := CAS_entry(z, t, tn);
 
@@ -149,12 +148,14 @@ procedure pop(id r, int lvl, entry z) returns (int v)
           unfold BagList(ur, ul, t);
           exhale G@ur;
 
-          assert nextList(t, ?nr, ?nl, ?n, ?n_state);
+          assert t.next |-> ?n && nextGhost(ur, ?nr, ?nl, ?n_state);
 
           // Assumption B
           assume n == tn;
 
-          use updateEntryGhost(z, nr, nl);
+          r._nextId := nr;
+          r._nextLvl := nl;
+          r._nextState := n_state;
 
           assert t.val |-> ?e;
           let(vi, e);
@@ -164,37 +165,6 @@ procedure pop(id r, int lvl, entry z) returns (int v)
   } while (!b);
 
   v := t.val;
-}
-
-/** Lemma Methods */
-
-lemma updateEntryGhost(entry x, id c, int l)
-  requires x.next |-> ?y && BagList(c, l, y, ?vs) && nextGhost(x, _, _, _);
-  ensures  x.next |->  y && BagList(c, l, y, vs)  && nextGhost(x, c, l, vs);
-{
-  exhale nextGhost(x, _, _, _);
-  inhale nextGhost(x, ?hr, ?hl, ?h_state);
-  assume hr == c && hl == l && h_state == vs;
-}
-
-lemma updateLinkGhost(link x, id c, int l)
-  requires x.next |-> ?y && BagList(c, l, y, ?vs) && nextGhost(x, _, _, _);
-  ensures  x.next |->  y && BagList(c, l, y, vs)  && nextGhost(x, c, l, vs);
-{
-  exhale nextGhost(x, _, _, _);
-  inhale nextGhost(x, ?hr, ?hl, ?h_state);
-  assume hr == c && hl == l && h_state == vs;
-}
-
-lemma createBagList(id r, int lvl, link x, id c, int l, seq<int> vs)
-  requires x.val |-> ?v && x.next |-> ?y && nextGhost(x, _, _, _) && (x != null ==> BagList(c, l, y, vs) && G@c && l < lvl);
-  ensures  BagList(r, lvl, x, Seq<int>(v) concat vs) && G@r;
-{
-  inhale G@r;
-  if (x != null) {
-    use updateLinkGhost(x, c, l);
-  }
-  fold BagList(r, lvl, x);
 }
 
 

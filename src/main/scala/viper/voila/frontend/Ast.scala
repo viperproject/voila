@@ -37,6 +37,16 @@ sealed abstract class PAstNode extends Product {
     }
   }
 
+  def at(other: PAstNode): this.type = {
+    VoilaGlobalState.positions.dupPos(other, this)
+    this
+  }
+
+  def range(from: PAstNode, to: PAstNode): this.type = {
+    VoilaGlobalState.positions.dupRangePos(from, to, this)
+    this
+  }
+
   def lineColumnPosition: silver.ast.LineColumnPosition = {
     val pos = this.position
 
@@ -327,6 +337,14 @@ case class PAssert(assertion: PExpression) extends PGhostStatement { val stateme
 case class PHavocVariable(variable: PIdnUse) extends PGhostStatement { val statementName = "havoc" }
 case class PHavocLocation(location: PLocation) extends PGhostStatement { val statementName = "havoc" }
 case class PLemmaApplication(call: PProcedureCall) extends PGhostStatement { val statementName = "apply" }
+
+case class PDuplicateRegion(predicateExp: PPredicateExp) extends PGhostStatement {
+  val statementName = "duplicate"
+}
+
+case class PAcquireDuplicableGuard(guard: PRegionedGuardExp) extends PGhostStatement {
+  val statementName = "acquire-guard"
+}
 
 case class PUseRegionInterpretation(regionPredicate: PPredicateExp) extends PGhostStatement {
   val statementName = "use-region-interpretation"

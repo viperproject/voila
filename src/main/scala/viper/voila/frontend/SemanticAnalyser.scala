@@ -332,6 +332,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           message(call, s"expected non-atomic call, but got $call", atomicity(call) != AtomicityKind.Nonatomic)
         }
 
+      case acquireGuard: PAcquireDuplicableGuard =>
+        val guardMod = entity(acquireGuard.guard.guard).asInstanceOf[GuardEntity].declaration.modifier
+        message(acquireGuard, "only duplicable guards can be used in an acquire statement", !guardMod.isInstanceOf[PDuplicableGuard])
+
       case _rule @ (_: POpenRegion | _: PUpdateRegion) =>
         val rule = _rule.asInstanceOf[PRuleStatement]
 

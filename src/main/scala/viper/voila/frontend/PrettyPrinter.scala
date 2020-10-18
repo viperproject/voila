@@ -321,6 +321,8 @@ class DefaultPrettyPrinter
       case PLemmaApplication(call) => "use" <+> toDoc(call)<> semi
       case PUseRegionInterpretation(regionPredicate) =>
         "use_region_interpretation" <+> toDoc(regionPredicate) <> semi
+      case PDuplicateRegion(region) => "duplicate" <+> toDoc(region) <> semi
+      case PAcquireDuplicableGuard(guard) => "acquire_guard" <+> toDoc(guard) <> semi
       case other =>
         sys.error(s"Implementation missing for element of class ${other.getClass.getSimpleName}")
     }

@@ -11,21 +11,12 @@ region Counter(id r, int lvl, memcell x)
     ?n, ?m | n < m | INCREMENT: n ~> m;
   }
 
-procedure makeCounter(id r, int lvl) returns (memcell ret)
+procedure makeCounter(int lvl) returns (memcell ret, id r)
   requires lvl >= 0;
   ensures Counter(r, lvl, ret) && INCREMENT@r;
 {
-  memcell v;
-
-  // v := new memcell(0);
-  inhale v.f |-> ?w;
-  v.f := 0;
-
-  ret := v;
-
-  // create Counter(r, lvl, ret, 0);
-  inhale INCREMENT@r;
-  fold Counter(r, lvl, ret, 0);
+  ret := new memcell(0);
+  r := new Counter(lvl, ret) with INCREMENT;
 }
 
 make_atomic procedure incr(id c, int lvl, memcell x) returns (int ret)

@@ -27,37 +27,28 @@ procedure thread2(id r, int alvl, id s, int lvl, memcell x, memcell y)
 
 
 procedure main(id dummy, int lvl, int alvl) returns (memcell x, memcell y, id r, id s, int ret)
-  requires alvl > lvl >= 0 && LevelDummy(dummy, alvl);
+  level alvl + 1;
+  requires alvl > lvl >= 0;
   ensures Flag(r, alvl, s, lvl, x, y) && ret == 1;
 {
-  // x := new memcell(0)
-  inhale x.f |-> _;
-  x.f := 0;
+  x := new memcell(0);
 
   y, s := makeJoin(lvl);
 
-  // duplicate Join(s, lvl, y)
-  assert Join(s, lvl, y);
-  inhale Join(s, lvl, y);
+  duplicate Join(s, lvl, y);
 
-  // r := create Flag(alvl, s, lvl, x, y)
-  inhale SFLAG@r;
-  fold Flag(r, alvl, s, lvl, x, y);
+  r := new Flag(alvl, s, lvl, x, y) with SFLAG;
 
-  // duplicate Flag(r, alvl, s, lvl, x, y)
-  assert Flag(r, alvl, s, lvl, x, y);
-  inhale Flag(r, alvl, s, lvl, x, y);
-  
-  // fork thread2(r, alvl, s, lvl, x, y)
-  exhale Flag(r, alvl, s, lvl, x, y, 0) && SFLAG@r;
-  skip;
+  duplicate Flag(r, alvl, s, lvl, x, y);
+
+  fork thread2(r, alvl, s, lvl, x, y);
 
   wait(s, lvl, y);
 
   open_region using Flag(r, alvl, s, lvl, x, y) {
     ret := x.f;
   }
-} 
+}
 
 
 /** Join */
@@ -78,15 +69,10 @@ region Join(id r, int lvl, memcell x)
 
 procedure makeJoin(int lvl) returns (memcell ret, id r)
   requires lvl >= 0;
-  ensures  Join(r, lvl, ret, 0) && SET@r;
+  ensures  Join(r, lvl, ret, 0) && SET@r && Z@r;
 {
-  // ret := new memcell(0)
-  inhale ret.f |-> _;
-  ret.f := 0;
-
-  // r := create Join(lvl, ret)
-  inhale SET@r;
-  fold Join(r, lvl, ret);
+  ret := new memcell(0);
+  r := new Join(lvl, ret) with SET && Z;
 }
 
 
@@ -117,8 +103,3 @@ procedure wait(id r, int lvl, memcell x)
 }
 
 
-region LevelDummy(id r, int lvl)
-  guards { duplicable LevelDummyG; }
-  interpretation { true }
-  state { 0 }
-  actions {  }

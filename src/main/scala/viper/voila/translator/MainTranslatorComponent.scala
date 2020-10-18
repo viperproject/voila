@@ -1552,6 +1552,20 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       case stmt: PUseGuardUniqueness => translate(stmt)
 
+      case s: PDuplicateRegion =>
+        val vprRegion = translate(s.predicateExp)
+        vpr.Seqn(
+          Vector(
+            vpr.Assert(vprRegion)(),
+            vpr.Inhale(vprRegion)()
+          ),
+          Vector.empty
+        )()
+
+      case s: PAcquireDuplicableGuard =>
+        val vprGuard = translate(s.guard)
+        vpr.Inhale(vprGuard)()
+
       case PLemmaApplication(call) =>
         val vprMethodStub = translatedProcedureStubs(call.procedure.name)
         val vprArguments = call.arguments map translate
@@ -2023,24 +2037,10 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     val vprNew = vpr.NewStmt(vprLocalVar, vprFields)().withSource(newStmt)
 
     // G1(r, ...), G2(r, ...), ...
-    val vprGuards: Vector[vpr.PredicateAccessPredicate] =
-      optGuards.fold(Vector.empty[vpr.PredicateAccessPredicate])(_.map(guardExp => {
-        val guardDecl =
-          semanticAnalyser.entity(guardExp.guard) match {
-            case GuardEntity(guardDecl, `region`) => guardDecl
-            case other => sys.error(s"Unexpectedly found $other")
-          }
-
-        val vprGuardArguments =
-          guardExp.argument.arguments map translate
-
-        vpr.PredicateAccessPredicate(
-          vpr.PredicateAccess(
-            vprLocalVar +: vprGuardArguments,
-            guardPredicate(guardDecl, region).name
-          )(),
-          vpr.FullPerm()() // TODO: What about fractional guards?
-        )()
+    val vprGuards: Vector[vpr.Exp] =
+      optGuards.fold(Vector.empty[vpr.Exp])(_.map(guardExp => {
+        val regionedGuardExpr = PRegionedGuardExp(guardExp.guard, PIdnExp(lhs).at(lhs), guardExp.argument).at(guardExp)
+        translate(regionedGuardExpr)
       }))
 
     // inhale G1(r, ...) && G2(r, ...) && ...

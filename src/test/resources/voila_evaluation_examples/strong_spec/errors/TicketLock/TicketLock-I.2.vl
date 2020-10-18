@@ -18,25 +18,13 @@ procedure makeLock(int alvl, int xlvl, int ylvl) returns (cell x, cell y, id r, 
   requires xlvl >= 0 && ylvl >= 0 && alvl > xlvl && alvl > ylvl;
   ensures TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, _);
 {
-  // x := new cell(0);
-  inhale x.f |-> _;
-  x.f := 0;
+  x := new cell(0);
+  y := new cell(0);
 
-  // y := new cell(0);
-  inhale y.f |-> _;
-  y.f := 0;
+  rx := new Counter(xlvl, x) with G;
+  ry := new Counter(ylvl, y) with G;
 
-  // rx := create Counter(rx, xlvl, x);
-  inhale G@rx;
-  fold Counter(rx, xlvl, x);
-
-  // ry := create Counter(ry, ylvl, y);
-  inhale G@ry;
-  fold Counter(ry, ylvl, y);
-
-  // r := create TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
-  inhale TICKET|Set( ?k | k >= 0 )|@r;
-  fold TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
+  r := new TLock(alvl, rx, xlvl, x, ry, ylvl, y) with TICKET|Set( ?k | k >= 0 )|;
 }
 
 

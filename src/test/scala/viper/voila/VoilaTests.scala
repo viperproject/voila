@@ -18,7 +18,7 @@ class VoilaTests extends AnnotationBasedTestSuite with BeforeAndAfterAll {
   val testDirectories: Vector[String] =
     Vector(
       "regressions", "examples",
-      "voila_evaluation_examples")
+      "voila_evaluation_examples", "voila_evaluation_examples2")
 
   override val defaultTestPattern: String = ".*\\.vl"
 
