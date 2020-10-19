@@ -1,6 +1,6 @@
 
 
-
+// The arguments could have been avoided through additional ghost fields as seen with the BagStack
 region TLock(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y; int m)
   guards { unique TICKET(int n); duplicable Z; }
   interpretation {

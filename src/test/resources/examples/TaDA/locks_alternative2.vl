@@ -1,4 +1,4 @@
-#option voila.useQPsInsteadOfForperms // See issue #105
+
 
 struct memcell {
   int f;
@@ -42,13 +42,7 @@ abstract_atomic procedure unlock1(id a, int lvl, memcell x)
     using Lock(a, lvl, x) with G@a;
   {
     update_region
-      using Lock(a, lvl, x);
-    {
-      x.f := 1;
-    }
-
-    update_region
-      using Lock(a, lvl, x);
+      using Lock(a, lvl, x) if true;
     {
       x.f := 0;
     }
@@ -69,14 +63,15 @@ abstract_atomic procedure unlock2(id a, int lvl, memcell x)
     do
       invariant Lock(a, lvl, x, ?si);
       invariant 0 <= nonDet <= 1;
-      invariant nonDet == 1 ==> a |=> <D> && si == 1;
+      invariant nonDet == 1 ==> a |=> <D>;
       invariant nonDet == 0 ==> a |=> (1, 0);
     {
+      // nonDet := random(1) // provides random integer between 0 and 1 (inclusive)
       havoc nonDet;
       assume 0 <= nonDet <= 1;
 
       update_region
-        using Lock(a, lvl, x);
+        using Lock(a, lvl, x) if nonDet == 0;
       {
         x.f := nonDet;
       }

@@ -18,15 +18,12 @@ region BCounter(id r, int lvl, memcell x)
     ?n, ?m | 0 <= n <= 2 && 0 <= m <= 2 | INCREMENT: n ~> m;
   }
 
-// TODO: Should return the last read value (i.e. v).
-//       However, 'ret := v' as the final statement currently "destroys" the atomic triple.
-//       Could make 'return v' a ghost statement that assigns to 'ret'.
-//       Could try to include 'ret := v' inside make_atomic.
-abstract_atomic procedure incrAA(id r, int lvl, memcell x)
+abstract_atomic procedure incrAA(id r, int lvl, memcell x) returns (int ret)
   interference ?v0 in Set(0, 1, 2) on r;
   requires BCounter(r, lvl, x, v0) && INCREMENT@r;
   ensures  BCounter(r, lvl, x, ?v1) && INCREMENT@r;
-  ensures  0 <= v1 <= 2; // Rather boring postcondition
+  ensures  0 <= v1 <= 2 && v1 == (v0 < 2 ? v0 + 1 : 0); 
+  ensures ret == v0 && 0 <= ret <= 2;
 {
   int v;
   int w;
@@ -39,7 +36,7 @@ abstract_atomic procedure incrAA(id r, int lvl, memcell x)
       invariant BCounter(r, lvl, x);
       invariant !b ==> r |=> <D>;
       invariant 0 <= v <= 2; // Note: Needed after the loop, by make_atomic
-      invariant  b ==> r |=> (v, v < 2 ? v + 1 : 0);
+      invariant  b ==> r |=> (v, v < 2 ? v + 1 : 0) && ret == v;
     {
       open_region
         using BCounter(r, lvl, x);
@@ -53,24 +50,27 @@ abstract_atomic procedure incrAA(id r, int lvl, memcell x)
         w := 0;
       }
 
-      use_region_interpretation BCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
+      use_region_interpretation BCounter(r, lvl, x); 
+    
       update_region
         using BCounter(r, lvl, x);
       {
         b := CAS(x, v, w);
       }
+
+      ret := v;
     } while (!b);
   }
 }
 
-// TODO: Should return the last read value, see comment on incrAA
-procedure incrNA1(id r, int lvl, memcell x)
+
+procedure incrNA1(id r, int lvl, memcell x) returns (int ret)
   requires BCounter(r, lvl, x, ?v0) && INCREMENT@r;
   ensures  BCounter(r, lvl, x, ?v1) && INCREMENT@r;
-  // ensures  0 <= ret <= 2;
+  ensures  0 <= ret <= 2;
 {
-  use_region_interpretation BCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
-  incrAA(r, lvl, x);
+  use_region_interpretation BCounter(r, lvl, x);
+  ret := incrAA(r, lvl, x);
 }
 
 procedure incrNA2(id r, int lvl, memcell x) returns (int ret)
@@ -123,7 +123,7 @@ procedure readNA(id r, int lvl, memcell x) returns (int ret)
   ensures  BCounter(r, lvl, x, ?v1) && INCREMENT@r;
   ensures  0 <= ret <= 2;
 {
-  use_region_interpretation BCounter(r, lvl, x); // TODO: See Voila issues #28 and #29
+  use_region_interpretation BCounter(r, lvl, x); 
   ret := readAA(r, lvl, x);
 }
 

@@ -31,7 +31,8 @@ region Qu(id q_r, int q_lvl, queue q)
   state { 0 }
   actions {}
 
-//:: UnexpectedOutput(region_actions_not_transitive_error, /voila/issue/41/)
+
+//:: UnexpectedOutput(region_actions_not_transitive_error)
 region QL(id r, int lvl, node x/*, int v */) // TODO: Add v as an in-argument, see also BagStack-inargs.vl
   ghost_fields {
     int _absstate;
@@ -308,7 +309,7 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
       success := false;
     } else {
 //      r := CAS(q, sentinel, hd);
-      //:: UnexpectedOutput(use-atomic_error:guard_permission_error, /voila/issue/41/)
+      acquire_guard G@q_r;
       use_atomic
         using Qu(q_r, q_lvl, q) with G@q_r;
       {
@@ -319,7 +320,7 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
                                     // "merely" compensates for Voila's limited support for existentials
         assert QL(sl_r1, sl_lvl1, sl1, ?sl_a1);
 
-        (
+        
           success := CAS_sentinel(q, sl, hd);
           // If dequeue succeeded, perform various ghost operations
           if (success) {
@@ -377,7 +378,7 @@ procedure dequeue(id q_r, int q_lvl, queue q) returns (bool success, int v)
               inhale QL(hd_r0, hd_lvl0, hd);
             }
           }
-        );
+        
       }
 
 //        if (r != 0)

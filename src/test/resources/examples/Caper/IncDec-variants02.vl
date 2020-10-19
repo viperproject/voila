@@ -6,12 +6,11 @@ region Cell(id s, int lvl, memcell x)
     G: ?n ~> ?m;
   }
 
-// Basically a simplified version of the spinCAS used in BoundedReadWriteLock-variants03.vl
-// TODO: Should return the last read value (i.e. v).
-abstract_atomic procedure spinIncBy(id s, int lvl, memcell x, int k, set<int> from)
+
+abstract_atomic procedure spinIncBy(id s, int lvl, memcell x, int k, set<int> from) returns (int ret)
   interference ?v0 in from on s;
   requires Cell(s, lvl, x, v0) && G@s;
-  requires k != 0; // Needed because of Voila issue #8
+  requires k != 0; // Needed because of an incompleteness of Voila
   ensures  Cell(s, lvl, x, ?v1) && G@s;
   ensures  v1 == v0 + k;
 {
@@ -39,9 +38,10 @@ abstract_atomic procedure spinIncBy(id s, int lvl, memcell x, int k, set<int> fr
         b := CAS(x, v, v + k);
       }
     } while (!b);
-  }
 
-  // ret := v
+    // return v;
+    ret := v;
+  }
 }
 
 
@@ -59,27 +59,27 @@ region IncDec(id r, int alvl, id s, int lvl, memcell x)
     INC && DEC: ?n ~> ?m;
   }
 
-// TODO: Should return the return value of spinIncBy, see comment above
-procedure increment(id r, int alvl, id s, int lvl, memcell x, int k)
+
+procedure increment(id r, int alvl, id s, int lvl, memcell x, int k) returns (int ret)
   requires IncDec(r, alvl, s, lvl, x, ?v0) && INC@r && k > 0;
   ensures  IncDec(r, alvl, s, lvl, x, ?v1) && INC@r && v1 <= v0 + k;
 {
   use_atomic
     using IncDec(r, alvl, s, lvl, x) with INC@r;
   {
-    spinIncBy(s, lvl, x, k, Set(?t | t <= v0));
+    ret := spinIncBy(s, lvl, x, k, Set(?t | t <= v0));
   }
 }
 
-// TODO: Should return the last read value (i.e. v), see comment above
-procedure decrement(id r, int alvl, id s, int lvl, memcell x, int k)
+
+procedure decrement(id r, int alvl, id s, int lvl, memcell x, int k) returns (int ret)
   requires IncDec(r, alvl, s, lvl, x, ?v0) && DEC@r && k > 0;
   ensures  IncDec(r, alvl, s, lvl, x, ?v1) && DEC@r && v1 >= v0 - k;
 {
   use_atomic
     using IncDec(r, alvl, s, lvl, x) with DEC@r;
   {
-    spinIncBy(s, lvl, x, -k, Set(?t | v0 <= t));
+    ret := spinIncBy(s, lvl, x, -k, Set(?t | v0 <= t));
   }
 }
 

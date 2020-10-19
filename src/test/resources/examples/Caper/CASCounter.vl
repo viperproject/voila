@@ -14,7 +14,13 @@ region Counter(id r, int lvl, memcell x)
     ?n, ?m | n < m | INCREMENT: n ~> m;
   }
 
-// TODO: makeCounter()
+procedure makeCounter(int lvl) returns (memcell ret, id r)
+  requires lvl >= 0;
+  ensures Counter(r, lvl, ret) && INCREMENT@r;
+{
+  ret := new memcell(0);
+  r := new Counter(lvl, ret) with INCREMENT;
+}
 
 procedure incr(id r, int lvl, memcell x) returns (int ret)
   requires Counter(r, lvl, x, ?v0) && INCREMENT@r;
