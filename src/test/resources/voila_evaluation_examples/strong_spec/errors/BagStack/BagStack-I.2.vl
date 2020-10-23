@@ -48,7 +48,7 @@ make_atomic procedure push(id r, int lvl, entry z, int n)
   interference ?q in Set<seq<int>>(?u | true);
   requires Bag(r, lvl, z, q) && Z@r;
   // The postcondition is incorrect.
-  //:: ExpectedOutput(postcondition_error:assertion_error)
+  //:: ExpectedOutput(postcondition_error:region_state_error)
   ensures  Bag(r, lvl, z, q concat Seq<int>(n)) && Z@r;
 {
   link x;
