@@ -6,7 +6,6 @@
 
 package viper.voila.translator
 
-import scala.collection.breakOut
 import scala.collection.immutable.{ListMap, ListSet}
 import viper.silver.{ast => vpr}
 import viper.voila.frontend.{PIdnExp, PIdnUse, PSetComprehension, VoilaTree}
@@ -37,7 +36,9 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
 
     val freeVariables: ListSet[PIdnUse] = semanticAnalyser.freeVariables(comprehension)
     val decls: ListSet[vpr.LocalVarDecl] =
-      freeVariables.zipWithIndex
+      freeVariables
+        .view
+        .zipWithIndex
         .map { case (_, ix)  =>
           val vprDecl =
             vpr.LocalVarDecl(
@@ -46,7 +47,7 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
             )()
 
           vprDecl
-        }(breakOut)
+        }.to(ListSet)
 
     val freeVariablesToDecls: ListMap[PIdnUse, vpr.LocalVarDecl] =
       freeVariables.zip(decls)(breakOut)

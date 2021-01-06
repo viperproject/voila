@@ -6,7 +6,6 @@
 
 package viper.voila.frontend
 
-import scala.collection.breakOut
 import org.bitbucket.inkytonik.kiama.relation.TreeRelation.isLeaf
 import org.bitbucket.inkytonik.kiama.util.Positions
 
@@ -134,7 +133,7 @@ class PositionedRewriter(override val positions: Positions)
         deepcloneAndRename(makro, renamings)
       })
 
-    val mm: Map[String, PMacro] = sanitizedMacros.map(makro => makro.id.name -> makro)(breakOut)
+    val mm: Map[String, PMacro] = sanitizedMacros.view.map(makro => makro.id.name -> makro).to(Map)
 
     def instantiateMacroBody(formals: Vector[PIdnDef],
                              actuals: Vector[PExpression],
@@ -162,7 +161,7 @@ class PositionedRewriter(override val positions: Positions)
         localVariableReplacements ++ binderReplacements
 
       val formalReplacements: Map[PIdnDef, PExpression] =
-        formals.zip(actuals)(breakOut)
+        formals.view.zip(actuals).to(Map)
 
       deepcloneAndReplace(
         root = body,

@@ -6,7 +6,6 @@
 
 package viper.voila.reporting
 
-import scala.collection.breakOut
 import scala.collection.immutable.ListMap
 
 final class VerificationDurationRecord(var parsing: Option[Long] = None,
@@ -25,10 +24,10 @@ final class VerificationDurationRecord(var parsing: Option[Long] = None,
     asRow.map(_.getOrElse(0L))
 
   def asMap: ListMap[String, Option[Long]] =
-    propertyNames.zip(asRow)(breakOut)
+    propertyNames.view.zip(asRow).to(ListMap)
 
   def asValuesMap: ListMap[String, Long] =
-    propertyNames.zip(asValuesRow)(breakOut)
+    propertyNames.view.zip(asValuesRow).to(ListMap)
 
   override def toString: String = {
     val dataStr =

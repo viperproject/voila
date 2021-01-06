@@ -6,7 +6,6 @@
 
 package viper.voila.translator
 
-import scala.collection.breakOut
 import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.voila.frontend._
@@ -353,9 +352,9 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
 
     // aggregates guards for each action to deal with "&&" guard
     val actionMaps: Map[Int, Map[String, TranslatedPGuardArg]] =
-      region.actions.zipWithIndex.map { case (a,i) =>
+      region.actions.view.zipWithIndex.map { case (a,i) =>
         i -> groupGuards(a.guards)
-      }(breakOut)
+      }.to(Map)
 
     /** encodes single action to: (1) use variables, (2) condition, (3) from, (4) to, (5) guard constraints */
     def applyAction(action: PAction,
@@ -429,13 +428,13 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
         val (fromBound, notFromBound) = a.binders.partition(isBoundExpExtractableFromPoint(_, a.from))
         val (toBound, restBinders) = notFromBound.partition(isBoundExpExtractableFromPoint(_, a.to))
 
-        val fromBoundRenaming = fromBound.map(
+        val fromBoundRenaming = fromBound.view.map(
           b => localVariableDeclaration(b).localVar -> extractBoundExpFromPoint(b, a.from, from).get
-        )(breakOut)
+        ).to(Map)
 
-        val toBoundRenaming = toBound.map(
+        val toBoundRenaming = toBound.view.map(
           b => localVariableDeclaration(b).localVar -> extractBoundExpFromPoint(b, a.to, to).get
-        )(breakOut)
+        ).to(Map)
 
         val initialDecls = restBinders map localVariableDeclaration
         val initialVars = initialDecls map (_.localVar)

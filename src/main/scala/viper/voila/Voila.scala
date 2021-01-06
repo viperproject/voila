@@ -10,7 +10,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path, Paths}
 
-import scala.collection.breakOut
 import scala.util.{Left, Right}
 import ch.qos.logback.classic.{Level, Logger}
 import com.typesafe.scalalogging.StrictLogging
@@ -455,7 +454,7 @@ class Voila extends StrictLogging {
           case (viperErrors, Seq()) =>
             /* Only verification failures */
             val voilaErrors: Vector[VoilaError] =
-              viperErrors.flatMap(viperError =>
+              viperErrors.view.flatMap(viperError =>
                 errorBacktranslator.translate(viperError) match {
                   case None =>
                     /* Back-translation didn't work */
@@ -472,7 +471,7 @@ class Voila extends StrictLogging {
 
                   case Some(voilaError) =>
                     Some(voilaError)
-                })(breakOut)
+                }).to(Vector)
 
             Some(Failure(voilaErrors))
         }

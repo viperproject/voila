@@ -6,7 +6,7 @@
 
 package viper.voila.translator
 
-import scala.collection.{breakOut, mutable}
+import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
@@ -262,9 +262,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val (predicate, args) = getPredicateDetails(predicateExp)
 
-    val mapping: Map[String, PExpression] = predicate.formalArgs.zip(args).map { case (f,a) =>
+    val mapping: Map[String, PExpression] = predicate.formalArgs.view.zip(args).map { case (f,a) =>
       f.id.name -> a
-    }(breakOut)
+    }.to(Map)
 
     def combinedCustomTranslationScheme: PartialFunction[PExpression, vpr.Exp] = {
       case exp@PIdnExp(id) =>
@@ -292,9 +292,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     /* TODO: tree.root appears to be a costly operation rather than a simple getter - investigate */
 
     _translatedProcedureStubs =
-      tree.root.procedures.map(procedure =>
+      tree.root.procedures.view.map(procedure =>
         procedure.id.name -> translateAsStub(procedure)
-      )(breakOut)
+      ).to(Map)
 
     val topLevelDeclarations: Vector[vpr.Declaration] = (
          Vector(
@@ -545,7 +545,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             }).toMap
 
           val vprSaveInferenceSets: Vector[vpr.Stmt] =
-            regionInterferenceVariables.map { case (_, entry) =>
+            regionInterferenceVariables.view.map { case (_, entry) =>
               val translatedClauseSet = translate(entry.clause.set)
 
               vpr.Seqn(
@@ -565,7 +565,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                 ),
                 Vector.empty
               )()
-            }(breakOut)
+            }.to(Vector)
 
           vpr.Seqn(vprSaveInferenceSets, Vector.empty)()
 
@@ -682,7 +682,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
     val vprBody = {
       val vprSaveInferenceSets: Vector[vpr.Stmt] =
-        regionInterferenceVariables.map { case (_, entry) =>
+        regionInterferenceVariables.view.map { case (_, entry) =>
           val translatedClauseSet = translate(entry.clause.set)
 
           vpr.Seqn(
@@ -702,7 +702,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             ),
             Vector.empty
           )()
-        }(breakOut)
+        }.to(Vector)
 
       val vprMainBody =
         procedure.body match {
@@ -813,7 +813,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
           val assignContext =
             vpr.Seqn(
               atomicityContextFunctions.inhaleFootprint(region)(singleWrapper(regionInArgs)) +:
-              regionInterferenceVariables.map { case (_, entry) =>
+              regionInterferenceVariables.view.map { case (_, entry) =>
                 val translatedClauseSet = translate(entry.clause.set)
 
                 vpr.Seqn(
@@ -827,7 +827,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
                   ),
                   Vector.empty
                 )()
-              }(breakOut),
+              }.to(Vector),
               Vector.empty
             )()
 
@@ -2111,7 +2111,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         vpr.FuncApp(
           vprFunction,
-          freeVariables.map(translateUseOf)(breakOut)
+          freeVariables.view.map(translateUseOf).to(Seq)
         )()
 
       case pointsTo: PPointsTo => translate(pointsTo)

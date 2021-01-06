@@ -7,7 +7,6 @@
 package viper.voila.frontend
 
 import java.util.regex.Pattern
-import scala.collection.breakOut
 import scala.language.implicitConversions
 import org.bitbucket.inkytonik.kiama.parsing.Parsers
 import org.bitbucket.inkytonik.kiama.util.Positions
@@ -414,7 +413,7 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
 
            /* TODO: Current renaming scheme does not guarantee global name-clash freedom */
           val renamings: Map[String, String] =
-            binders.map(b => b.id.name -> s"${b.id.name}$$")(breakOut)
+            binders.view.map(b => b.id.name -> s"${b.id.name}$$").to(Map)
 
           val clonedBody = positionedRewriter.deepcloneAndRename(body, renamings)
 

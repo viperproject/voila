@@ -9,7 +9,6 @@ package viper.voila.translator
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.silver.ast._
 
-import scala.collection.breakOut
 import viper.silver.{ast => vpr}
 import viper.voila.backends.ViperAstUtils
 import viper.voila.frontend._
@@ -135,17 +134,22 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
 
   def regionArgumentMapping(region: PRegion, args: Vector[vpr.Exp]): Map[vpr.LocalVar, vpr.Exp] = {
     val inArgsSubst: Map[vpr.LocalVar, vpr.Exp] =
-      region.formalInArgs.map(translate(_).localVar)
-            .zip(args)
-            .map{case (formal, actual) => formal -> actual}(breakOut)
+      region.formalInArgs.view
+        .map(translate(_).localVar)
+        .zip(args)
+        .map { case (formal, actual) => formal -> actual }
+        .to(Map)
 
     val outArgsSubst: Map[vpr.LocalVar, vpr.Exp] =
-      region.formalOutArgs.map(translate(_).localVar).zipWithIndex.map{ case (f, i) =>
-        f -> FuncApp(
-          regionOutArgumentFunction(region, i),
-          args
-        )()
-      }(breakOut)
+      region.formalOutArgs.view
+        .map(translate(_).localVar)
+        .zipWithIndex
+        .map { case (f, i) =>
+          f -> FuncApp(
+                regionOutArgumentFunction(region, i),
+                args)()
+        }
+        .to(Map)
 
     inArgsSubst ++ outArgsSubst
   }

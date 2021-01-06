@@ -7,7 +7,6 @@
 package viper.voila.frontend
 
 import scala.collection.immutable.ListSet
-import scala.collection.breakOut
 import scala.language.implicitConversions
 import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
@@ -1456,7 +1455,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case _: PIntSet | _: PNatSet => ListSet.empty
 
       case explicitCollection: PExplicitCollection =>
-        explicitCollection.elements.flatMap(freeVariables)(breakOut)
+        explicitCollection.elements.view.flatMap(freeVariables).to(ListSet)
 
       case PSeqSize(seq) => freeVariables(seq)
       case PSeqHead(seq) => freeVariables(seq)
@@ -1472,9 +1471,9 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         freeVariables(predicate) ++ freeVariables(body)
 
       case PRegionedGuardExp(_, regionId, guardArg) =>
-        ListSet(regionId.id) ++ guardArg.arguments.flatMap(freeVariables)(breakOut)
+        ListSet(regionId.id) ++ guardArg.arguments.view.flatMap(freeVariables).to(ListSet)
 
-      case PBaseGuardExp(_, guardArg) => guardArg.arguments.flatMap(freeVariables)(breakOut)
+      case PBaseGuardExp(_, guardArg) => guardArg.arguments.view.flatMap(freeVariables).to(ListSet)
 
       case PDiamond(regionId) => ListSet(regionId)
 

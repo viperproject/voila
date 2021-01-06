@@ -7,7 +7,10 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, message}
 import org.bitbucket.inkytonik.kiama.util._
 import viper.voila.reporting.{ParserError, VoilaError}
 
-class Frontend extends PositionStore with Messaging with StrictLogging {
+class Frontend extends StrictLogging {
+  val positions = new Positions
+  val messaging = new Messaging(positions)
+
   val syntaxAnalyser = new SyntaxAnalyser(positions)
 
   def parse(file: Path): Either[Vector[ParserError], PProgram] = {
@@ -46,9 +49,9 @@ class Frontend extends PositionStore with Messaging with StrictLogging {
                             (messages: Messages, errorFactory: (String, Position) => E)
                             : Vector[E] = {
 
-    messages.sorted.map(message => {
+    messages.sorted(messaging.messageOrdering).map(message => {
       val position = positions.getStart(message.value).get
-      errorFactory(formatMessage(message), position)
+      errorFactory(messaging.formatMessage(message), position)
     })
   }
 }

@@ -6,7 +6,7 @@
 
 package viper.voila.translator
 
-import scala.collection.{breakOut, mutable}
+import scala.collection.mutable
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
 import viper.voila.backends.ViperAstUtils
@@ -426,9 +426,9 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
       !guardDecl.modifier.isInstanceOf[PDivisibleGuard]
     }
 
-    val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.map { g =>
+    val noArgMap: Map[String, TranslatedPGuardArg] = noArgGuards.view.map { g =>
       g.guard.name -> TranslatedPStandardGuardArg(Vector.empty, Some(Vector.empty))
-    }(breakOut)
+    }.to(Map)
 
     val unionMap: Map[String, TranslatedPGuardArg] = {
       val setArg =
@@ -451,21 +451,21 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         }
       }
 
-      val combinedSetArg: Map[String, vpr.Exp] = setArg.map { case (name, sets) =>
+      val combinedSetArg: Map[String, vpr.Exp] = setArg.view.map { case (name, sets) =>
         name -> sets.tail.fold(sets.head) { case (l, r) => vpr.AnySetUnion(l,r)() }
-      }(breakOut)
+      }.to(Map)
 
       val uniqueSingleArg: mutable.Map[String, Vector[PExpression]] = mutable.Map.empty
 
-      val combinedSingleArg: Map[String, vpr.Exp] = singleArg.map { case (name, argss) =>
+      val combinedSingleArg: Map[String, vpr.Exp] = singleArg.view.map { case (name, argss) =>
         if (argss.size == 1) {
           uniqueSingleArg += name -> argss.head
         }
 
         name -> vpr.ExplicitSet(argss.map(args => tupleWrap(args map translate)).toVector)()
-      }(breakOut)
+      }.to(Map)
 
-      occurringGuards.map { name =>
+      occurringGuards.view.map { name =>
         (uniqueSingleArg.isDefinedAt(name), combinedSingleArg.isDefinedAt(name), combinedSetArg.isDefinedAt(name)) match {
           case (false, false, true) => name -> TranslatedPSetGuardArg(combinedSetArg(name))
           case (false, true, false) => name -> TranslatedPSetGuardArg(combinedSingleArg(name))
@@ -473,7 +473,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
           case (_, true, true) => name -> TranslatedPSetGuardArg(vpr.AnySetUnion(combinedSetArg(name), combinedSingleArg(name))())
           case other => sys.error(s"Found unexpected case $other")
         }
-      }(breakOut)
+      }.to(Map)
     }
 
     val addMap: Map[String, TranslatedPGuardArg] = {
@@ -490,8 +490,8 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         }
       }
 
-      accMap.toVector.map { case(name,perm) =>
-        name -> TranslatedPStandardGuardArg(Vector(perm), None)}(breakOut)
+      accMap.toVector.view.map { case(name,perm) =>
+        name -> TranslatedPStandardGuardArg(Vector(perm), None)}.to(Map)
     }
 
     noArgMap ++ unionMap ++ addMap
@@ -513,13 +513,13 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
 
     val usedGuardsMap = groupGuards(usedGuards)
 
-    val usedGuardDeclMap: Map[String, PGuardDecl] = usedGuards.map{ g =>
+    val usedGuardDeclMap: Map[String, PGuardDecl] = usedGuards.view.map{ g =>
       val guardDecl = semanticAnalyser.entity(g.guard) match {
         case GuardEntity(_guardDecl, `region`) => _guardDecl
       }
 
       g.guard.name -> guardDecl
-    }(breakOut)
+    }.to(Map)
 
     def isRelevantAction(action: PAction): Boolean = {
       /* Assumes globally unique guard name */
@@ -636,7 +636,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
         }
 
         val binderInstantiations: Map[String, vpr.Exp] =
-          action.binders.map { binder =>
+          action.binders.view.map { binder =>
             val maybeExtractedExp = extractBoundExpFromAction(binder, action, vprFrom, vprTo, actionGuardMap, usedGuardsMap)
 
             if (maybeExtractedExp.isEmpty) {
@@ -645,12 +645,12 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
             }
 
             binder.id.name -> maybeExtractedExp.get
-          }(breakOut)
+          }.to(Map)
 
         val substitutes: Map[vpr.LocalVar, vpr.Exp] =
-          vprExistentialConstraint.variables.map(v =>
+          vprExistentialConstraint.variables.view.map(v =>
             v.localVar -> binderInstantiations(v.name)
-          )(breakOut)
+          ).to(Map)
 
         val body = vpr.And(
           vprExistentialConstraint.exp,
