@@ -153,7 +153,7 @@ class Voila extends StrictLogging {
         /* TODO: Move semantic analysis to the frontend */
 
         abortIfConfigOptionToolUnknown(program.options)
-        config = setVoilaConfigOptions(program.options, config.args)
+        config = setVoilaConfigOptions(program.options, config.args.to(Seq))
         setLogLevelsFromConfig(config)
         VoilaGlobalState.config = config // TODO: Remove global state
 
@@ -378,7 +378,7 @@ class Voila extends StrictLogging {
   }
 
   private def potentiallyReportExcludedProcedures(config: Config, program: PProgram): Unit = {
-    if (config.include.supplied) {
+    if (config.include.isSupplied) {
       val excludedProcedures: Vector[String] =
         program.procedures
           .map(_.id.name)
