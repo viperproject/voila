@@ -27,10 +27,10 @@ lazy val voila = (project in file("."))
     carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */
     Compile / unmanagedResourceDirectories += baseDirectory.value / "conf",
     libraryDependencies +=
-      ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.2.0") // Parsing
+      ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.4.0") // Parsing
         .exclude("com.google.guava", "guava"),
-    libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0", // Logging Frontend
-    libraryDependencies += "org.fusesource.jansi" % "jansi" % "1.17.1", // For colouring Logback output
+    libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2", // Logging Frontend
+    libraryDependencies += "org.fusesource.jansi" % "jansi" % "2.1.0", // For colouring Logback output
 
     /* Run settings */
     run / javaOptions += "-Xss128m",
