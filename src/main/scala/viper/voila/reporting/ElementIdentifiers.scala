@@ -6,7 +6,7 @@
 
 package viper.voila.reporting
 
-import org.bitbucket.inkytonik.kiama.util.{Entity, ErrorEntity, MultipleEntity, UnknownEntity}
+import org.bitbucket.inkytonik.kiama.util.Entity
 import viper.voila.frontend._
 import viper.voila.reporting.ElementIdentifier.{Article, Mode}
 
@@ -49,7 +49,7 @@ object ElementIdentifier {
 object EntityIdentifier {
   private def identify(entity: Entity): (String, Option[String]) = {
     entity match {
-      case _: ErrorEntity => ("error entity", None)
+      case _ if entity.isError => ("error entity", None)
       case StructEntity(declaration) => ("struct", Some(declaration.id.name))
       case ProcedureEntity(declaration) => ("procedure", Some(declaration.id.name))
       case PredicateEntity(declaration) => ("predicate", Some(declaration.id.name))

@@ -10,9 +10,19 @@ import org.bitbucket.inkytonik.kiama.util.{Entity, Environments}
 
 /** A symbol table and its entries */
 
-class SymbolTable() extends Environments
+sealed abstract class VoilaEntity extends Entity with Product
 
-sealed abstract class RegularEntity extends Entity with Product {
+case class MultipleEntity() extends VoilaEntity {
+  override val isError = true
+}
+
+case class UnknownEntity() extends VoilaEntity {
+  override val isError = true
+}
+
+class SymbolTable() extends Environments[VoilaEntity]
+
+sealed abstract class RegularEntity extends VoilaEntity with Product {
   def declaration: PDeclaration
 }
 
@@ -34,7 +44,7 @@ case class GuardEntity(declaration: PGuardDecl, region: PRegion) extends Regular
 //  def unapply(entity: VariableEntity): Option[PDeclaration] = Some(entity.declaration)
 //}
 
-sealed trait LocalVariableLikeEntity extends Entity {
+sealed trait LocalVariableLikeEntity extends VoilaEntity {
   def id: PIdnDef
   def typ: PType
 }

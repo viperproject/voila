@@ -12,7 +12,6 @@ import org.bitbucket.inkytonik.kiama.==>
 import org.bitbucket.inkytonik.kiama.attribution.{Attribution, Decorators}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{id => _, _}
 import org.bitbucket.inkytonik.kiama.util.Messaging._
-import org.bitbucket.inkytonik.kiama.util.{Entity, ErrorEntity, MultipleEntity, UnknownEntity}
 import viper.voila.VoilaGlobalState
 import viper.voila.reporting.PIdnNodeIdentifier
 
@@ -40,7 +39,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                       s"Receiver $receiver does not have a field $field",
                       !struct.fields.exists(_.id.name == field.name))
 
-                  case other if !other.isInstanceOf[ErrorEntity] =>
+                  case other if other.isError =>
                     error(receiver, s"Receiver $receiver is not of struct type")
                 }
 
@@ -559,8 +558,8 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     * The entity defined by a defining occurrence of an identifier.
     * Defined by the context of the occurrence.
     */
-  lazy val definedEntity: PIdnDef => Entity =
-    attr[PIdnDef, Entity] {
+  lazy val definedEntity: PIdnDef => VoilaEntity =
+    attr[PIdnDef, VoilaEntity] {
       case tree.parent(p) =>
         p match {
           case decl: PStruct=> StructEntity(decl)
@@ -632,10 +631,10 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           region.guards.map(guard =>
             s"${guard.id.name}@${region.id.name}" -> GuardEntity(guard, region)))
 
-      val bindings: Vector[(String, Entity)] = topLevelBindings ++ guardBindings
+      val bindings: Vector[(String, VoilaEntity)] = topLevelBindings ++ guardBindings
 
       bindings.foldLeft(rootenv()) { case (currentEnv, currentBinding) =>
-        defineIfNew(currentEnv, currentBinding._1, currentBinding._2)
+        defineIfNew(currentEnv, currentBinding._1, MultipleEntity(), currentBinding._2)
       }
 
     case bindingContext: PBindingContext with PScope =>
@@ -646,7 +645,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       var nextEnv = enter(in(bindingContext))
 
       def add(binder: PNamedBinder): Unit = {
-        nextEnv = defineIfNew(nextEnv, binder.id.name, definedEntity(binder.id))
+        nextEnv = defineIfNew(nextEnv, binder.id.name, MultipleEntity(), definedEntity(binder.id))
       }
 
       bindingContext match {
@@ -677,7 +676,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
           out(idef)
 
         case _ =>
-          defineIfNew(out(idef), idef.name, definedEntity(idef))
+          defineIfNew(out(idef), idef.name, MultipleEntity(), definedEntity(idef))
       }
   }
 
@@ -690,14 +689,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   /**
     * The program entity referred to by an identifier definition or use.
     */
-  lazy val entity: PIdnNode => Entity =
-    attr[PIdnNode, Entity] {
+  lazy val entity: PIdnNode => VoilaEntity =
+    attr[PIdnNode, VoilaEntity] {
       case g @ tree.parent(PRegionedGuardExp(guardId, _, _)) if guardId eq g => lookupGuard(guardId)
       case g @ tree.parent(PBaseGuardExp(guard, _)) if guard eq g => lookupGuard(g)
       case n => lookup(env(n), n.name, UnknownEntity())
     }
 
-  private def lookupGuard(guardId: PIdnNode): Entity = {
+  private def lookupGuard(guardId: PIdnNode): VoilaEntity = {
     /* Guards must currently be globally unique and we can therefore find the region it
      * belongs to simply by iterating over all regions.
      *
