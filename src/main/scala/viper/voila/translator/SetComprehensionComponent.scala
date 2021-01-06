@@ -50,7 +50,7 @@ trait SetComprehensionComponent { this: PProgramToViperTranslator =>
         }.to(ListSet)
 
     val freeVariablesToDecls: ListMap[PIdnUse, vpr.LocalVarDecl] =
-      freeVariables.zip(decls)(breakOut)
+      freeVariables.view.zip(decls).to(ListMap)
 
     val vprBody = {
       val vprQVarDecl =

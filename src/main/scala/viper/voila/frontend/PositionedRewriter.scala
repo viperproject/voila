@@ -154,11 +154,12 @@ class PositionedRewriter(override val positions: Positions)
 
       val binders = AstUtils.extractNamedBinders(body)
 
-      val (_, binderReplacements) =
-        duplicateAndGenerateRenamings(binders, name => s"${name}_$appliedMacro")
+      val (_, binderReplacements: Map[PDeclaration, PDeclaration]) =
+        duplicateAndGenerateRenamings[PDeclaration](binders, name => s"${name}_$appliedMacro")
 
       val declarationReplacements: Map[PDeclaration, PDeclaration] =
-        localVariableReplacements ++ binderReplacements
+        (localVariableReplacements ++ binderReplacements).to(Map)
+          // 2021-01 Malte: After updating to Scala 2.13, the trailing .to(Map) was necessary. I don't understand, why.
 
       val formalReplacements: Map[PIdnDef, PExpression] =
         formals.view.zip(actuals).to(Map)
