@@ -6,6 +6,7 @@
 
 package viper.voila.translator
 
+import scala.annotation.unused
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.collect
 import viper.silver.{ast => vpr}
 import viper.voila.frontend._
@@ -73,7 +74,7 @@ trait LevelTranslatorComponent { this: PProgramToViperTranslator =>
 
     def noRecordedRegions: Boolean = currentAtomicityContextLevels.isEmpty
 
-    def registerRegionExp(region: PRegion, args: Vector[vpr.Exp]): vpr.Stmt = {
+    def registerRegionExp(@unused region: PRegion, args: Vector[vpr.Exp]): vpr.Stmt = { // TODO: Why isn't region used?
       val levelVar = declareFreshVariable(vpr.Int, "_levelVar").localVar
       currentAtomicityContextLevels ::= levelVar
       vpr.LocalVarAssign(levelVar, args(1))()

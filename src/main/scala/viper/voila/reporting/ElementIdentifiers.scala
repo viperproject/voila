@@ -68,7 +68,7 @@ object EntityIdentifier {
 
   def name(entity: Entity): Option[String] = identify(entity)._2
 
-  def fullyQualified(entity: Entity, article: Article = Article.None): String = {
+  def fullyQualified(entity: Entity): String = {
     val (entityKind, optEntityName) = identify(entity)
 
     s"$entityKind${optEntityName.fold("")(name => s" $name")}"

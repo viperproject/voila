@@ -99,7 +99,7 @@ class Config(arguments: Seq[String])
       + " option must be set, otherwise the Viper encoding is not correct.")
     case  (Some(true), Some(true), Some(false)) => sys.error(s"If Carbon is used, the " + s"--${useQPsInsteadOfForperms.name}"
       + " must be set, because Carbon does not support generalized forperm expressions.")
-    case _ => Right(Unit)
+    case _ => Right(())
   }
 
   /*

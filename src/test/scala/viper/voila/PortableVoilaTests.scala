@@ -152,7 +152,7 @@ class PortableVoilaTests extends VoilaTests with BeforeAndAfterEach {
         .transpose
         .zip(meanTimePerPhase)
         .map { case (col, mean) =>
-          math.sqrt(col.map(v => math.pow(v - mean, 2)).sum / col.length).toLong
+          math.sqrt(col.map(v => math.pow((v - mean).toDouble, 2)).sum / col.length).toLong
         }
 
     val relStddevTimings: Seq[Long] =

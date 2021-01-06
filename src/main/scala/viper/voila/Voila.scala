@@ -9,7 +9,6 @@ package viper.voila
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path, Paths}
-
 import scala.util.{Left, Right}
 import ch.qos.logback.classic.{Level, Logger}
 import com.typesafe.scalalogging.StrictLogging
@@ -17,10 +16,12 @@ import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
-import viper.voila.backends.{MockViperFrontend, Silicon, Carbon, ViperVerifier, ViperNameSanitizer, ViperPreamble}
+import viper.voila.backends.{Carbon, MockViperFrontend, Silicon, ViperNameSanitizer, ViperPreamble, ViperVerifier}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
+
+import scala.collection.immutable.ArraySeq
 
 object VoilaConstants {
   val toolName: String  = "Voila"
@@ -84,7 +85,7 @@ class Voila extends StrictLogging {
     val preambleFile = defaultPreambleFile
     val viperFrontend = new MockViperFrontend()
 
-    viperFrontend.translate(preambleFile) match {
+    (viperFrontend.translate(preambleFile): @unchecked) match {
       case (None, errors) =>
         logger.error(s"Could not parse Viper preamble $preambleFile:")
         errors foreach (error => logger.error(s"  ${error.readableMessage}"))
@@ -99,13 +100,13 @@ class Voila extends StrictLogging {
   }
 
   def verify(file: String): Option[VoilaResult] = {
-    val config = new Config(Array("-i", file))
+    val config = new Config(Vector("-i", file))
 
     verify(Paths.get(config.inputFileName()), config)
   }
 
   def verify(path: Path): Option[VoilaResult] = {
-    val config = new Config(Array("-i", path.toFile.getPath))
+    val config = new Config(Vector("-i", path.toFile.getPath))
 
     verify(Paths.get(config.inputFileName()), config)
   }
@@ -478,7 +479,7 @@ class Voila extends StrictLogging {
     }
   }
 
-  private def setLogLevelsFromConfig(config: Config) {
+  private def setLogLevelsFromConfig(config: Config): Unit = {
     val logger = LoggerFactory.getLogger(this.getClass.getPackage.getName).asInstanceOf[Logger]
     logger.setLevel(Level.toLevel(config.logLevel()))
   }
@@ -492,8 +493,8 @@ class Voila extends StrictLogging {
 }
 
 object VoilaRunner extends Voila {
-  def main(args: Array[String]) {
-    verify(new Config(args)) match {
+  def main(args: Array[String]): Unit = {
+    verify(new Config(ArraySeq.unsafeWrapArray(args))) match {
       case None =>
         exitWithError("Voila failed unexpectedly")
       case Some(result) =>

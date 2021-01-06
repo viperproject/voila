@@ -6,6 +6,7 @@
 
 package viper.voila.translator
 
+import scala.annotation.unused
 import scala.collection.mutable
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{reasons => vprrea}
@@ -194,7 +195,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
               body = None
             )()
 
-          case (_: PDivisibleGuard, perm +: args) => /* TODO: Why isn't perm used?*/
+          case (_: PDivisibleGuard, (perm@_) +: args) => /* TODO: Why isn't perm used?*/
             vpr.Predicate(
               name = guardPredicateName(guard, region),
               formalArgs = regionIdArgument +: args,
@@ -498,7 +499,7 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
   }
 
   def regionStateChangeAllowedByGuard(region: PRegion,
-                                      vprRegionInArgs: Vector[vpr.Exp],
+                                      @unused vprRegionInArgs: Vector[vpr.Exp], // TODO: Why have the argument?
                                       usedGuards: Vector[PRegionedGuardExp],
                                       vprFrom: vpr.Exp,
                                       vprTo: vpr.Exp,

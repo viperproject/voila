@@ -6,6 +6,7 @@
 
 package viper.voila.translator
 
+import scala.annotation.unused
 import viper.silver.ast.{Exp, Label, Stmt, Trigger}
 import viper.silver.{ast => vpr}
 import viper.voila.VoilaGlobalState
@@ -107,7 +108,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     sequenceStabilizeSubject.nextVersion()
   }
 
-  private def afterNonAtomic(preHavocLabel: vpr.Label): Unit = {} /* TODO: Remove? */
+  private def afterNonAtomic(@unused preHavocLabel: vpr.Label): Unit = {} /* TODO: Remove? */
 
   def nonAtomicStabilizeSingleInstances(reason: String, regions: (PRegion, Vector[vpr.Exp])*)
                                        : vpr.Stmt = {
@@ -254,7 +255,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   private def havocSingleRegion(region: PRegion,
-                                wrapper: TranslatorUtils.QuantifierWrapper.Wrapper,
+                                @unused wrapper: TranslatorUtils.QuantifierWrapper.Wrapper, // TODO: Why have the argument?
                                 preHavocLabel: vpr.Label)
                                : vpr.Stmt = {
 
@@ -375,7 +376,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
     )()
   }
 
-  private def dfltActionFilter(region: PRegion)(action: PAction): Boolean = true
+  private def dfltActionFilter(@unused region: PRegion)(@unused action: PAction): Boolean = true
 
 //  private def dfltPostRegionState(region: PRegion)(args: Vector[vpr.Exp]): vpr.Exp =
 //    vpr.FuncApp(regionStateFunction(region), args)()
@@ -398,7 +399,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
 
     /* Skolemize action existentials */
 
-    def substitute(v: vpr.LocalVar, qvars: Seq[vpr.LocalVar]): vpr.Exp = {
+    def substitute(v: vpr.LocalVar, @unused qvars: Seq[vpr.LocalVar]): vpr.Exp = { // TODO: Why isn't qvars used?
       vpr.FuncApp(
         collectedActionSkolemizationFunctions(region.id.name, v.name),
         skolemArgs
@@ -568,7 +569,7 @@ trait StabilizationComponent { this: PProgramToViperTranslator =>
   }
 
   def possibleNextStateConstraint(region: PRegion,
-                                  actionFilter: PAction => Boolean,
+                                  @unused actionFilter: PAction => Boolean, // TODO: Why have the argument?
                                   preRegionState: Vector[vpr.Exp] => vpr.Exp)
                                  : Constraint = {
 

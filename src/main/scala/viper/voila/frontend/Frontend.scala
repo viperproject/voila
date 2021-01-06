@@ -33,7 +33,7 @@ class Frontend extends StrictLogging {
 
     positions.reset()
 
-    syntaxAnalyser.parse(parser, source) match {
+    (syntaxAnalyser.parse(parser, source): @unchecked) match {
       case Success(ast, _) =>
         Right(ast)
       case ns @ NoSuccess(label, next) =>

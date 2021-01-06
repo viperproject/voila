@@ -9,10 +9,11 @@ package viper.voila
 import scala.reflect.{ClassTag, classTag}
 import scala.util.{Left, Right}
 import org.bitbucket.inkytonik.kiama.util.StringSource
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 import viper.voila.frontend._
 
-class ParserTests extends FunSuite with Matchers {
+class ParserTests extends AnyFunSuite with Matchers {
   private val frontend = new TestFrontend()
 
   private val `0` = PIntLit(BigInt(0))

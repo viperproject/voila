@@ -6,6 +6,7 @@
 
 package viper.voila.translator
 
+import scala.annotation.unused
 import scala.collection.mutable
 import viper.silver.ast.{Declaration, Exp, Stmt}
 import viper.silver.{ast => vpr}
@@ -19,7 +20,7 @@ object TranslatorUtils {
    */
 
   trait Observer[S] {
-    def receiveUpdate(subject: S)
+    def receiveUpdate(subject: S): Unit
   }
 
   trait Subject[S] {
@@ -460,7 +461,7 @@ object TranslatorUtils {
     protected def post(trigger: vpr.DomainFuncApp): Vector[vpr.Exp] =
       Vector(vpr.InhaleExhaleExp(trigger, vpr.TrueLit()())())
 
-    protected def body(obj: ManagedObject[T]): Option[vpr.Exp] = None
+    protected def body(@unused obj: ManagedObject[T]): Option[vpr.Exp] = None
 
     override protected def toMember(obj: ManagedObject[T])
                                    : (vpr.Function, Vector[vpr.Declaration]) = {
