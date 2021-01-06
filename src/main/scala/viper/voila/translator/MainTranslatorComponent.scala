@@ -471,7 +471,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
     collectedVariableDeclarations = Vector.empty
 
     val bodyToVerify: Option[vpr.Seqn] =
-      if (!config.include.supplied || config.include().contains(procedure.id.name))
+      if (!config.include.isSupplied || config.include().contains(procedure.id.name))
         bodyWithPreamble
       else
         None
