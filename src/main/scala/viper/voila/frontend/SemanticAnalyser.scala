@@ -26,7 +26,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
   lazy val errors: Messages =
     collectMessages(tree) {
       case decl: PIdnDef if entity(decl) == MultipleEntity() =>
-        message(decl, s"${decl.name} is declared more than once")
+        error(decl, s"${decl.name} is declared more than once")
 
       case use: PIdnUse =>
         use match {
@@ -35,33 +35,33 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               case PRefType(referencedTyp) =>
                 check(entity(referencedTyp)) {
                   case StructEntity(struct) =>
-                    message(
+                    error(
                       receiver,
                       s"Receiver $receiver does not have a field $field",
                       !struct.fields.exists(_.id.name == field.name))
 
                   case other if !other.isInstanceOf[ErrorEntity] =>
-                    message(receiver, s"Receiver $receiver is not of struct type")
+                    error(receiver, s"Receiver $receiver is not of struct type")
                 }
 
               case PRegionIdType() =>
                 val region = usedWithRegion(receiver.id)
 
-                 message(
+                 error(
                    receiver,
                    s"Receiver $receiver does not have a field $field",
                    !region.fields.exists(_.id.name == field.name))
 
               case other if !other.isInstanceOf[PUnknownType] =>
-                message(receiver, s"Receiver $receiver is not of reference type")
+                error(receiver, s"Receiver $receiver is not of reference type")
             }
 
           case _ =>
-            message(use, s"${use.name} is not declared", entity(use) == UnknownEntity())
+            error(use, s"${use.name} is not declared", entity(use) == UnknownEntity())
         }
 
       case exp: PExpression if typ(exp) == PUnknownType() =>
-        message(exp, s"$exp could not be typed")
+        error(exp, s"$exp could not be typed")
 
       case predicateDecl @ PPredicate(predicate, _, body) =>
         val collectRegionPredicateExpressions =
@@ -71,7 +71,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
         val regionPredicateExpressions = collectRegionPredicateExpressions(body)
 
-        message(
+        error(
           predicateDecl,
           s"Regular predicates may currently not contain region predicates, but predicate " +
               s"${predicate.name} contains the following: " +
@@ -86,7 +86,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         val atomicityMessages =
           optBody match {
             case Some(body) =>
-              message(
+              error(
                 body,
                 "Unexpectedly found a non-atomic and non-ghost statement " +
                     s"(${body.statementName}) in an atomic context",
@@ -100,21 +100,21 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
       case region: PRegion =>
         if (region.formalInArgs.length < 2) {
-          message(
+          error(
             region,
             s"Region ${region.id.name} must have at least two parameters: id and level")
         } else {
           val Vector(firstParam, secondParam) = region.formalInArgs.take(2)
 
           val idTypeMessage =
-            message(
+            error(
               firstParam,
               s"Region ${region.id.name}'s first parameter must be of type ${PRegionIdType().pretty}, " +
                   s"but got: ${firstParam.typ.pretty}",
               firstParam.typ != PRegionIdType())
 
           val levelTypeMessage =
-            message(
+            error(
               secondParam,
               s"Region ${region.id.name}'s second parameter must be of type ${PIntType().pretty}, " +
                   s"but got: ${secondParam.typ.pretty}",
@@ -136,7 +136,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                 (action.guards flatMap freeVariables)
             ).filterNot(fv => action.binders.exists(_.id.name == fv.name))
 
-          message(
+          error(
             action,
             s"Actions may not contain free variables, but found: ${freeVars.mkString(", ")}",
             freeVars.nonEmpty)
@@ -147,7 +147,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             checkUse(entity(guardId)) {
               case GuardEntity(decl, declaringRegion) =>
                 val regionMessages =
-                  message(
+                  error(
                     guardExp,
                     s"Guard ${guardId.name} is not a guard of this region",
                     !enclosingMember(action).contains(declaringRegion))
@@ -190,14 +190,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                         reportTypeMismatch(guardSet, expectedGuardSetTyp(decl), typ(guardSet))
 
                       case _: PDivisibleGuard =>
-                        message(guardId, s"Indexed divisible guards are currently not supported, but got ${guardId.name}")
+                        error(guardId, s"Indexed divisible guards are currently not supported, but got ${guardId.name}")
                     }
                   }
 
                 regionMessages ++ typeMessages
 
               case _ =>
-                message(guardId, s"Expected a guard, but got ${guardId.name}")
+                error(guardId, s"Expected a guard, but got ${guardId.name}")
             }
           }
 
@@ -206,7 +206,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
       case PAssign(lhs, rhs) =>
         val lhsEntity = entity(lhs)
 
-        message(
+        error(
           lhs,
           s"Cannot assign to ${lhs.name}",
           !lhsEntity.isInstanceOf[LocalVariableLikeEntity]
@@ -219,7 +219,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
           case other =>
             checkUse(other){ case _ =>
-              message(
+              error(
                 localVariable,
                 "Type error: expected a local variable, but found " +
                   PIdnNodeIdentifier.fullyQualified(localVariable, other))
@@ -233,7 +233,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         val lhsEntity = entity(lhs)
 
         val lhsMessages =
-          message(
+          error(
             lhs,
             s"Cannot assign to ${lhs.name}",
             !lhsEntity.isInstanceOf[LocalVariableLikeEntity])
@@ -246,7 +246,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
               val argumentsMessages =
                 if (arguments.size > structDecl.fields.size) {
-                  message(
+                  error(
                     newStmt,
                     s"Wrong number of arguments for struct constructor '${constructor.name}', got ${arguments.size} "
                       + s"but expected at most ${structDecl.fields.size}")
@@ -256,11 +256,11 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
               val guardsMessages =
                 optGuards.fold(noMessages)(
-                  message(_, s"Struct constructor does not take a list of guards"))
+                  error(_, s"Struct constructor does not take a list of guards"))
 
               val initializerMessages =
                 optInitializer.fold(noMessages)(
-                  message(_, s"Struct constructor does not take an initializer block"))
+                  error(_, s"Struct constructor does not take an initializer block"))
 
               typeMessages ++ argumentsMessages ++ guardsMessages ++ initializerMessages
 
@@ -274,7 +274,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     if (arguments.size > regionDecl.formalInArgs.size - 1) " (note that the region id must be omitted)"
                     else ""
 
-                  message(
+                  error(
                     newStmt,
                     s"Wrong number of arguments for region constructor '${constructor.name}', got ${arguments.size} "
                       + s"but expected ${regionDecl.formalInArgs.size - 1}"
@@ -289,7 +289,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     case GuardEntity(_, `regionDecl`) =>
                       noMessages
                     case _ =>
-                      message(
+                      error(
                         guardExp,
                         s"Region ${constructor.name} does not declare guard ${guardExp.guard.name}")
                   }
@@ -298,7 +298,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               typeMessages ++ argumentsMessages ++ guardsMessages
 
             case _ =>
-              message(constructor, s"Cannot instantiate ${constructor.name}, struct or region expected")
+              error(constructor, s"Cannot instantiate ${constructor.name}, struct or region expected")
           }
 
         lhsMessages ++ constructorMessages
@@ -312,23 +312,23 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
             ++ call.rhs.zip(decl.formalReturns).flatMap { case (rhs, formal) => reportTypeMismatch(rhs, formal.typ) }
             ++ { call match {
                    case tree.parent(_: PLemmaApplication) =>
-                     message(call, "only lemma methods are invoked with 'use'", !decl.lemma.flag)
+                     error(call, "only lemma methods are invoked with 'use'", !decl.lemma.flag)
                    case _ =>
-                     message(call, "lemma methods can only be invoked with 'use'", decl.lemma.flag)
+                     error(call, "lemma methods can only be invoked with 'use'", decl.lemma.flag)
                }}
             )
 //            ++ reportTypeMismatch(call.rhs, decl.formalReturns)) /* TODO: See comment for reportTypeMismatch */
 
           case _ =>
-            message(call.procedure, s"Cannot call ${call.procedure}")
+            error(call.procedure, s"Cannot call ${call.procedure}")
         }
 
       case fork: PFork =>
-        message(fork.call, s"expected non-atomic call, but got ${fork.call}", atomicity(fork.call) != AtomicityKind.Nonatomic)
+        error(fork.call, s"expected non-atomic call, but got ${fork.call}", atomicity(fork.call) != AtomicityKind.Nonatomic)
 
       case parallelCall: PParallelCall =>
         parallelCall.calls.flatMap { call =>
-          message(call, s"expected non-atomic call, but got $call", atomicity(call) != AtomicityKind.Nonatomic)
+          error(call, s"expected non-atomic call, but got $call", atomicity(call) != AtomicityKind.Nonatomic)
         }
 
       case _rule @ (_: POpenRegion | _: PUpdateRegion) =>
@@ -363,7 +363,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
               case PIdnExp(id) =>
                 checkUse(entity(id)) {
                   case _: ProcedureEntity =>
-                    message(id, "Cannot refer to procedures directly")
+                    error(id, "Cannot refer to procedures directly")
                 }
 
               case PPredicateExp(id, args) =>
@@ -384,7 +384,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     val actualArgCount = args.length
 
                     val lengthMessages =
-                      message(
+                      error(
                         id,
                           s"Wrong number of arguments for '${id.name}': expected at least "
                         + s"${expectedArgCounts._1} (no out-arguments) and at most "
@@ -402,7 +402,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     lengthMessages ++ typeMessages
 
                   case _ =>
-                    message(id, s"Expected a predicate or a region, but got ${id.name}")
+                    error(id, s"Expected a predicate or a region, but got ${id.name}")
                 }
 
               case PRegionedGuardExp(guardId, regionId, argument) =>
@@ -428,13 +428,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                     }
 
                   case _ =>
-                    message(guardId, s"Expected a guard, but got ${guardId.name}")
+                    error(guardId, s"Expected a guard, but got ${guardId.name}")
                 }
 
               case PTupleGet(tuple, index) =>
                 check(typ(tuple)) {
                   case PTupleType(elementTypes) =>
-                    message(exp, s"Out of bounds access in ${exp.pretty}", index >= elementTypes.length)
+                    error(exp, s"Out of bounds access in ${exp.pretty}", index >= elementTypes.length)
                 }
 
               case unfolding: PUnfolding => reportAbstractPredicateUnFoldIng(unfolding)
@@ -453,7 +453,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
                                            formalArgCount: Int,
                                            actualArgCount: Int) = {
 
-    message(
+    error(
       offendingNode,
         s"Wrong number of arguments for '${callee.name}', got $actualArgCount "
       + s"but expected $formalArgCount",
@@ -496,13 +496,13 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
         s"${expectedTypes.last}, but got $foundType"
       }
 
-    message(offendingNode, text, !expectedTypes.exists(isCompatible(foundType, _)))
+    error(offendingNode, text, !expectedTypes.exists(isCompatible(foundType, _)))
   }
 
   def reportAbstractPredicateUnFoldIng(foldUnfold: PFoldUnfold): Messages = {
     checkUse(entity(foldUnfold.predicateExp.predicate)) {
       case PredicateEntity(predicate) if predicate.body.isEmpty =>
-        message(
+        error(
           foldUnfold,
           s"Cannot (un)fold ${foldUnfold.predicateExp.pretty} because predicate ${predicate.id.name} is abstract")
     }
@@ -510,7 +510,7 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
 
   def reportAtomicityMismatch(stmt: PStatement, expectedAtomicity: AtomicityKind, text: String): Messages = {
     checkWith(atomicity(stmt))(atomicityKind =>
-      message(
+      error(
         stmt,
         text,
         atomicityKind != expectedAtomicity))
@@ -524,14 +524,14 @@ class SemanticAnalyser(tree: VoilaTree) extends Attribution {
     val guardIds = guards.map(_.regionId).distinct
 
     if (guardIds.length > 1) {
-      message(
+      error(
         offendingNode,
         s"The guards used by ${offendingNode.statementName} must all be for the same region, " +
             s"but got different region IDs: ${guardIds.mkString(", ")}")
     } else {
       assert(guardIds.nonEmpty, "Expected at least one region ID, but got zero")
 
-      message(
+      error(
         offendingNode,
         s"Region and guard(s) used by ${offendingNode.statementName} don't share the same region ID: " +
             s"${regionPredicate.arguments.head} vs. ${guardIds.head}",
