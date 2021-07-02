@@ -34,28 +34,28 @@ domain Pair[T1, T2] {
  * Revision: 6270caf234d41ea82501ccade147a1d56c31cf21
  */
 
-domain Map[U, V] {
-  function Map_keys(m: Map[U, V]): Set[U]
+domain $Map[U, V] {
+  function Map_keys(m: $Map[U, V]): Set[U]
   // function Map#Elements<U,V>(Map U V) : [U]V;
-  function Map_card(m: Map[U, V]): Int
-  function Map_lookup(m: Map[U, V], u: U): V
+  function Map_card(m: $Map[U, V]): Int
+  function Map_lookup(m: $Map[U, V], u: U): V
 
   // TODO: Further axioms for Map_lookup?
 
   axiom Map_card_non_neg {
-    forall m: Map[U, V] :: { Map_card(m) } 0 <= Map_card(m)
+    forall m: $Map[U, V] :: { Map_card(m) } 0 <= Map_card(m)
   }
 
   axiom Map_card_domain {
-    forall m: Map[U, V] :: { |Map_keys(m)| }
+    forall m: $Map[U, V] :: { |Map_keys(m)| }
       |Map_keys(m)| == Map_card(m)
   }
 
 
-  function Map_values(m: Map[U, V]): Set[V];
+  function Map_values(m: $Map[U, V]): Set[V];
 
   axiom Map_values_def {
-    forall m: Map[U, V], v: V :: { v in Map_values(m) }
+    forall m: $Map[U, V], v: V :: { v in Map_values(m) }
       v in Map_values(m) <==>
       (exists u: U :: //{ u in Map_keys(m) } { Map_lookup(m, u) }
         u in Map_keys(m) &&
@@ -86,15 +86,15 @@ domain Map[U, V] {
       // Map#Elements(m)[_System.__tuple_h2._0($Unbox(item))] == _System.__tuple_h2._1($Unbox(item)));
 
 
-  function Map_empty(): Map[U, V]
+  function Map_empty(): $Map[U, V]
 
   axiom Map_empty_1 {
-    forall u: U :: { u in Map_keys((Map_empty(): Map[U, V])) }
-      !(u in Map_keys((Map_empty(): Map[U, V])))
+    forall u: U :: { u in Map_keys((Map_empty(): $Map[U, V])) }
+      !(u in Map_keys((Map_empty(): $Map[U, V])))
   }
 
   axiom Map_empty_2 {
-    forall m: Map[U, V] :: { Map_card(m) }
+    forall m: $Map[U, V] :: { Map_card(m) }
       (Map_card(m) == 0 <==> m == Map_empty()) &&
       (Map_card(m) != 0 ==> (exists u: U :: u in Map_keys(m)))
   }
@@ -112,14 +112,14 @@ domain Map[U, V] {
           // $Is(Map#Glue(a, b, t), t));
 
 
-  function Map_build(m: Map[U, V], u: U, v: V): Map[U, V]
+  function Map_build(m: $Map[U, V], u: U, v: V): $Map[U, V]
 
   /*axiom (forall<U, V> m: Map U V, u: U, v: V ::
     { Map#Domain(Map#Build(m, u, v))[u] } { Map#Elements(Map#Build(m, u, v))[u] }
     Map#Domain(Map#Build(m, u, v))[u] && Map#Elements(Map#Build(m, u, v))[u] == v);*/
 
   axiom Map_build_1 {
-    forall m: Map[U, V], u1: U, u2: U, v: V ::
+    forall m: $Map[U, V], u1: U, u2: U, v: V ::
       { u2 in Map_keys(Map_build(m, u1, v)) } //{ Map_elements(Map#Build(m, u, v))[u'] }
       (u2 == u1 ==> u2 in Map_keys(Map_build(m, u1, v)) /* &&
                     Map#Elements(Map#Build(m, u1, v))[u2] == v*/ &&
@@ -130,44 +130,44 @@ domain Map[U, V] {
   }
 
   axiom Map_build_2 {
-    forall m: Map[U, V], u: U, v: V :: { Map_card(Map_build(m, u, v)) }
+    forall m: $Map[U, V], u: U, v: V :: { Map_card(Map_build(m, u, v)) }
       u in Map_keys(m) ==> Map_card(Map_build(m, u, v)) == Map_card(m)
   }
 
   axiom Map_build_3 {
-    forall m: Map[U, V], u: U, v: V :: { Map_card(Map_build(m, u, v)) }
+    forall m: $Map[U, V], u: U, v: V :: { Map_card(Map_build(m, u, v)) }
       !(u in Map_keys(m)) ==> Map_card(Map_build(m, u, v)) == Map_card(m) + 1
   }
 
 
-  function Map_equal(m1: Map[U, V], m2: Map[U, V]): Bool
+  function Map_equal(m1: $Map[U, V], m2: $Map[U, V]): Bool
 
   axiom Map_equality {
-    forall m1: Map[U, V], m2: Map[U, V] ::
+    forall m1: $Map[U, V], m2: $Map[U, V] ::
       { Map_equal(m1, m2) }
         Map_equal(m1, m2) <==> (forall u: U :: { u in Map_keys(m1) }{ u in Map_keys(m2) } u in Map_keys(m1) <==> u in Map_keys(m2)) /*&&
                                (forall u: U :: u in Map_keys(m) ==> Map#Elements(m)[u] == Map#Elements(m')[u])*/
   }
 
   axiom Map_extensionality {
-    forall m1: Map[U, V], m2: Map[U, V] :: { Map_equal(m1, m2) }
+    forall m1: $Map[U, V], m2: $Map[U, V] :: { Map_equal(m1, m2) }
       Map_equal(m1, m2) ==> m1 == m2
   }
 
 
-  function Map_disjoint(m1: Map[U, V], m2: Map[U, V]): Bool
+  function Map_disjoint(m1: $Map[U, V], m2: $Map[U, V]): Bool
 
   axiom Map_disjoint_def {
-    forall m1: Map[U, V], m2: Map[U, V]:: { Map_disjoint(m1, m2) }
+    forall m1: $Map[U, V], m2: $Map[U, V]:: { Map_disjoint(m1, m2) }
       Map_disjoint(m1, m2) <==>
       (forall u: U :: { u in Map_keys(m1) } { u in Map_keys(m2) } !(u in Map_keys(m1)) || !(u in Map_keys(m2)))
   }
 
 
-  function Map_union(m1: Map[U, V], m2: Map[U, V]): Map[U, V]
+  function Map_union(m1: $Map[U, V], m2: $Map[U, V]): $Map[U, V]
 
   axiom Map_union_1 {
-    forall m1: Map[U, V], m2: Map[U, V], u: U ::
+    forall m1: $Map[U, V], m2: $Map[U, V], u: U ::
       { u in Map_keys(Map_union(m1, m2)) }
       { u in (Map_keys(m1) union Map_keys(m2)) }
       Map_disjoint(m1, m2) ==>
@@ -175,14 +175,14 @@ domain Map[U, V] {
   }
 
   axiom Map_union_2 {
-    forall m1: Map[U, V], m2: Map[U, V], u: U ::
+    forall m1: $Map[U, V], m2: $Map[U, V], u: U ::
       { Map_lookup(Map_union(m1, m2), u) }
       Map_disjoint(m1, m2) && u in Map_keys(m1) ==>
         Map_lookup(Map_union(m1, m2), u) == Map_lookup(m1, u)
   }
 
   axiom Map_union_3 {
-    forall m1: Map[U, V], m2: Map[U, V], u: U ::
+    forall m1: $Map[U, V], m2: $Map[U, V], u: U ::
       { Map_lookup(Map_union(m1, m2), u) }
       Map_disjoint(m1, m2) && u in Map_keys(m2) ==>
         Map_lookup(Map_union(m1, m2), u) == Map_lookup(m2, u)

@@ -116,7 +116,7 @@ class ViperPreamble(preamble: Program) {
   }
 
   object maps {
-    val domain: Domain = preamble.findDomain("Map")
+    val domain: Domain = preamble.findDomain("$Map")
 
     val keys: DomainFunc = preamble.findDomainFunction("Map_keys")
     val cardinality: DomainFunc = preamble.findDomainFunction("Map_card")
