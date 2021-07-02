@@ -132,7 +132,7 @@ trait RegionTranslatorComponent { this: PProgramToViperTranslator =>
               typVarMap = Map.empty
             )(pos = vpr.NoPosition,
               info = vpr.NoInfo,
-              typPassed = vpr.Bool,
+              typ = vpr.Bool,
               domainName = regionStateTriggerFunctionsDomainName,
               errT = vpr.NoTrafos),
             vpr.TrueLit()()
