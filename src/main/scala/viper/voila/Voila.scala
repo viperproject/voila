@@ -16,6 +16,7 @@ import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.silver
+import viper.silicon
 import viper.voila.backends.{Carbon, MockViperFrontend, Silicon, ViperNameSanitizer, ViperPreamble, ViperVerifier}
 import viper.voila.frontend._
 import viper.voila.reporting._
@@ -269,7 +270,7 @@ class Voila extends StrictLogging {
           //        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
           siliconOptions ++= Vector("--logLevel", "ERROR")
           siliconOptions ++= Vector("--disableCatchingExceptions")
-          siliconOptions ++= Vector("--disableMostStateConsolidations")
+          siliconOptions ++= Vector("--stateConsolidationMode", silicon.Config.StateConsolidationMode.MoreCompleteExhale.id.toString)
 
           if (config.disableSiliconSpecificHavockingCode()) {
             // Disabling Silicon's support for this hack isn't strictly necessary, but can't hurt, either
