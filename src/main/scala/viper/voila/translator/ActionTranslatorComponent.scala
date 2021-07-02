@@ -432,39 +432,35 @@ trait ActionTranslatorComponent { this: PProgramToViperTranslator =>
     }.to(Map)
 
     val unionMap: Map[String, TranslatedPGuardArg] = {
-      val setArg =
-        new mutable.HashMap[String, mutable.Set[vpr.Exp]]
-            with mutable.MultiMap[String, vpr.Exp]
-
-      val singleArg =
-        new mutable.HashMap[String, mutable.Set[Vector[PExpression]]]
-            with mutable.MultiMap[String, Vector[PExpression]]
+      val setArg = mutable.MultiDict.empty[String, vpr.Exp]
+      val singleArg = mutable.MultiDict.empty[String, Vector[PExpression]]
 
       val occurringGuards = unionGuards.map(_.guard.name).distinct
 
       unionGuards foreach { g =>
         g.argument match {
           case arg: PStandardGuardArg =>
-            singleArg.addBinding(g.guard.name, arg.arguments)
+            singleArg += g.guard.name -> arg.arguments
 
           case arg: PSetGuardArg =>
-            setArg.addBinding(g.guard.name, translate(arg.set))
+            setArg += g.guard.name -> translate(arg.set)
         }
       }
 
-      val combinedSetArg: Map[String, vpr.Exp] = setArg.view.map { case (name, sets) =>
-        name -> sets.tail.fold(sets.head) { case (l, r) => vpr.AnySetUnion(l,r)() }
-      }.to(Map)
+      val combinedSetArg: collection.Map[String, vpr.Exp] =
+        setArg.sets.map { case (name, sets) =>
+          name -> sets.reduceLeft[vpr.Exp] { case (l, r) => vpr.AnySetUnion(l,r)() }
+        }
 
       val uniqueSingleArg: mutable.Map[String, Vector[PExpression]] = mutable.Map.empty
 
-      val combinedSingleArg: Map[String, vpr.Exp] = singleArg.view.map { case (name, argss) =>
+      val combinedSingleArg: collection.Map[String, vpr.Exp] = singleArg.sets.map { case (name, argss) =>
         if (argss.size == 1) {
           uniqueSingleArg += name -> argss.head
         }
 
         name -> vpr.ExplicitSet(argss.map(args => tupleWrap(args map translate)).toVector)()
-      }.to(Map)
+      }
 
       occurringGuards.view.map { name =>
         (uniqueSingleArg.isDefinedAt(name), combinedSingleArg.isDefinedAt(name), combinedSetArg.isDefinedAt(name)) match {

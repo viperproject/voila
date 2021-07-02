@@ -26,6 +26,7 @@ lazy val voila = (project in file("."))
     silicon / excludeFilter := "logback.xml", /* Ignore Silicon's Logback configuration */
     carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */
     Compile / unmanagedResourceDirectories += baseDirectory.value / "conf",
+    libraryDependencies += "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2", // MultiDict collection
     libraryDependencies +=
       ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.4.0") // Parsing
         .exclude("com.google.guava", "guava"),
