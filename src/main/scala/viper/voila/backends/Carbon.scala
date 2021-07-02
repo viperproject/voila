@@ -25,7 +25,10 @@ class Carbon(commandLineArguments: Seq[String], voilaConfig: Config) extends Vip
   def start(): Unit = {
     require(backend == null)
 
-    backend = carbon.CarbonVerifier(List("startedBy" -> s"Unit test ${this.getClass.getSimpleName}"))
+    backend =
+      carbon.CarbonVerifier(
+        silver.reporter.StdIOReporter(),
+        List("startedBy" -> s"Unit test ${this.getClass.getSimpleName}"))
 
     backend.parseCommandLine(commandLineArguments ++ Seq("--ignoreFile", "dummy.sil"))
     backend.start()
