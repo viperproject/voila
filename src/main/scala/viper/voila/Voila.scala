@@ -15,8 +15,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
-import viper.silver
-import viper.silicon
+import viper.{silicon, silver}
 import viper.voila.backends.{Carbon, MockViperFrontend, Silicon, ViperNameSanitizer, ViperPreamble, ViperVerifier}
 import viper.voila.frontend._
 import viper.voila.reporting._
@@ -281,12 +280,16 @@ class Voila extends StrictLogging {
 
           timer.start()
 
-        logger.info("Encoded Voila program in Viper")
+          logger.info("Verifying encoding using Silicon ...")
+          backend = new Silicon(siliconOptions)
+        } else {
+          logger.info("Encoded Voila program in Viper")
 
-        timer.start()
+          timer.start()
 
-        logger.info("Verifying encoding using Silicon ...")
-        val backend = new Silicon(siliconOptions)
+          logger.info("Verifying encoding using Carbon ...")
+          backend = new Carbon(Vector.empty, config)
+        }
 
         backend.start()
         val verificationResult = backend.handle(programToVerify)
@@ -294,7 +297,6 @@ class Voila extends StrictLogging {
 
         timer.stop()
         durations.verification = Some(timer.durationMillis)
-
 
         logger.info(s"... done (with ${getNumberOfErrors(verificationResult)} Viper error(s))")
 
@@ -306,7 +308,7 @@ class Voila extends StrictLogging {
     var abort = false
 
     configOptions foreach (configOption => {
-      if (!Set("voila", "silicon").contains(configOption.tool)) {
+      if (!Set("voila", "silicon", "carbon").contains(configOption.tool)) {
         abort = true
         logger.error(s"### UNRECOGNISED TOOL '${configOption.tool}' IN '$configOption'")
       }

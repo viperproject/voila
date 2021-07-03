@@ -6,9 +6,8 @@
 
 package viper.voila.translator
 
+import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.attribution.UncachedAttribution.attr
-
-import scala.collection.{breakOut, mutable}
 import org.bitbucket.inkytonik.kiama.rewriting.Rewriter.{collect, collectall}
 import viper.silver.{ast => vpr}
 import viper.silver.verifier.{errors => vprerr, reasons => vprrea}
@@ -543,7 +542,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
               val regionState = vpr.FuncApp(regionStateFunction(reg), regionArguments)()
 
-              regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprInterferenceSet, referencePoint, regionState)
+              regionId -> Entry(inter, regionPredicate, vprInterferenceSet, referencePoint, regionState)
             }).toMap
 
           val vprSaveInferenceSets: Vector[vpr.Stmt] =
@@ -677,7 +676,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val regionState = vpr.FuncApp(regionStateFunction(reg), regionArguments)()
 
-        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprInterferenceSet, referencePoint, regionState)
+        regionId -> Entry(inter, regionPredicate, vprInterferenceSet, referencePoint, regionState)
       }).toMap
 
     val vprLocals = procedure.locals.map(translate)
@@ -742,7 +741,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
         val regionState = vpr.FuncApp(regionStateFunction(reg), regionArguments)()
 
-        regionId -> Entry(inter, regionPredicate.asInstanceOf[PPredicateExp], vprAtomicitySetFootprint, vprAtomicitySet, regionState)
+        regionId -> Entry(inter, regionPredicate, vprAtomicitySetFootprint, vprAtomicitySet, regionState)
       }).toMap
 
     // precondition is only permitted to contain one region predicate and one guard
@@ -775,10 +774,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             regionInArgs = q._2
             vpr.TrueLit()()
           case _ =>
-            assert(
-              false,
-              "make-atomic procedures does not permit predicates that are not region predicates"
-            )
+            sys.error("make-atomic procedures does not permit predicates that are not region predicates")
         }
 
       case guard: PRegionedGuardExp =>
@@ -788,10 +784,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
 
       // TODO: other non-pure expresions are not permitted. Currently sub expressions (e.g. conditionals) are not checked
       case _: PPointsTo | _: PDiamond | _: PRegionUpdateWitness =>
-        assert(
-          false,
-          "make-atomic procedures does only permit guards and region assertions"
-        )
+        sys.error("make-atomic procedures does only permit guards and region assertions")
 
       case _ =>
     }
@@ -986,6 +979,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
               exhaleGuard,
               inhaleDiamond,
               assignContext,
+              havoc1, // [2021-07-03 MS] Was missing in TACAS21 branch, probably by accident
               ruleBody,
               checkUpdatePermitted,
               havoc2,
