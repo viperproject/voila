@@ -2,6 +2,7 @@
 //   https://github.com/caper-tool/caper/blob/master/examples/iterative/SpinLock.t
 //
 
+
 struct memcell {
   int f;
 }
@@ -12,82 +13,53 @@ region SLock(id r, int lvl, memcell x)
     unique UNLOCK;
   }
   interpretation {
-    x.f |-> ?v &&
-    (v == 0 ? UNLOCK@r :
-     v == 1 ? true :
-     false)
+       x.f |-> ?v 
+    && (v == 0 ==> UNLOCK@r)
   }
   state { v }
   actions {
     LOCK:   0 ~> 1;
     UNLOCK: 1 ~> 0;
-    LOCK && UNLOCK: Set(0,1) ~> Set(0,1); // Make actions transitively closed
+    LOCK && UNLOCK: ?n ~> ?m;
   }
 
-// TODO: Implement; but see issue #23
-procedure makeLock(int lvl) returns (id r, memcell ret)
-  ensures SLock(r, lvl, ret, 0) && LOCK@r;
+procedure makeLock(int lvl) returns (memcell ret, id r)
+  requires lvl >= 0;
+  ensures  SLock(r, lvl, ret) && LOCK@r;
+{
+  ret := new memcell(0);
+  r := new SLock(lvl, ret) with LOCK && UNLOCK;
+}
 
-abstract_atomic procedure acquire(id r, int lvl, memcell x)
-  interference ?v in Set(0, 1) on r;
+
+procedure acquire(id r, int lvl, memcell x)
   requires SLock(r, lvl, x) && LOCK@r;
-  ensures  SLock(r, lvl, x, 1);
-  ensures  UNLOCK@r;
-  ensures  LOCK@r;
+  ensures  SLock(r, lvl, x, 1) && LOCK@r && UNLOCK@r;
 {
   bool b;
 
-  make_atomic
-    using SLock(r, lvl, x) with LOCK@r;
+  do
+    invariant SLock(r, lvl, x, ?vi) && LOCK@r;
+    invariant b ==> vi == 1 && UNLOCK@r;
   {
-    do
-      invariant SLock(r, lvl, x);
-      invariant !b ==> r |=> <D>;
-      invariant  b ==> r |=> (0, 1) && UNLOCK@r;
-    {
-      update_region
-        using SLock(r, lvl, x);
-      {
-        b := CAS(x, 0, 1);
-      }
-    } while (!b);
-  }
-}
-
-abstract_atomic procedure release1(id r, int lvl, memcell x)
-  interference ?s in Set(1) on r;
-  requires SLock(r, lvl, x, 1) && UNLOCK@r;
-  ensures  SLock(r, lvl, x, 0) && LOCK@r;
-{
-  make_atomic
-    using SLock(r, lvl, x) with UNLOCK@r;
-  {
-    //:: ExpectedOutput(update-region_error:guard_permission_error)
-    update_region
-      using SLock(r, lvl, x);
-    {
-      x.f := 0;
+    use_atomic using SLock(r, lvl, x) with LOCK@r {
+      b := CAS(x, 0, 1);
     }
-  }
+  } while (!b);
 }
 
-abstract_atomic procedure release2(id r, int lvl, memcell x)
-  interference ?s in Set(1) on r;
+procedure release(id r, int lvl, memcell x)
   requires SLock(r, lvl, x, 1) && UNLOCK@r;
-  ensures  SLock(r, lvl, x, 0);
-  //:: UnexpectedOutput(postcondition_error:guard_permission_error, /voila/issue/19/)
-  ensures  LOCK@r;
+  ensures  SLock(r, lvl, x);
 {
-  use_atomic
-    using SLock(r, lvl, x) with UNLOCK@r;
-  {
+  use_atomic using SLock(r, lvl, x) with UNLOCK@r {
     x.f := 0;
   }
 }
-
 
 primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
   requires x.f |-> ?v;
   ensures  v == now
               ? ret && x.f |-> thn
               : !ret && x.f |-> v;
+

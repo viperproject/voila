@@ -37,6 +37,16 @@ sealed abstract class PAstNode extends Product {
     }
   }
 
+  def at(other: PAstNode): this.type = {
+    VoilaGlobalState.positions.dupPos(other, this)
+    this
+  }
+
+  def range(from: PAstNode, to: PAstNode): this.type = {
+    VoilaGlobalState.positions.dupRangePos(from, to, this)
+    this
+  }
+
   def lineColumnPosition: silver.ast.LineColumnPosition = {
     val pos = this.position
 
@@ -283,9 +293,11 @@ case class PNewStmt(lhs: PIdnUse,
                     arguments: Vector[PExpression],
                     guards: Option[Vector[PBaseGuardExp]],
                     initializer: Option[PStatement])
-    extends PStatement {
+    extends PCompoundStatement {
 
   val statementName = s"new:${constructor.name}"
+
+  lazy val components: Vector[PStatement] = initializer.toVector
 }
 
 case class PProcedureCall(procedure: PIdnUse, arguments: Vector[PExpression], rhs: Vector[PIdnUse])
@@ -326,6 +338,14 @@ case class PHavocVariable(variable: PIdnUse) extends PGhostStatement { val state
 case class PHavocLocation(location: PLocation) extends PGhostStatement { val statementName = "havoc" }
 case class PLemmaApplication(call: PProcedureCall) extends PGhostStatement { val statementName = "apply" }
 
+case class PDuplicateRegion(predicateExp: PPredicateExp) extends PGhostStatement {
+  val statementName = "duplicate"
+}
+
+case class PAcquireDuplicableGuard(guard: PRegionedGuardExp) extends PGhostStatement {
+  val statementName = "acquire-guard"
+}
+
 case class PUseRegionInterpretation(regionPredicate: PPredicateExp) extends PGhostStatement {
   val statementName = "use-region-interpretation"
 }
@@ -338,7 +358,7 @@ sealed trait PRuleStatement extends PStatement {
   def body: PStatement
 }
 
-case class PMakeAtomic(regionPredicate: PPredicateExp, guards: Vector[PRegionedGuardExp], body: PStatement)
+case class PMakeAtomic(regionPredicate: PPredicateExp, guards: Vector[PRegionedGuardExp], posts: Vector[PPostconditionClause], body: PStatement)
     extends PRuleStatement with PCompoundStatement
 {
   val statementName = "make-atomic"

@@ -321,6 +321,8 @@ class DefaultPrettyPrinter
       case PLemmaApplication(call) => "use" <+> toDoc(call)<> semi
       case PUseRegionInterpretation(regionPredicate) =>
         "use_region_interpretation" <+> toDoc(regionPredicate) <> semi
+      case PDuplicateRegion(region) => "duplicate" <+> toDoc(region) <> semi
+      case PAcquireDuplicableGuard(guard) => "acquire_guard" <+> toDoc(guard) <> semi
       case other =>
         sys.error(s"Implementation missing for element of class ${other.getClass.getSimpleName}")
     }
@@ -340,9 +342,10 @@ class DefaultPrettyPrinter
 
   def toDoc(rule: PRuleStatement): Doc = {
     rule match {
-      case PMakeAtomic(regionPredicate, guards, body) =>
+      case PMakeAtomic(regionPredicate, guards, posts, body) =>
         (   "make_atomic" <> line
          <> nest("using" <+> toDoc(regionPredicate) <+> "with" <+> ssep(guards map toDoc, comma <> space) <> semi) <> line
+         <> nest(lterm(posts map toDoc, semi)) <> line
          <> braces(nest(toDoc(body))))
       case PUseAtomic(regionPredicate, guards, body) =>
         (   "use_atomic" <> line

@@ -1,0 +1,71 @@
+
+struct memcell {
+  int f;
+}
+
+region SLock(id r, int lvl, memcell x)
+  guards {
+    duplicable LOCK;
+    unique UNLOCK;
+  }
+  interpretation {
+       x.f |-> ?v 
+    && (v == 0 ==> UNLOCK@r)
+  }
+  state { v }
+  actions {
+    LOCK:   0 ~> 1;
+    UNLOCK: 1 ~> 0;
+  }
+
+procedure makeLock(int lvl) returns (memcell ret, id r)
+  requires lvl >= 0;
+  ensures  SLock(r, lvl, ret) && LOCK@r;
+{
+  // ret := new memcell(0)\
+  inhale ret.f |-> 0;
+
+  // s := create SLock(lvl, x)
+  havoc r;
+  inhale LOCK@r && UNLOCK@r;
+  fold SLock(r, lvl, ret);
+}
+
+
+abstract_atomic procedure acquire(id r, int lvl, memcell x)
+  interference ?v in Set(0, 1);
+  requires SLock(r, lvl, x, v) && LOCK@r;
+  ensures  SLock(r, lvl, x, 1) && LOCK@r && UNLOCK@r;
+  ensures  v == 0;
+{
+  bool b;
+  make_atomic using SLock(r, lvl, x) with LOCK@r;
+    ensures SLock(r, lvl, x, 1) && LOCK@r && UNLOCK@r;
+    ensures v == 0;
+  {
+    do
+      invariant SLock(r, lvl, x);
+      invariant !b ==> r |=> <D>;
+      invariant  b ==> r |=> (0, 1) && UNLOCK@r;
+    {
+      update_region using SLock(r, lvl, x) {
+        b := CAS(x, 0, 1);
+      }
+    } while (!b);
+  }
+}
+
+abstract_atomic procedure release(id r, int lvl, memcell x)
+  requires SLock(r, lvl, x, 1) && UNLOCK@r;
+  ensures  SLock(r, lvl, x, 0);
+{
+  use_atomic using SLock(r, lvl, x) with UNLOCK@r {
+    x.f := 0;
+  }
+}
+
+primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)
+  requires x.f |-> ?v;
+  ensures  v == now
+              ? ret && x.f |-> thn
+              : !ret && x.f |-> v;

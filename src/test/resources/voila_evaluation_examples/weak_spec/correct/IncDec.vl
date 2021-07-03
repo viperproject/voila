@@ -19,21 +19,12 @@ region IncDec(id r, int lvl, memcell x)
   }
 
 
-procedure makeCounter(int lvl, id r) returns (memcell ret)
+procedure makeCounter(int lvl) returns (memcell ret, id r)
   requires lvl >= 0;
   ensures IncDec(r, lvl, ret) && INC@r && DEC@r;
 {
-  memcell v;
-
-  // v := new memcell(0);
-  inhale v.val |-> ?w;
-  v.val := 0;
-
-  ret := v;
-
-  // create IncDec(r, lvl, ret, 0);
-  inhale INC@r && DEC@r;
-  fold IncDec(r, lvl, ret, 0);
+  ret := new memcell(0);
+  r := new IncDec(lvl, ret) with INC && DEC;
 }
 
 procedure increment(id r, int lvl, memcell x, int k) returns (int ret)

@@ -63,7 +63,7 @@ procedure increment(id r, int lvl, memcell x, int k) returns (int ret)
     }
   } while (!b);
 
-  //return v;
+  // return v;
   ret := v;
 }
 
@@ -92,7 +92,7 @@ procedure decrement(id r, int lvl, memcell x, int k) returns (int ret)
     }
   } while (!b);
 
-  //return v;
+  // return v;
   ret := v;
 }
 

@@ -53,7 +53,6 @@ procedure acquire(id r, int lvl, memcell x)
 procedure release(id r, int lvl, memcell x)
   requires TLock(r,lvl,x,_,?n) && TICKET(n)@r;
   ensures TLock(r,lvl,x,_,_);
-  // ensures false;
 {
   int v;
 
@@ -69,31 +68,8 @@ procedure release(id r, int lvl, memcell x)
   }
 }
 
-/* // does not work
 
-abstract_atomic procedure release2(id r, int lvl, memcell x)
-  interference ?n in Set<int>(n) on r;
-  requires TLock(r,lvl,x,_,n) && TICKET(n)@r;
-  ensures TLock(r,lvl,x,_,n+1);
-  // ensures false;
-{
-  int v;
 
-  make_atomic using TLock(r,lvl,x) with TICKET(n)@r;
-  {
-    open_region using TLock(r,lvl,x);
-    {
-      v := x.owner;
-    }
-
-    update_region using TLock(r,lvl,x);
-    {
-      x.owner := v+1;
-    }
-  }
-}
-
-*/
 
 
 primitive_atomic procedure CAS(memcell x, int now, int thn) returns (bool ret)

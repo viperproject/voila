@@ -256,7 +256,7 @@ trait InterferenceTranslatorComponent { this: PProgramToViperTranslator =>
         val wrapper = singleWrapper(innerArgs)
         val prePermissions = vpr.LabelledOld(_: vpr.Exp, refLabel.name)()
 
-        // TODO: @Felix: I [Malte] couldn't figure out how to pass pathConditions to either
+        // TODO: @FW: I [MS] couldn't figure out how to pass pathConditions to either
         //       referencePointConstraint or interferenceReferenceFunctions.select in a meaningful
         //       way.
 

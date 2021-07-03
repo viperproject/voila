@@ -20,14 +20,9 @@ procedure makeLock(int lvl) returns (memcell ret, id r)
   requires lvl >= 0;
   ensures TLock(r, lvl, ret);
 {
-  // ret := new memcell(0, 0);
-  inhale ret.next |-> _ && ret.owner |-> _;
-  ret.next := 0;
-  ret.owner := 0;
+  ret := new memcell(0, 0);
 
-  // r := create TLock(lvl, x);
-  inhale TICKET|Set( ?k | k >= 0 )|@r;
-  fold TLock(r, lvl, ret);
+  r := new TLock(lvl, ret) with TICKET|Set( ?k | k >= 0 )|;
 }
 
 

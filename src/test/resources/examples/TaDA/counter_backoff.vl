@@ -27,21 +27,21 @@ abstract_atomic procedure incr(id c, int lvl, memcell x)
       invariant b ==> c |=> (v, v + 1);
     {
       if (m == 0) {
-//        v := [x];
+        // (TaDA)  v := [x];
         open_region
           using Counter(c, lvl, x);
         {
           v := x.f;
         }
 
-//        b := CAS(x, v, v + 1);
+        // TaDA  b := CAS(x, v, v + 1);
         update_region
           using Counter(c, lvl, x);
         {
           b := CAS(x, v, v + 1);
         }
 
-//        m := random();
+        // (TaDA)  m := random();
         havoc m;
         assume 0 <= m;
       } else {

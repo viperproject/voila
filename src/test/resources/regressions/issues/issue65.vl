@@ -19,6 +19,7 @@ procedure test10(id r, int lvl, cell c)
 {
   inhale Cell(r, lvl, c, 0);
   inhale r |=> <D>;
+  skip;
 
   //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
   update_region
@@ -33,6 +34,7 @@ procedure test10Copy(id r, int lvl, cell c)
 {
   inhale Cell(r, lvl, c, 0);
   inhale r |=> <D>;
+  skip;
 
   //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
   update_region
@@ -52,6 +54,7 @@ procedure test01(id r, int lvl, cell c)
   requires false ==> Cell(r, lvl, c, 0); // Workaround for issue #84
 {
   inhale Cell(r, lvl, c, 0);
+  skip;
 
   //:: ExpectedOutput(update-region_error:diamond_permission_error)
   update_region
@@ -66,6 +69,7 @@ procedure test02(id r, int lvl, cell c)
 {
   inhale Cell(r, lvl, c, 0);
   inhale r |=> <D>;
+  skip;
 
   //:: ExpectedOutput(update-region_error:region_atomicity_context_tracking_permission_error)
   update_region

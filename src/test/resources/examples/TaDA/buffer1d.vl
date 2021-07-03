@@ -1,0 +1,78 @@
+struct cell {
+  int value;
+}
+
+predicate resource(int v)
+
+region Buffer(id r, int lvl, cell buf)
+  guards { duplicable Z; }
+  interpretation { buf.value |-> ?v && (v != 0 ==> resource(v)) }
+  state { v }
+  actions { Z: ?n ~> ?m; }
+
+abstract_atomic procedure send(id r, int lvl, cell buf, int x)
+  interference ?v in Int on r;
+  requires Buffer(r, lvl, buf, v) && resource(x) && x != 0;
+  requires Z@r;
+  ensures  v == 0;
+{
+  bool b;
+
+  make_atomic
+    using Buffer(r, lvl, buf) with Z@r;
+  {
+    do
+      invariant Buffer(r, lvl, buf);
+      invariant !b ==> r |=> <D> && resource(x);
+      invariant  b ==> r |=> (0, x);
+    {
+      update_region
+        using Buffer(r, lvl, buf);
+      {
+        b := CAS(buf, 0, x);
+      }
+    } while(!b);
+  }
+}
+
+abstract_atomic procedure recv(id r, int lvl, cell buf) returns (int ret)
+  interference ?v in Int on r;
+  requires Buffer(r, lvl, buf, v);
+  requires Z@r;
+  ensures  resource(ret);
+  ensures  ret == v;
+{
+  bool b;
+
+  make_atomic
+    using Buffer(r, lvl, buf) with Z@r;
+  {
+    do
+      invariant Buffer(r, lvl, buf);
+      invariant !b ==> r |=> <D>;
+      invariant  b ==> r |=> (ret, 0) && resource(ret);
+    {
+      open_region
+        using Buffer(r, lvl, buf);
+      {
+        ret := buf.value;
+      }
+
+      if (ret == 0) {
+        b := false;
+      } else {
+        update_region
+          using Buffer(r, lvl, buf);
+        {
+          b := CAS(buf, ret, 0);
+        }
+      }
+    } while(!b);
+  }
+}
+
+primitive_atomic procedure CAS(cell x, int now, int thn) returns (bool ret)
+  requires x.value |-> ?v;
+  ensures  v == now
+              ? ret && x.value |-> thn
+              : !ret && x.value |-> v;

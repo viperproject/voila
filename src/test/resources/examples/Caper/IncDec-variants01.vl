@@ -14,14 +14,11 @@ region IncDec(id r, int lvl, memcell x)
   }
 
 
-// TODO: Should return the last read value (i.e. v).
-//       However, 'ret := v' as the final statement currently "destroys" the atomic triple.
-//       Could make 'return v' a ghost statement that assigns to 'ret'.
-//       Could try to include 'ret := v' inside make_atomic.
-abstract_atomic procedure increment(id r, int lvl, memcell x, int k)
+abstract_atomic procedure increment(id r, int lvl, memcell x, int k) returns (int ret)
   interference ?v0 in Set(?t | t <= v0) on r;
   requires IncDec(r, lvl, x,  v0) && INC@r && k > 0;
   ensures  IncDec(r, lvl, x, ?v1) && INC@r && v1 == v0 + k;
+  ensures  ret == v0;
 {
   bool b;
   int v;
@@ -41,29 +38,24 @@ abstract_atomic procedure increment(id r, int lvl, memcell x, int k)
         v := x.val;
       }
 
-      // The environment cannot increment the counter, because it cannot hold INC@r.
-      // However, we lost this knowledge by temporarily losing INC@r when entering
-      // make_atomic (as prescribed by the corresponding TaDA rule).
-      // Hence, we assume the property here. See also issue #103.
-      assume v <= v0;
-
       update_region
         using IncDec(r, lvl, x);
       {
         b := CAS(x, v, v + k);
       }
     } while (!b);
-  }
 
-  //return v;
-  //ret := v; // See comment above
+    //return v;
+    ret := v;
+  }
 }
 
-// TODO: Should return the last read value (i.e. v), see comment above
-abstract_atomic procedure decrement(id r, int lvl, memcell x, int k)
+
+abstract_atomic procedure decrement(id r, int lvl, memcell x, int k) returns (int ret)
   interference ?v0 in Set(?t | v0 <= t) on r;
   requires IncDec(r, lvl, x,  v0) && DEC@r && k > 0;
   ensures  IncDec(r, lvl, x, ?v1) && DEC@r && v1 == v0 - k;
+  ensures  ret == v0;
 {
   bool b;
   int v;
@@ -83,18 +75,17 @@ abstract_atomic procedure decrement(id r, int lvl, memcell x, int k)
         v := x.val;
       }
 
-      assume v0 <= v; // Analogous to assumption in procedure increment. See issue #103.
-
       update_region
         using IncDec(r, lvl, x);
       {
         b := CAS(x, v, v - k);
       }
     } while (!b);
+    
+    //return v;
+    ret := v; 
+  
   }
-
-  //return v;
-  //ret := v; // See comment above
 }
 
 

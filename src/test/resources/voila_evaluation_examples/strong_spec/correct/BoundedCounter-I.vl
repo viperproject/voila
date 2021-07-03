@@ -7,21 +7,12 @@ region BCounter(id r, int lvl, memcell x)
   state { v }
   actions { INCREMENT: ?n ~> ?m; }
 
-procedure makeBCounter(id r, int lvl) returns (memcell ret)
+procedure makeBCounter(int lvl) returns (memcell ret, id r)
   requires lvl >= 0;
   ensures BCounter(r, lvl, ret) && INCREMENT@r;
 {
-  memcell v;
-
-  // v := new memcell(0);
-  inhale v.f |-> ?w;
-  v.f := 0;
-
-  ret := v;
-
-  // create BCounter(r, lvl, ret, 0);
-  inhale INCREMENT@r;
-  fold BCounter(r, lvl, ret, 0);
+  ret := new memcell(0);
+  r := new BCounter(lvl, ret) with INCREMENT;
 }
 
 make_atomic procedure incr(id c, int lvl, memcell x) returns (int ret)

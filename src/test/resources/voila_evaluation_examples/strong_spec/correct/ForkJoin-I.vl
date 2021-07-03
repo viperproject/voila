@@ -17,13 +17,8 @@ procedure makeJoin(int lvl) returns (memcell ret, id r)
   requires lvl >= 0;
   ensures  Join(r, lvl, ret) && SET@r;
 {
-  // ret := new memcell(0)
-  inhale ret.f |-> _;
-  ret.f := 0;
-
-  // r := create Join(lvl, ret)
-  inhale SET@r;
-  fold Join(r, lvl, ret);
+  ret := new memcell(0);
+  r := new Join(lvl, ret) with SET;
 }
 
 
@@ -48,14 +43,8 @@ make_atomic procedure wait(id r, int lvl, memcell x)
     invariant Join(r, lvl, x, ?w);
     invariant (v == 0 ? w >= 0 && r |=> <D> : w == 1 && r |=> (w,w));
   {
-    open_region using Join(r, lvl, x) {
+    update_region using Join(r, lvl, x) if v == 1 {
       v := x.f;
-    }
-
-    if (v == 1) {
-      assert Join(r, lvl, x, 1);
-      exhale r |=> <D>;
-      inhale r |=> (1,1);
     }
   } while (v == 0);
 

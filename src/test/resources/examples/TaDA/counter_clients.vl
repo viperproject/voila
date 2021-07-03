@@ -50,18 +50,14 @@ procedure seq_client(id c, int lvl, cell x, int n)
  *      them at the appropriate places. This increases the annotation overhead, but is equally
  *      sound as having special support for declaring arbitrary algebras.
  *
- *   2. Voila doesn't natively support parallel composition (or fork/join statements); it is
- *      encoded using exhales and inhales
- *
- *   3. In Pedro's example, the guard algebra also controls when a region can be disposed.
+ *   2. In Pedro's example, the guard algebra also controls when a region can be disposed.
  *      This aspect is missing from the current Voila encoding.
  */
 
 region CClient(id a, int alvl, id c, int lvl, cell x)
   guards {
-    /* TODO: Neither unique nor duplicable are an ideal choice for the two guards. See also issue #43. */
-    duplicable INC(int k, frac p);
-    duplicable TOTAL(int n);
+    manual INC(int k, frac p);
+    manual TOTAL(int n);
   }
   interpretation {
     Counter(c, lvl, x, ?n) && lvl < alvl && G@c && TOTAL(n)@a
@@ -85,7 +81,6 @@ lemma INC_join(id a, int k1, int k2, frac p1, frac p2)
 
 lemma TOTAL_INC_equality(id a, int n, int k)
   requires TOTAL(n)@a && INC(k, 1f)@a;
-//  requires TODO: ... and the composition must be defined
   ensures  TOTAL(n)@a && INC(k, 1f)@a;
   ensures  n == k;
 
@@ -105,24 +100,17 @@ lemma TOTAL_INC_inc(id a, int n, int k, frac p)
   use TOTAL_INC_update(a, m, k, k + 1, p);
 }
 
-/* Macro single_client's contract for easy reuse when encoding fork/join via ex-/inhales */
-
-macro single_client_Pre(a, alvl, c, lvl, x, p)
-  CClient(a, alvl, c, lvl, x, ?v0) && INC( 0, p)@a && 0f < p && 0 <= v0;
-
-macro single_client_Post(a, alvl, c, lvl, x, p, n)
-  CClient(a, alvl, c, lvl, x,  _) && INC(n, p)@a && 0 <= n;
 
 /*
  * The parallelly-composed code of Fig. 7.3
  */
 procedure single_client(id a, int alvl, id c, int lvl, cell x, frac p) returns (int n)
-  requires single_client_Pre(a, alvl, c, lvl, x, p);
-  ensures single_client_Post(a, alvl, c, lvl, x, p, n);
+  requires CClient(a, alvl, c, lvl, x, ?v0) && INC( 0, p)@a && 0f < p && 0 <= v0;
+  ensures CClient(a, alvl, c, lvl, x,  _) && INC(n, p)@a && 0 <= n;
 {
   int i;
 
-  // n := random();
+  // (TaDA)  n := random();
   havoc n;
   assume 0 <= n;
 
@@ -162,7 +150,6 @@ procedure client()
   lvl := 0;
   alvl := 1;
 
-  // x := makeCounter();
   x := new cell(0);
   c := new Counter(lvl, x) with G;
 
@@ -170,8 +157,7 @@ procedure client()
   a := new CClient(alvl, c, lvl, x) with TOTAL(0) && INC(0, 1f);
 
   // Duplicate region assertion
-  assert CClient(a, alvl, c, lvl, x);
-  inhale CClient(a, alvl, c, lvl, x);
+  duplicate CClient(a, alvl, c, lvl, x);
   // Split guard INC
   use INC_split(a, 0, 0, 1/2, 1/2);
 
@@ -180,29 +166,16 @@ procedure client()
     k2 := single_client(a, alvl, c, lvl, x, 1/2)
   };
 
-/*
-  // Fork two instances of single_client(a, alvl, c, lvl, x, 1/2)
-  exhale single_client_Pre(a, alvl, c, lvl, x, 1/2);
-  exhale single_client_Pre(a, alvl, c, lvl, x, 1/2);
-
-  skip; // Account for possible interference between forking and joining
-
-  // Join the two forked instances of single_client(a, alvl, c, lvl, x)
-  havoc k1;
-  inhale single_client_Post(a, alvl, c, lvl, x, 1/2, k1);
-  havoc k2;
-  inhale single_client_Post(a, alvl, c, lvl, x, 1/2, k2);
-*/
   // Join guard INC
   use INC_join(a, k1, k2, 1/2, 1/2);
-  // Transform CClient assertion according to guard algebra (view shift?)
+  // open and close region to perform viewshift.
   unfold CClient(a, alvl, c, lvl, x, _);
   assert Counter(c, lvl, x, ?n);
   use TOTAL_INC_equality(a, n, k1 + k2);
   fold CClient(a, alvl, c, lvl, x, k1 + k2);
+
   // Dispose CClient region
   unfold CClient(a, alvl, c, lvl, x, k1 + k2);
-
   // Postcondition of Fig. 7.3
   exhale Counter(c, lvl, x, k1 + k2);
 }

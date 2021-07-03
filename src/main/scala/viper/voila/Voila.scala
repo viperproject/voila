@@ -26,7 +26,7 @@ import scala.collection.immutable.ArraySeq
 
 object VoilaConstants {
   val toolName: String  = "Voila"
-  val toolCopyright: String  = "(c) Copyright ETH Zurich 2016 - 2019"
+  val toolCopyright: String  = "(c) Anonymous Authors"
 
   val buildRevision = BuildInfo.gitRevision
   val buildBranch = BuildInfo.gitBranch
@@ -281,16 +281,12 @@ class Voila extends StrictLogging {
 
           timer.start()
 
-          logger.info("Verifying encoding using Silicon ...")
-          backend = new Silicon(siliconOptions)
-        } else {
-          logger.info("Encoded Voila program in Viper")
+        logger.info("Encoded Voila program in Viper")
 
-          timer.start()
+        timer.start()
 
-          logger.info("Verifying encoding using Carbon ...")
-          backend = new Carbon(Vector.empty, config)
-        }
+        logger.info("Verifying encoding using Silicon ...")
+        val backend = new Silicon(siliconOptions)
 
         backend.start()
         val verificationResult = backend.handle(programToVerify)
@@ -310,7 +306,7 @@ class Voila extends StrictLogging {
     var abort = false
 
     configOptions foreach (configOption => {
-      if (!Set("voila", "silicon", "carbon").contains(configOption.tool)) {
+      if (!Set("voila", "silicon").contains(configOption.tool)) {
         abort = true
         logger.error(s"### UNRECOGNISED TOOL '${configOption.tool}' IN '$configOption'")
       }

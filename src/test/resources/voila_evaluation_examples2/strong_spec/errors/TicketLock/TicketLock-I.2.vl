@@ -1,0 +1,120 @@
+
+
+
+region TLock(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y; int m)
+  guards { unique TICKET(int n); duplicable Z; }
+  interpretation {
+  	   Counter(rx, xlvl, x, ?n) && G@rx && xlvl < alvl
+    && Counter(ry, ylvl, y, ?m) && G@ry && ylvl < alvl
+    && TICKET|Set( ?k | k >= m )|@r && m >= n
+  }
+  state { n }
+  actions {
+  	?n, ?m | n < m | TICKET|Set( ?k | n <= k && k < m )|: n ~> m;
+  }
+
+
+procedure makeLock(int alvl, int xlvl, int ylvl) returns (cell x, cell y, id r, id rx, id ry)
+  requires xlvl >= 0 && ylvl >= 0 && alvl > xlvl && alvl > ylvl;
+  ensures TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, _);
+{
+  // x := new cell(0);
+  inhale x.f |-> _;
+  x.f := 0;
+
+  // y := new cell(0);
+  inhale y.f |-> _;
+  y.f := 0;
+
+  // rx := create Counter(rx, xlvl, x);
+  inhale G@rx;
+  fold Counter(rx, xlvl, x);
+
+  // ry := create Counter(ry, ylvl, y);
+  inhale G@ry;
+  fold Counter(ry, ylvl, y);
+
+  // r := create TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
+  inhale TICKET|Set( ?k | k >= 0 )|@r;
+  fold TLock(r, alvl, rx, xlvl, x, ry, ylvl, y);
+}
+
+
+abstract_atomic procedure acquire(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y)
+  interference ?n in Int;
+  requires TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n) && Z@r;
+  ensures  TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n+1) && Z@r && TICKET(n)@r;
+{
+  int t;
+  int v;
+  make_atomic using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) with Z@r;
+      //:: ExpectedOutput(postcondition_error:region_state_error)
+      ensures TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n+1) && Z@r && TICKET(n)@r;
+  {
+    open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) {
+      t := incr(ry, ylvl, y);
+    }
+
+    do
+      invariant TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, ?mii, ?nii) && TICKET(t)@r;
+      invariant t >= nii && nii >= v;
+      invariant v <  t ==> r |=> <D>;
+      invariant v == t ==> r |=> (nii, nii);
+    {
+      open_region using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) {
+        v := read(rx, xlvl, x);
+      }
+
+      if (v == t) {
+        // manual update region if t is the fresh owner
+        assert TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, ?nf);
+        exhale r |=> <D>;
+        inhale r |=> (nf, nf);
+      }
+    }
+    while(v < t);
+  }
+}
+
+
+
+
+abstract_atomic procedure release(id r, int alvl, id rx, int xlvl, cell x, id ry, int ylvl, cell y)
+  interference ?n in Set<int>(n);
+  requires TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n) && TICKET(n)@r;
+  ensures  TLock(r, alvl, rx, xlvl, x, ry, ylvl, y, _, n+1);
+{
+  use_atomic using TLock(r, alvl, rx, xlvl, x, ry, ylvl, y) with TICKET(n)@r {
+    wkincr(rx, xlvl, x);
+    use_guard_uniqueness TICKET(n)@r;
+  }
+}
+
+
+/** Counter Specification */
+
+struct cell {
+  int f;
+}
+
+region Counter(id c, int lvl, cell x)
+  guards { unique G; }
+  interpretation { x.f |-> ?n }
+  state { n }
+  actions { G: ?n ~> ?m; }
+
+abstract_atomic procedure read(id c, int lvl, cell x) returns (int ret)
+  interference ?n in Int on c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n) && G@c;
+  ensures ret == n;
+
+abstract_atomic procedure incr(id c, int lvl, cell x) returns (int ret)
+  interference ?n in Int on c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n + 1) && G@c && ret == n;
+
+abstract_atomic procedure wkincr(id c, int lvl, cell x)
+  interference ?n in Set<int>(n) on c;
+  requires Counter(c, lvl, x, n) && G@c;
+  ensures Counter(c, lvl, x, n + 1) && G@c;

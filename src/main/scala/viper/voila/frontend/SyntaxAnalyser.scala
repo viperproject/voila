@@ -360,6 +360,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
     parseAndUnrollDoWhileLoop ^^ { case unrolled ~ loop => PSeqComp(unrolled, loop) } |
     "fold" ~> predicateExp <~ ";" ^^ PFold |
     "unfold" ~> predicateExp <~ ";" ^^ PUnfold |
+    "duplicate" ~> predicateExp <~ ";" ^^ PDuplicateRegion |
+    "acquire_guard" ~> guardExp <~ ";" ^^ PAcquireDuplicableGuard |
     "inhale" ~> expression <~ ";" ^^ PInhale |
     "exhale" ~> expression <~ ";" ^^ PExhale |
     "assume" ~> expression <~ ";" ^^ PAssume |
@@ -440,7 +442,8 @@ class SyntaxAnalyser(positions: Positions) extends Parsers(positions) {
   lazy val makeAtomic: Parser[PMakeAtomic] =
     "make_atomic" ~>
     ("using" ~> predicateExp) ~ ("with" ~> rep1sep(guardExp, "&&") <~ ";".?) ~
-    ("{" ~> statements <~ "}") ^^ PMakeAtomic
+      ensures .* ~
+      ("{" ~> statements <~ "}") ^^ PMakeAtomic
 
   lazy val updateRegion: Parser[PUpdateRegion] =
     "update_region" ~>
