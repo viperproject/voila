@@ -117,7 +117,7 @@ procedure push(id r, int alvl, bag x, int v)
 }
 
 // For Voila, the precondition is not stable. To make it stable, sophisticated guard algebras are required.
-//:: UnexpectedOutput(method_precondition_not_stable_error)
+//:: UnexpectedOutput(method_precondition_not_stable_error, /voila/issue/102/)
 abstract_atomic procedure popCAS(id r, int alvl, bag x, id t_r, int t_lvl, node t, id t2_r, int t2_lvl, node t2) returns (int success)
   requires Bag(r, alvl, x, 0) && BagList(t_r, t_lvl, t, ?v, t2) && BagList(t2_r, t2_lvl, t2) && t != null && Z@r;
   ensures success == 0 || success == 1;
