@@ -8,6 +8,8 @@ import scala.util.{Failure, Success, Try}
 //   To be investigated.
 Project.inConfig(Test)(baseAssemblySettings ++ Seq(Test / assembly / test := {}))
 
+ThisBuild / scalaVersion := "2.13.4"
+
 // Import general settings from Silver
 lazy val silver = project in file("silver")
 
