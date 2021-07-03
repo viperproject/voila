@@ -8,6 +8,8 @@ import scala.util.{Failure, Success, Try}
 //   To be investigated.
 Project.inConfig(Test)(baseAssemblySettings ++ Seq(Test / assembly / test := {}))
 
+// [2021-07-03 MS] Should be inherited from Silver, but without it, Jenkins appears to
+// look for dependencies built against Scala 2.12, which then fails
 ThisBuild / scalaVersion := "2.13.4"
 
 // Import general settings from Silver
@@ -28,7 +30,7 @@ lazy val voila = (project in file("."))
     name := "Voila",
     organization := "viper",
     version := "0.1-SNAPSHOT",
-    homepage := Some(url("https://bitbucket.org/viperproject/voila")),
+    homepage := Some(url("https://github.com/viperproject/voila")),
     licenses := Seq("MPL-2.0 License" -> url("https://opensource.org/licenses/MPL-2.0")),
 
     /* Compilation settings */
