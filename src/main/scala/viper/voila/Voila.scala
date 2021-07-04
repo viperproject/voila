@@ -16,7 +16,7 @@ import org.apache.commons.io.FileUtils
 import org.bitbucket.inkytonik.kiama.util.Positions
 import org.slf4j.LoggerFactory
 import viper.{silicon, silver}
-import viper.voila.backends.{Carbon, MockViperFrontend, Silicon, ViperNameSanitizer, ViperPreamble, ViperVerifier}
+import viper.voila.backends.{/* Carbon, */MockViperFrontend, Silicon, ViperNameSanitizer, ViperPreamble, ViperVerifier}
 import viper.voila.frontend._
 import viper.voila.reporting._
 import viper.voila.translator.{ErrorBacktranslator, PProgramToViperTranslator}
@@ -283,12 +283,13 @@ class Voila extends StrictLogging {
           logger.info("Verifying encoding using Silicon ...")
           backend = new Silicon(siliconOptions)
         } else {
-          logger.info("Encoded Voila program in Viper")
-
-          timer.start()
-
-          logger.info("Verifying encoding using Carbon ...")
-          backend = new Carbon(Vector.empty, config)
+          sys.error("Carbon support is currently disabled")
+//          logger.info("Encoded Voila program in Viper")
+//
+//          timer.start()
+//
+//          logger.info("Verifying encoding using Carbon ...")
+//          backend = new Carbon(Vector.empty, config)
         }
 
         backend.start()

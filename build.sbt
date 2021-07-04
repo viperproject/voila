@@ -18,13 +18,13 @@ lazy val silver = project in file("silver")
 // Import general settings from Silicon
 lazy val silicon = project in file("silicon")
 
-// Import general settings from Silicon
-lazy val carbon = project in file("carbon")
+//// Import general settings from Carbon
+//lazy val carbon = project in file("carbon") [CARBON]
 
 lazy val voila = (project in file("."))
   .dependsOn(silver % "compile->compile;test->test")
   .dependsOn(silicon % "compile->compile;test->test")
-  .dependsOn(carbon % "compile->compile;test->test")
+//  .dependsOn(carbon % "compile->compile;test->test") [CARBON]
   .settings(
     /* General settings */
     name := "Voila",
@@ -35,7 +35,7 @@ lazy val voila = (project in file("."))
 
     /* Compilation settings */
     silicon / excludeFilter := "logback.xml", /* Ignore Silicon's Logback configuration */
-    carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */
+//    carbon / excludeFilter := "logback.xml", /* Ignore Carbon's Logback configuration */ [CARBON]
     Compile / unmanagedResourceDirectories += baseDirectory.value / "conf",
     libraryDependencies += "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2", // MultiDict collection
     libraryDependencies +=
