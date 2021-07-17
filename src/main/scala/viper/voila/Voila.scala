@@ -27,8 +27,8 @@ object VoilaConstants {
   val toolName: String  = "Voila"
   val toolCopyright: String  = "(c) Anonymous Authors"
 
-  val buildRevision = BuildInfo.gitRevision
-  val buildBranch = BuildInfo.gitBranch
+  val buildRevision: String = BuildInfo.gitRevision
+  val buildBranch: String = BuildInfo.gitBranch
 
   val buildVersion: Option[String] =
     if (buildRevision.isEmpty && buildBranch.isEmpty) None

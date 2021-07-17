@@ -230,7 +230,7 @@ class PortableVoilaTests extends VoilaTests with BeforeAndAfterEach {
     super.beforeAll()
 
     csvFileName foreach (filename => {
-      report(s"Recording verification times in ${filename}.")
+      report(s"Recording verification times in $filename.")
 
       csvFile = new BufferedWriter(new FileWriter(filename))
 
@@ -246,7 +246,7 @@ class PortableVoilaTests extends VoilaTests with BeforeAndAfterEach {
     csvFileName foreach (filename => {
       csvFile.close()
 
-      report(s"Recorded verification times in ${filename}.")
+      report(s"Recorded verification times in $filename.")
     })
   }
 
