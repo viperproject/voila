@@ -264,7 +264,7 @@ class Voila extends StrictLogging {
 
         // Step 5: Verification
         var backend: ViperVerifier = null
-        if(!config.useCarbon()) {
+        if(/*!config.useCarbon()*/ true) {
           var siliconOptions: Vector[String] = Vector.empty
           //        siliconOptions ++= Vector("--numberOfParallelVerifiers", "1")
           siliconOptions ++= Vector("--logLevel", "ERROR")
