@@ -61,8 +61,8 @@ lazy val voila = (project in file("."))
     assembly / assemblyJarName := "voila.jar",
     assembly / mainClass := Some("viper.voila.VoilaRunner"),
     assembly / assemblyMergeStrategy := {
-      case LogbackConfigurationFilePattern() =>
-        MergeStrategy.discard
+      // case LogbackConfigurationFilePattern() =>
+      //   MergeStrategy.discard
       case PathList("viper", "silicon", ps @ _*)
               if ps.nonEmpty && ps.last.startsWith("BuildInfo") && ps.last.endsWith(".class") =>
         /* On Jenkins, it seems that two copies of class viper.silicon.BuildInfo get assembly-ed:
