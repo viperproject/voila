@@ -34,7 +34,7 @@ Install the Scala build tool [sbt](https://www.scala-sbt.org/download.html), ver
 
 ## Usage
 
-1. Open a terminal, change directory into where you downloaded or built Voila, e.g. `~/voila`
+1. Open a terminal, change directory to where you downloaded or built Voila, e.g. `~/voila`
 1. Run `./voila.sh -i <path_to_file.vl>` to verify a file
 
 ## Authors
