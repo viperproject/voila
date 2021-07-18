@@ -70,22 +70,19 @@ jobs:
           # Compiled source files are therefore not cached.
           key: ${{ runner.os }}-sbt-no-precompiled-sources-${{ hashFiles('**/build.sbt') }}
 
-# #       - name: Execute all tests
-# #         run: sbt test
-# #         working-directory: voila
+      - name: Execute all tests
+        run: sbt test
 #       - name: Execute one test
 #         run: sbt "testOnly -- -n SpinLock.vl"
-# #         working-directory: voila
         
-#       - name: Assemble Voila fat jar
-#         run: sbt assembly
-# #         working-directory: voila
+      - name: Assemble Voila fat jar
+        run: sbt assembly
         
 #       - uses: actions/upload-artifact@v2
 #         with:
 #           name: voila-nightly
 #           path: |
-#             voila/target/scala-2.13/voila.jar
+#             target/scala-2.13/voila.jar
 #             buildinfo.log
 #             src/test/resources/
 
@@ -104,13 +101,9 @@ jobs:
       - name: Gather release files
         run: |
           mkdir ${{ env.RELEASE_DIR }}
-          # mv target/scala-2.13/voila.jar ${{ env.RELEASE_DIR }}
+          mv target/scala-2.13/voila.jar ${{ env.RELEASE_DIR }}
           mv buildinfo.log ${{ env.RELEASE_DIR }}
-          echo "test" > ${{ env.RELEASE_DIR }}/test.txt
-          # mv src/test/resources/ ${{ env.RELEASE_DIR }}/testsuite
-          # ls -l
-          # ls -l ${{ env.RELEASE_DIR }}
-          # ls -l ${{ env.RELEASE_DIR }}/testsuite
+          mv src/test/resources/ ${{ env.RELEASE_DIR }}/testsuite
       - name: Create release asset
         run: |
           # zip -r release.zip .
@@ -122,7 +115,7 @@ jobs:
         run: |
           echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
           echo "RELEASE_NAME=Snapshot ${TODAY}/${SHORT_SHA}" >> $GITHUB_ENV
-          echo "RELEASE_ASSET=voila-${RELEASE_TAG}.tar.gz" >> $GITHUB_ENV
+          echo "RELEASE_ASSET=voila-snapshot-${TODAY}-${SHORT_SHA}.tar.gz" >> $GITHUB_ENV
       - name: Prepare snapshot release asset
         if: startsWith(github.ref, 'refs/heads/master')
         run: mv release.tar.gz ${{ env.RELEASE_ASSET }}
