@@ -1,0 +1,149 @@
+name: ci
+
+on: [push, pull_request]
+
+env:
+  RELEASE_DIR: tmp_release
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    container: gobraverifier/gobra-base:v5_z3_4.8.7 # Thank you, Gobra team
+    steps:
+      # Install JDK
+#       - uses: actions/setup-java@v2
+#         with:
+#           distribution: 'adopt' # See https://github.com/marketplace/actions/setup-java-jdk
+#           java-version: '11'
+
+      # Checkout Voila
+      - name: Checkout Voila
+        uses: actions/checkout@v2
+#         with:
+#          path: voila
+
+      # Checkout Viper dependencies (Silver, Silicon)
+      - name: Checkout Silver
+        uses: actions/checkout@v2
+        with:
+          repository: viperproject/silver
+          path: silver
+      - name: Checkout Silicon
+        uses: actions/checkout@v2
+        with:
+          repository: viperproject/silicon
+          path: silicon
+
+      # Query versions. Results are displayed on stdio, and written to buildinfo.log
+      - name: Java Version
+        run: printf -- "------- Java version --------\n%s\n\n" "$(java --version)" | tee -a buildinfo.log
+      - name: Z3 Version
+        run: printf -- "------- Z3 version --------\n%s\n\n" "$(z3 -version)" | tee -a buildinfo.log
+      - name: Voila Commit
+        run: printf -- "------- Voila commit --------\n%s\n\n" "$(git -C . log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
+      - name: Silver Commit
+        run: printf -- "------- Silver commit --------\n%s\n\n" "$(git -C silver log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
+      - name: Silicon Commit
+        run: printf -- "------- Silicon commit --------\n%s\n\n" "$(git -C silicon log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
+
+      # Create symlinks necessary to wire Viper source dependencies
+      - name: Create Silicon's sym links
+        run: ln --symbolic ../silver
+        working-directory: silicon
+#       - name: Create Voila's sym links
+#         run: ln --symbolic ../silver; ln --symbolic ../silicon
+#         working-directory: voila
+
+      - name: Set sbt cache variables
+        # Cache path is relative to the directory in which sbt is invoked
+        run: echo "SBT_OPTS=-Dsbt.global.base=sbt-cache/.sbtboot -Dsbt.boot.directory=sbt-cache/.boot -Dsbt.ivy.home=sbt-cache/.ivy" >> $GITHUB_ENV
+      - name: Cache sbt
+        uses: actions/cache@v2
+        with:
+          path: |
+            sbt-cache/.sbtboot
+            sbt-cache/.boot
+            sbt-cache/.ivy/cache
+          # <x>/project/target and <x>/target, where <x> is e.g. 'voila' or 'silicon', are intentionally not
+          # included as several occurrences of NoSuchMethodError exceptions have been observed during CI runs. 
+          # It seems that sbt is unable to correctly compute source files that require a recompilation. 
+          # Compiled source files are therefore not cached.
+          key: ${{ runner.os }}-sbt-no-precompiled-sources-${{ hashFiles('**/build.sbt') }}
+
+# #       - name: Execute all tests
+# #         run: sbt test
+# #         working-directory: voila
+#       - name: Execute one test
+#         run: sbt "testOnly -- -n SpinLock.vl"
+# #         working-directory: voila
+        
+#       - name: Assemble Voila fat jar
+#         run: sbt assembly
+# #         working-directory: voila
+        
+#       - uses: actions/upload-artifact@v2
+#         with:
+#           name: voila-nightly
+#           path: |
+#             voila/target/scala-2.13/voila.jar
+#             buildinfo.log
+#             src/test/resources/
+
+#       # NOTE: Installing zip fails on container gobraverifier/gobra-base
+#       - name: Install prerequisites
+#         run: apt-get install zip unzip
+#       - name: I need help
+#         run: |
+#           tar --version
+#           gzip --version
+#           zip --version
+      - name: Create env variables with release information
+        run: |
+          echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+      - name: Gather release files
+        run: |
+          mkdir ${{ env.RELEASE_DIR }}
+          # mv target/scala-2.13/voila.jar ${{ env.RELEASE_DIR }}
+          mv buildinfo.log ${{ env.RELEASE_DIR }}
+          echo "test" > ${{ env.RELEASE_DIR }}/test.txt
+          # mv src/test/resources/ ${{ env.RELEASE_DIR }}/testsuite
+          # ls -l
+          # ls -l ${{ env.RELEASE_DIR }}
+          # ls -l ${{ env.RELEASE_DIR }}/testsuite
+      - name: Create release asset
+        run: |
+          # zip -r release.zip .
+          tar -zcvf release.tar.gz *
+        working-directory: ${{ env.RELEASE_DIR }}
+        
+      - name: Create env variables with snapshot-release specific information
+        if: startsWith(github.ref, 'refs/heads/master') # Only for regular commits to master branch (no pull requests, no tagging)
+        run: |
+          echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
+          echo "RELEASE_ASSET=voila-${RELEASE_TAG}.tar.gz" >> $GITHUB_ENV
+#         env:
+#           RELEASE_TAG: snapshot-${{ env.TODAY }}-${{ env.SHORT_SHA }}
+#           RELEASE_ASSET: voila-${{ env.RELEASE_TAG }}.zip
+      - name: Prepare snapshot release asset
+        if: startsWith(github.ref, 'refs/heads/master')
+        run: mv release.tar.gz ${{ env.RELEASE_ASSET }}
+        working-directory: ${{ env.RELEASE_DIR }}
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/heads/master')
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Snapshot ${{ env.TODAY }}/${{ env.SHORT_SHA }})
+          prerelease: true
+          files: ${{ env.RELEASE_DIR }}/${{ env.RELEASE_ASSET }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub, i.e. not a personal/custom token
+#       - name: Create an official release
+#         if: startsWith(github.ref, 'refs/tags/releases/')
+#         uses: softprops/action-gh-release@v1
+#         with:
+#           prerelease: false
+#           files: ${{ env.RELEASE_DIR }}     
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
