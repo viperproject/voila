@@ -121,20 +121,27 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/master') # Only for regular commits to master branch (no pull requests, no tagging)
         run: |
           echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=Snapshot ${TODAY}/${SHORT_SHA}" >> $GITHUB_ENV
           echo "RELEASE_ASSET=voila-${RELEASE_TAG}.tar.gz" >> $GITHUB_ENV
-#         env:
-#           RELEASE_TAG: snapshot-${{ env.TODAY }}-${{ env.SHORT_SHA }}
-#           RELEASE_ASSET: voila-${{ env.RELEASE_TAG }}.zip
       - name: Prepare snapshot release asset
         if: startsWith(github.ref, 'refs/heads/master')
         run: mv release.tar.gz ${{ env.RELEASE_ASSET }}
         working-directory: ${{ env.RELEASE_DIR }}
+      - name: Create a snapshot release on GitHub (with source assets)
+        id: create_snapshot_release
+        uses: viperproject/create-nightly-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub, i.e. not a personal/custom token
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          release_name: ${{ env.RELEASE_NAME }}
+          keep_num: 2
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/heads/master')
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: Snapshot ${{ env.TODAY }}/${{ env.SHORT_SHA }})
+          name: ${{ env.RELEASE_NAME }}
           prerelease: true
           files: ${{ env.RELEASE_DIR }}/${{ env.RELEASE_ASSET }}
         env:
