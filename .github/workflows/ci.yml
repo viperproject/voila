@@ -19,8 +19,6 @@ jobs:
       # Checkout Voila
       - name: Checkout Voila
         uses: actions/checkout@v2
-#         with:
-#          path: voila
 
       # Checkout Viper dependencies (Silver, Silicon)
       - name: Checkout Silver
