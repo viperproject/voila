@@ -102,8 +102,11 @@ jobs:
         run: |
           mkdir ${{ env.RELEASE_DIR }}
           mv target/scala-2.13/voila.jar ${{ env.RELEASE_DIR }}
-          mv buildinfo.log ${{ env.RELEASE_DIR }}
           mv src/test/resources/ ${{ env.RELEASE_DIR }}/testsuite
+          mv voila.sh ${{ env.RELEASE_DIR }}
+          mv voila.bat ${{ env.RELEASE_DIR }}
+          mv buildinfo.log ${{ env.RELEASE_DIR }}
+          echo -l ${{ env.RELEASE_DIR }}
       - name: Create release asset
         run: |
           # zip -r release.zip .
