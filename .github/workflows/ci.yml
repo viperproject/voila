@@ -6,7 +6,7 @@ env:
   RELEASE_DIR: tmp_release
 
 jobs:
-  setup:
+  test-and-assemble:
     runs-on: ubuntu-latest
     container: gobraverifier/gobra-base:v5_z3_4.8.7 # Thank you, Gobra team
     steps:
@@ -32,25 +32,25 @@ jobs:
           repository: viperproject/silicon
           path: silicon
 
-      # Query versions. Results are displayed on stdio, and written to buildinfo.log
-      - name: Java Version
+      # Query versions, and other details that may help with reconstructing a built. 
+      # Results are displayed on stdio, and written to buildinfo.log
+      - name: Query current date 
+        run: printf -- "------- Timestamp --------\n%s\n\n" "$(date +"%Y-%m-%d %H:%M")" | tee -a buildinfo.log
+      - name: Query Java version
         run: printf -- "------- Java version --------\n%s\n\n" "$(java --version)" | tee -a buildinfo.log
-      - name: Z3 Version
+      - name: Query Z3 version
         run: printf -- "------- Z3 version --------\n%s\n\n" "$(z3 -version)" | tee -a buildinfo.log
-      - name: Voila Commit
+      - name: Query Voila commit
         run: printf -- "------- Voila commit --------\n%s\n\n" "$(git -C . log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
-      - name: Silver Commit
+      - name: Query Silver commit
         run: printf -- "------- Silver commit --------\n%s\n\n" "$(git -C silver log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
-      - name: Silicon Commit
+      - name: Query Silicon commit
         run: printf -- "------- Silicon commit --------\n%s\n\n" "$(git -C silicon log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
 
       # Create symlinks necessary to wire Viper source dependencies
       - name: Create Silicon's sym links
         run: ln --symbolic ../silver
         working-directory: silicon
-#       - name: Create Voila's sym links
-#         run: ln --symbolic ../silver; ln --symbolic ../silicon
-#         working-directory: voila
 
       - name: Set sbt cache variables
         # Cache path is relative to the directory in which sbt is invoked
@@ -76,75 +76,87 @@ jobs:
       - name: Assemble Voila fat jar
         run: sbt assembly
         
-#       - uses: actions/upload-artifact@v2
-#         with:
-#           name: voila-nightly
-#           path: |
-#             target/scala-2.13/voila.jar
-#             buildinfo.log
-#             src/test/resources/
+      - uses: actions/upload-artifact@v2
+        with:
+          name: test-and-assemble
+          path: |
+            target/scala-2.13/voila.jar
+            buildinfo.log
+          retention-days: 14
 
-#       # NOTE: Installing zip fails on container gobraverifier/gobra-base
-#       - name: Install prerequisites
-#         run: apt-get install zip unzip
-#       - name: I need help
+  release-snapshot:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    needs: test-and-assemble
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download math result for job 1
+        uses: actions/download-artifact@v2
+        with:
+          name: test-and-assemble
+      - name: Test step
+        run: ls -l
+
+# #       # NOTE: Installing zip fails on container gobraverifier/gobra-base
+# #       - name: Install prerequisites
+# #         run: apt-get install zip unzip
+# #       - name: I need help
+# #         run: |
+# #           tar --version
+# #           gzip --version
+# #           zip --version
+#       - name: Create env variables with release information
 #         run: |
-#           tar --version
-#           gzip --version
-#           zip --version
-      - name: Create env variables with release information
-        run: |
-          echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
-      - name: Gather release files
-        run: |
-          mkdir ${{ env.RELEASE_DIR }}
-          mv target/scala-2.13/voila.jar ${{ env.RELEASE_DIR }}
-          mv src/test/resources/ ${{ env.RELEASE_DIR }}/testsuite
-          mv voila.sh ${{ env.RELEASE_DIR }}
-          mv voila.bat ${{ env.RELEASE_DIR }}
-          mv buildinfo.log ${{ env.RELEASE_DIR }}
-          echo -l ${{ env.RELEASE_DIR }}
-      - name: Create release asset
-        run: |
-          # zip -r release.zip .
-          tar -zcvf release.tar.gz *
-        working-directory: ${{ env.RELEASE_DIR }}
+#           echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+#           echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+#       - name: Gather release files
+#         run: |
+#           mkdir ${{ env.RELEASE_DIR }}
+#           mv target/scala-2.13/voila.jar ${{ env.RELEASE_DIR }}
+#           mv src/test/resources/ ${{ env.RELEASE_DIR }}/testsuite
+#           mv voila.sh ${{ env.RELEASE_DIR }}
+#           mv voila.bat ${{ env.RELEASE_DIR }}
+#           mv buildinfo.log ${{ env.RELEASE_DIR }}
+#           echo -l ${{ env.RELEASE_DIR }}
+#       - name: Create release asset
+#         run: |
+#           # zip -r release.zip .
+#           tar -zcvf release.tar.gz *
+#         working-directory: ${{ env.RELEASE_DIR }}
         
-      - name: Create env variables with snapshot-release specific information
-        if: startsWith(github.ref, 'refs/heads/master') # Only for regular commits to master branch (no pull requests, no tagging)
-        run: |
-          echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
-          echo "RELEASE_NAME=Snapshot ${TODAY}/${SHORT_SHA}" >> $GITHUB_ENV
-          echo "RELEASE_ASSET=voila-snapshot-${TODAY}-${SHORT_SHA}.tar.gz" >> $GITHUB_ENV
-      - name: Prepare snapshot release asset
-        if: startsWith(github.ref, 'refs/heads/master')
-        run: mv release.tar.gz ${{ env.RELEASE_ASSET }}
-        working-directory: ${{ env.RELEASE_DIR }}
-      - name: Create a snapshot release on GitHub (with source assets)
-        id: create_snapshot_release
-        uses: viperproject/create-nightly-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub, i.e. not a personal/custom token
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          release_name: ${{ env.RELEASE_NAME }}
-          keep_num: 2
-      - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/heads/master')
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_NAME }}
-          prerelease: true
-          files: ${{ env.RELEASE_DIR }}/${{ env.RELEASE_ASSET }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub, i.e. not a personal/custom token
-#       - name: Create an official release
-#         if: startsWith(github.ref, 'refs/tags/releases/')
+#       - name: Create env variables with snapshot-release specific information
+#         if: startsWith(github.ref, 'refs/heads/master') # Only for regular commits to master branch (no pull requests, no tagging)
+#         run: |
+#           echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
+#           echo "RELEASE_NAME=Snapshot ${TODAY}/${SHORT_SHA}" >> $GITHUB_ENV
+#           echo "RELEASE_ASSET=voila-snapshot-${TODAY}-${SHORT_SHA}.tar.gz" >> $GITHUB_ENV
+#       - name: Prepare snapshot release asset
+#         if: startsWith(github.ref, 'refs/heads/master')
+#         run: mv release.tar.gz ${{ env.RELEASE_ASSET }}
+#         working-directory: ${{ env.RELEASE_DIR }}
+#       - name: Create a snapshot release on GitHub (with source assets)
+#         id: create_snapshot_release
+#         uses: viperproject/create-nightly-release@v1
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub, i.e. not a personal/custom token
+#         with:
+#           tag_name: ${{ env.RELEASE_TAG }}
+#           release_name: ${{ env.RELEASE_NAME }}
+#           keep_num: 2
+#       - name: Create GitHub release
+#         if: startsWith(github.ref, 'refs/heads/master')
 #         uses: softprops/action-gh-release@v1
 #         with:
-#           prerelease: false
-#           files: ${{ env.RELEASE_DIR }}     
+#           tag_name: ${{ env.RELEASE_TAG }}
+#           name: ${{ env.RELEASE_NAME }}
+#           prerelease: true
+#           files: ${{ env.RELEASE_DIR }}/${{ env.RELEASE_ASSET }}
 #         env:
-#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub, i.e. not a personal/custom token
+# #       - name: Create an official release
+# #         if: startsWith(github.ref, 'refs/tags/releases/')
+# #         uses: softprops/action-gh-release@v1
+# #         with:
+# #           prerelease: false
+# #           files: ${{ env.RELEASE_DIR }}     
+# #         env:
+# #           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
