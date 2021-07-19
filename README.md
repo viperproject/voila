@@ -10,13 +10,13 @@ Prerequisites:
 
 1. Java: Voila is written in Scala, and runs on the Java Virtual Machine. We recommend Java 11, but newer versions should work as well.
 
-1. Z3: Voila uses the excellent Z3 SMT solver. We strongly recommend [Z3 4.8.7](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.7).
+1. Z3: Voila uses the excellent Z3 SMT solver. We strongly recommend [Z3 4.8.7](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.7). Add Z3's executable to your path, or let environment variable `Z3_EXE` point to it.
 
 We provide instructions for Linux, but adapting them for Windows or MacOS should be straightforward.
 
 ### Pre-built
 
-TODO
+Download the [latest official Voila release](https://github.com/viperproject/voila/releases/latest), or see [all Voila release](https://github.com/viperproject/voila/releases) for alternatives.
 
 ### Self-built
 
