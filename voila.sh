@@ -14,7 +14,7 @@ if [ -f "$JAR_IN_TARGET" ]; then
 elif [ -f "$JAR_IN_HERE" ]; then
   JAR=$JAR_IN_HERE
 else
-  abort "Could not find voila.jar"
+  abort "Error: Neither found $JAR_IN_TARGET, nor $JAR_IN_HERE. Did you download a prebuilt JAR file, or sbt-assembled one yourself (see README.md)?"
 fi
 
 echo "Running Voila from $JAR"
