@@ -74,8 +74,10 @@ jobs:
         run: sbt "testOnly -- -n SpinLock.vl"
         
       - name: Assemble Voila fat jar
-        run: sbt assembly        
-      - run: cp target/scala-2.13/voila.jar .
+        run: sbt assembly
+
+      - name: Prepare artifact upload
+        run: cp target/scala-2.13/voila.jar .
       - uses: actions/upload-artifact@v2
         with:
           name: test-and-assemble
@@ -86,54 +88,65 @@ jobs:
           if-no-files-found: error
 
   release-snapshot:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/master')
     needs: test-and-assemble
+    # Only for regular commits to master branch (no pull requests, no tagging)
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     steps:
       - name: Download math result for job 1
         uses: actions/download-artifact@v2
         with:
           name: test-and-assemble
-      - name: Test step
-        run: ls -l
 
-# #       # NOTE: Installing zip fails on container gobraverifier/gobra-base
-# #       - name: Install prerequisites
-# #         run: apt-get install zip unzip
-# #       - name: I need help
-# #         run: |
-# #           tar --version
-# #           gzip --version
-# #           zip --version
-#       - name: Create env variables with release information
+#       # NOTE: Installing zip fails on container gobraverifier/gobra-base
+#       - name: Install prerequisites
+#         run: apt-get install zip unzip
+#       - name: I need help
 #         run: |
-#           echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-#           echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+#           tar --version
+#           gzip --version
+#           zip --version
+      
+      # Checkout Voila
+      - name: Checkout Voila
+        uses: actions/checkout@v2
+
+      - name: Create env variables with release information
+        run: |
+          echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+          echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
+          echo "GITHUB_ENV = $GITHUB_ENV"
+          export
+
+#       - name: Create env variables with release-relevant information
+#         run: |
+#           echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
+#           echo "RELEASE_NAME=Snapshot ${TODAY}/${SHORT_SHA}" >> $GITHUB_ENV
+#           echo "RELEASE_ASSET=voila-snapshot-${TODAY}-${SHORT_SHA}.tar.gz" >> $GITHUB_ENV
+
 #       - name: Gather release files
 #         run: |
 #           mkdir ${{ env.RELEASE_DIR }}
-#           mv target/scala-2.13/voila.jar ${{ env.RELEASE_DIR }}
+#           mv voila.jar ${{ env.RELEASE_DIR }}
 #           mv src/test/resources/ ${{ env.RELEASE_DIR }}/testsuite
 #           mv voila.sh ${{ env.RELEASE_DIR }}
 #           mv voila.bat ${{ env.RELEASE_DIR }}
 #           mv buildinfo.log ${{ env.RELEASE_DIR }}
 #           echo -l ${{ env.RELEASE_DIR }}
-#       - name: Create release asset
+
+#       - name: Create release asset archive
 #         run: |
 #           # zip -r release.zip .
 #           tar -zcvf release.tar.gz *
 #         working-directory: ${{ env.RELEASE_DIR }}
         
-#       - name: Create env variables with snapshot-release specific information
-#         if: startsWith(github.ref, 'refs/heads/master') # Only for regular commits to master branch (no pull requests, no tagging)
-#         run: |
-#           echo "RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}" >> $GITHUB_ENV
-#           echo "RELEASE_NAME=Snapshot ${TODAY}/${SHORT_SHA}" >> $GITHUB_ENV
-#           echo "RELEASE_ASSET=voila-snapshot-${TODAY}-${SHORT_SHA}.tar.gz" >> $GITHUB_ENV
-#       - name: Prepare snapshot release asset
-#         if: startsWith(github.ref, 'refs/heads/master')
+
+
+#       - name: Prepare release asset
 #         run: mv release.tar.gz ${{ env.RELEASE_ASSET }}
 #         working-directory: ${{ env.RELEASE_DIR }}
+
 #       - name: Create a snapshot release on GitHub (with source assets)
 #         id: create_snapshot_release
 #         uses: viperproject/create-nightly-release@v1
