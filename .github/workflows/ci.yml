@@ -74,8 +74,8 @@ jobs:
         run: sbt "testOnly -- -n SpinLock.vl"
         
       - name: Assemble Voila fat jar
-        run: sbt assembly
-        
+        run: sbt assembly        
+      - run: cp target/scala-2.13/voila.jar .
       - uses: actions/upload-artifact@v2
         with:
           name: test-and-assemble
@@ -83,6 +83,7 @@ jobs:
             target/scala-2.13/voila.jar
             buildinfo.log
           retention-days: 14
+          if-no-files-found: error
 
   release-snapshot:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/master')
