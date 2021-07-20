@@ -74,15 +74,16 @@ jobs:
         run: sbt "testOnly -- -n SpinLock.vl"
         
       - name: Assemble Voila fat jar
-        run: sbt assembly
+        run: |
+          sbt assembly
+          cp target/scala-2.13/voila.jar .
 
-      - name: Prepare artifact upload
-        run: cp target/scala-2.13/voila.jar .
-      - uses: actions/upload-artifact@v2
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
         with:
           name: test-and-assemble
           path: |
-            target/scala-2.13/voila.jar
+            voila.jar
             buildinfo.log
           retention-days: 14
           if-no-files-found: error
