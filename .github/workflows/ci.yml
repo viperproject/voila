@@ -93,7 +93,7 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     steps:
-      - name: Download math result for job 1
+      - name: Download artifacts from job test-and-assemble
         uses: actions/download-artifact@v2
         with:
           name: test-and-assemble
@@ -113,6 +113,7 @@ jobs:
 
       - name: Create env variables with release information
         run: |
+          ls -l
           SHORT_SHA=$(git rev-parse --short HEAD)
           TODAY=$(date +%Y-%m-%d)
           RELEASE_TAG=snapshot-${TODAY}-${SHORT_SHA}
