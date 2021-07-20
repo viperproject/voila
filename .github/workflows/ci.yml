@@ -16,7 +16,7 @@ jobs:
 #           distribution: 'adopt' # See https://github.com/marketplace/actions/setup-java-jdk
 #           java-version: '11'
 
-      # Checkout Voila
+      # Checkout Voila (note: all checkouts delete the contents of their working directory)
       - name: Checkout Voila
         uses: actions/checkout@v2
 
@@ -94,6 +94,10 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     steps:
+      # Checkout Voila (deletes content of working directory)
+      - name: Checkout Voila
+        uses: actions/checkout@v2
+
       - name: Download artifacts from job test-and-assemble
         uses: actions/download-artifact@v2
         with:
@@ -107,10 +111,6 @@ jobs:
 #           tar --version
 #           gzip --version
 #           zip --version
-      
-      # Checkout Voila
-      - name: Checkout Voila
-        uses: actions/checkout@v2
 
       - name: Create env variables with release information
         run: |
