@@ -120,12 +120,14 @@ jobs:
       - name: Create env variables with release information
         run: |
           SHORT_SHA="$(git rev-parse --short HEAD)"
-          TODAY="$(date +%Y-%m-%d)"
-          RELEASE_TAG="snapshot-${TODAY}-${SHORT_SHA}"
+          TIMESTAMP_TODAY="$(date +%Y-%m-%d)" # NOTE: Safe in filenames 
+          TIMESTAMP_NOW="$(date +%H%M)"       # NOTE: Safe in filenames
+          RELEASE_TAG="snapshot-${TIMESTAMP_TODAY}-${SHORT_SHA}"
           RELEASE_ASSET="voila-$RELEASE_TAG"
-          RELEASE_NAME="Snapshot ${TODAY}/${SHORT_SHA}"
+          RELEASE_NAME="Snapshot ${TIMESTAMP_TODAY}-${TIMESTAMP_NOW}/${SHORT_SHA}"
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
-          echo "TODAY=$TODAY" >> $GITHUB_ENV
+          echo "TIMESTAMP_TODAY=$TIMESTAMP_TODAY" >> $GITHUB_ENV
+          echo "TIMESTAMP_NOW=$TIMESTAMP_NOW" >> $GITHUB_ENV
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
           echo "RELEASE_ASSET=$RELEASE_ASSET" >> $GITHUB_ENV
           echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
