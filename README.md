@@ -1,6 +1,6 @@
 # Voila: Concise Outlines for a Complex Logic
 
-Voila — see our [FM'21 paper](#) for all the glory details — is a proof outline checker for fine-grained concurrency verification. It supports a simple, Java-like programming language, with specifications based on a concurrent separation logic. Voila uses the [Viper verification infrastructure](https://viper.ethz.ch) to automatically discharge all proof obligations.
+Voila — paper to appear at [FM'21](https://lcs.ios.ac.cn/fm2021/), see [arXiv.org](https://arxiv.org/abs/2010.07080) for now — is a proof outline checker for fine-grained concurrency verification. It supports a simple, Java-like programming language, with specifications based on a concurrent separation logic. Voila uses the [Viper verification infrastructure](https://viper.ethz.ch) to automatically discharge all proof obligations.
 
 See [TicketLock.vl](https://github.com/viperproject/voila/blob/master/src/test/resources/examples/Caper/TicketLock.vl) for an example, or browse all examples and regression tests in [src/test/resources](https://github.com/viperproject/voila/blob/master/src/test/resources).
 
