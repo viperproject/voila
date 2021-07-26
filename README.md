@@ -1,7 +1,7 @@
 # Voila: Concise Outlines for a Complex Logic
 
 <p align="center">
-   <img height="160" width="447" alt="Voila logo" src=".github/voila-logo.svg">
+   <img width="447" height="160" alt="Voila logo" src=".github/voila-logo.svg">
 </p>
 
 Voila — paper to appear at [FM'21](https://lcs.ios.ac.cn/fm2021/), see [arXiv.org](https://arxiv.org/abs/2010.07080) for now — is a *proof outline checker* for fine-grained concurrency verification. It supports a simple, Java-like programming language, with specifications based on a concurrent separation logic. Voila uses the [Viper verification infrastructure](https://viper.ethz.ch) to automatically discharge all proof obligations.
@@ -40,6 +40,12 @@ Install the Scala build tool [sbt](https://www.scala-sbt.org/download.html), ver
 
 1. Open a terminal, change directory to where you downloaded or built Voila, e.g. `~/voila`
 1. Run `./voila.sh -i <path_to_file.vl>` to verify a file
+
+## Demo Session
+
+<p align="center">
+   <img width="520" height="400" alt="Recording of a Voila demo session" src=".github/voila-demo.webp">
+</p>
 
 ## Authors
 
