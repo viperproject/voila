@@ -44,7 +44,7 @@ Install the Scala build tool [sbt](https://www.scala-sbt.org/download.html), ver
 ## Demo Session
 
 <p align="center">
-   <img width="520" height="400" alt="Recording of a Voila demo session" src=".github/voila-demo.webp">
+   <img width="2103" height="1617" alt="Recording of a Voila demo session" src=".github/voila-demo.webp">
 </p>
 
 ## Authors
