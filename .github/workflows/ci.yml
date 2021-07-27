@@ -122,7 +122,7 @@ jobs:
           SHORT_SHA="$(git rev-parse --short HEAD)"
           TIMESTAMP_TODAY="$(date +%Y-%m-%d)" # NOTE: Safe in filenames 
           TIMESTAMP_NOW="$(date +%H%M)"       # NOTE: Safe in filenames
-          RELEASE_TAG="snapshot-${TIMESTAMP_TODAY}-${SHORT_SHA}"
+          RELEASE_TAG="snapshot-${TIMESTAMP_TODAY}-${TIMESTAMP_NOW}-${SHORT_SHA}"
           RELEASE_ASSET="voila-$RELEASE_TAG" # NOTE: Safe in filenames, no extension
           RELEASE_NAME="Snapshot ${TIMESTAMP_TODAY}-${TIMESTAMP_NOW}/${SHORT_SHA}"
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
