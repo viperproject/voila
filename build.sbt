@@ -8,9 +8,9 @@ import scala.util.{Failure, Success, Try}
 //   To be investigated.
 Project.inConfig(Test)(baseAssemblySettings ++ Seq(Test / assembly / test := {}))
 
-// [2021-07-03 MS] Should be inherited from Silver, but without it, Jenkins appears to
-// look for dependencies built against Scala 2.12, which then fails
-ThisBuild / scalaVersion := "2.13.4"
+// // [2021-07-03 MS] Should be inherited from Silver, but without it, Jenkins appears to
+// // look for dependencies built against Scala 2.12, which then fails
+// ThisBuild / scalaVersion := "2.13.4"
 
 // Import general settings from Silver
 lazy val silver = project in file("silver")
