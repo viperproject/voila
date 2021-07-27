@@ -73,10 +73,10 @@ jobs:
           # Compiled source files are therefore not cached.
           key: ${{ runner.os }}-sbt-no-precompiled-sources-${{ hashFiles('**/build.sbt') }}
 
-#       - name: Execute all tests
-#         run: sbt test
-      - name: Execute one test
-        run: sbt "testOnly -- -n SpinLock.vl"
+      # - name: Execute a single test only
+      #   run: sbt "testOnly -- -n SpinLock.vl"
+      - name: Execute all tests
+        run: sbt test
         
       - name: Assemble Voila fat jar
         run: |
