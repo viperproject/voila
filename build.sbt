@@ -3,14 +3,14 @@ import scala.util.{Failure, Success, Try}
 
 // [2020-10-12 MS]
 //   When assembling a fat test JAR (test:assembly), the files under
-//   src/test don't end up in tje JAR if the next line is missing.
+//   src/test don't end up in the JAR if the next line is missing.
 //   I'm not sure why that is, or why exactly the next line helps.
 //   To be investigated.
 Project.inConfig(Test)(baseAssemblySettings ++ Seq(Test / assembly / test := {}))
 
-// [2021-07-03 MS] Should be inherited from Silver, but without it, Jenkins appears to
-// look for dependencies built against Scala 2.12, which then fails
-ThisBuild / scalaVersion := "2.13.4"
+// // [2021-07-03 MS] Should be inherited from Silver, but without it, Jenkins appears to
+// // look for dependencies built against Scala 2.12, which then fails
+// ThisBuild / scalaVersion := "2.13.4"
 
 // Import general settings from Silver
 lazy val silver = project in file("silver")
@@ -29,7 +29,7 @@ lazy val voila = (project in file("."))
     /* General settings */
     name := "Voila",
     organization := "viper",
-    version := "0.1-SNAPSHOT",
+    version := "1.1-SNAPSHOT",
     homepage := Some(url("https://github.com/viperproject/voila")),
     licenses := Seq("MPL-2.0 License" -> url("https://opensource.org/licenses/MPL-2.0")),
 
