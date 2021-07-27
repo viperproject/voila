@@ -123,7 +123,7 @@ jobs:
           TIMESTAMP_TODAY="$(date +%Y-%m-%d)" # NOTE: Safe in filenames 
           TIMESTAMP_NOW="$(date +%H%M)"       # NOTE: Safe in filenames
           RELEASE_TAG="snapshot-${TIMESTAMP_TODAY}-${SHORT_SHA}"
-          RELEASE_ASSET="voila-$RELEASE_TAG"
+          RELEASE_ASSET="voila-$RELEASE_TAG" # NOTE: Safe in filenames, no extension
           RELEASE_NAME="Snapshot ${TIMESTAMP_TODAY}-${TIMESTAMP_NOW}/${SHORT_SHA}"
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
           echo "TIMESTAMP_TODAY=$TIMESTAMP_TODAY" >> $GITHUB_ENV
@@ -144,6 +144,8 @@ jobs:
 
       - name: Create release asset archive
         run: |
+          RELEASE_ASSET="$RELEASE_ASSET.tar.gz" # Add extension
+          echo "RELEASE_ASSET=$RELEASE_ASSET" >> $GITHUB_ENV
           # zip -r ${{ env.RELEASE_ASSET }} .
           tar -zcvf ${{ env.RELEASE_ASSET }} *
         working-directory: ${{ env.RELEASE_DIR }}
