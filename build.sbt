@@ -29,7 +29,7 @@ lazy val voila = (project in file("."))
     /* General settings */
     name := "Voila",
     organization := "viper",
-    version := "0.1-SNAPSHOT",
+    version := "1.0",
     homepage := Some(url("https://github.com/viperproject/voila")),
     licenses := Seq("MPL-2.0 License" -> url("https://opensource.org/licenses/MPL-2.0")),
 
