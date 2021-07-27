@@ -144,7 +144,7 @@ jobs:
 
       - name: Create release asset archive
         run: |
-          RELEASE_ASSET="$RELEASE_ASSET.tar.gz" # Add extension          
+          RELEASE_ASSET="$RELEASE_ASSET.tar.gz" # Add extension
           # zip -r $RELEASE_ASSET .
           tar -zcvf $RELEASE_ASSET *
           echo "RELEASE_ASSET=$RELEASE_ASSET" >> $GITHUB_ENV
