@@ -144,10 +144,10 @@ jobs:
 
       - name: Create release asset archive
         run: |
-          RELEASE_ASSET="$RELEASE_ASSET.tar.gz" # Add extension
+          RELEASE_ASSET="$RELEASE_ASSET.tar.gz" # Add extension          
+          # zip -r ${{ RELEASE_ASSET }} .
+          tar -zcvf ${{ RELEASE_ASSET }} *
           echo "RELEASE_ASSET=$RELEASE_ASSET" >> $GITHUB_ENV
-          # zip -r ${{ env.RELEASE_ASSET }} .
-          tar -zcvf ${{ env.RELEASE_ASSET }} *
         working-directory: ${{ env.RELEASE_DIR }}
 
       - name: Create a snapshot release on GitHub (with source assets)
@@ -160,7 +160,7 @@ jobs:
           release_name: ${{ env.RELEASE_NAME }}
           keep_num: 2
           keep_tags: false
-      - name: Create GitHub release
+      - name: Create GitHub pre-release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.RELEASE_TAG }}
