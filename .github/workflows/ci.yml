@@ -36,6 +36,7 @@ jobs:
         with:
           repository: viperproject/silicon
           path: silicon
+          submodules: 'false'
 
       # Query versions, and other details that may help with reconstructing a built. 
       # Results are displayed on stdio, and written to buildinfo.log
