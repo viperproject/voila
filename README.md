@@ -27,7 +27,7 @@ Download the [latest official Voila release](https://github.com/viperproject/voi
 Install the Scala build tool [sbt](https://www.scala-sbt.org/download.html), version 1.4.4 or newer.
 
 1. Download this repository into, e.g. `~/voila`
-1. Download [Silver](https://github.com/viperproject/silver/) into `~/voila/silver`
+1. ~~Download [Silver](https://github.com/viperproject/silver/) into `~/voila/silver`~~ No longer necessary, since Silicon includes Silver as a Git submodule
 1. Download [Silicon](https://github.com/viperproject/silicon/) into `~/voila/silicon`
 1. Open a terminal, change directory to `~/voila`, and start `sbt`
    1. Compile with sbt command `compile`
