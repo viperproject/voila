@@ -55,7 +55,9 @@ jobs:
 
       # Create symlinks necessary to wire Viper source dependencies
       - name: Create Silicon's sym links
-        run: ln --symbolic ../silver
+        run: |
+          rm -r ./silver
+          ln --symbolic ../silver
         working-directory: silicon
 
       - name: Set sbt cache variables
