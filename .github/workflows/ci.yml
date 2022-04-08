@@ -26,17 +26,17 @@ jobs:
         uses: actions/checkout@v2
 
       # Checkout Viper dependencies (Silver, Silicon)
-      # - name: Checkout Silver
-      #   uses: actions/checkout@v2
-      #   with:
-      #     repository: viperproject/silver
-      #     path: silver
+      - name: Checkout Silver
+        uses: actions/checkout@v2
+        with:
+          repository: viperproject/silver
+          path: silver
       - name: Checkout Silicon
         uses: actions/checkout@v2
         with:
           repository: viperproject/silicon
           path: silicon
-          # submodules: 'false'
+          submodules: none
 
       # Query versions, and other details that may help with reconstructing a built. 
       # Results are displayed on stdio, and written to buildinfo.log
@@ -49,14 +49,14 @@ jobs:
       - name: Query Voila commit
         run: printf -- "------- Voila commit --------\n%s\n\n" "$(git -C . log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
       - name: Query Silver commit
-        run: printf -- "------- Silver commit --------\n%s\n\n" "$(git -C silicon/silver log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
+        run: printf -- "------- Silver commit --------\n%s\n\n" "$(git -C silver log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
       - name: Query Silicon commit
         run: printf -- "------- Silicon commit --------\n%s\n\n" "$(git -C silicon log --format=reference -n 1 HEAD)" | tee -a buildinfo.log
 
       # Create symlinks necessary to wire Viper source dependencies
-      # - name: Create Silicon's sym links
-      #   run: ln --symbolic ../silver
-      #   working-directory: silicon
+      - name: Create Silicon's sym links
+        run: ln --symbolic ../silver
+        working-directory: silicon
 
       - name: Set sbt cache variables
         # Cache path is relative to the directory in which sbt is invoked
