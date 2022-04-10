@@ -500,8 +500,6 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
 
       surroundWithSectionComments(makeAtomic.statementName, total)
     }
-
-
   }
 
   def translate(updateRegion: PUpdateRegion): vpr.Stmt = {
@@ -520,7 +518,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val vprRegionId = vprInArgs.head
 
     val exhaleDiamond =
-      vpr.Exhale(diamondAccess(vprRegionId))().withSource(updateRegion.regionPredicate)
+      vpr.Exhale(diamondAccess(vprRegionId))().withSourceDeep(updateRegion.regionPredicate, overwrite = true)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleDiamond =>
@@ -530,7 +528,7 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     }
 
     val exhaleAtomicityTracking =
-      deselectAtomicityContext(region, vprInArgs).withSource(updateRegion.regionPredicate)
+      deselectAtomicityContext(region, vprInArgs).withSourceDeep(updateRegion.regionPredicate, overwrite = true)
 
     errorBacktranslator.addErrorTransformer {
       case e: vprerr.ExhaleFailed if e causedBy exhaleAtomicityTracking =>

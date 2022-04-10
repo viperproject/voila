@@ -1365,7 +1365,7 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val (vprPredicateAccess, optConstraints) = translateUseOf(foldUnfold.predicateExp)
 
         val optVprCheckConstraints =
-          optConstraints.map(vpr.Assert(_)().withSource(statement))
+          optConstraints.map(c => vpr.Assert(c.withSource(statement))().withSource(statement))
 
         val vprAssignments = extractLogicalVariableBindings(foldUnfold.predicateExp)
 
