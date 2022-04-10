@@ -39,10 +39,10 @@ lazy val voila = (project in file("."))
     Compile / unmanagedResourceDirectories += baseDirectory.value / "conf",
     libraryDependencies += "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2", // MultiDict collection
     libraryDependencies +=
-      ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.4.0") // Parsing
+      ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.5.0") // Parsing
         .exclude("com.google.guava", "guava"),
-    libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2", // Logging Frontend
-    libraryDependencies += "org.fusesource.jansi" % "jansi" % "2.1.0", // For colouring Logback output
+    libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4", // Logging Frontend
+    libraryDependencies += "org.fusesource.jansi" % "jansi" % "2.4.0", // For colouring Logback output
 
     /* Run settings */
     run / javaOptions += "-Xss128m",
