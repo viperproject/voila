@@ -4,7 +4,7 @@
    <img width="447" height="160" alt="Voila logo" src=".github/voila-logo.svg">
 </p>
 
-Voila — paper to appear at [FM'21](https://lcs.ios.ac.cn/fm2021/), see [arXiv.org](https://arxiv.org/abs/2010.07080) for now — is a *proof outline checker* for fine-grained concurrency verification. It supports a simple, Java-like programming language, with specifications based on a concurrent separation logic. Voila uses the [Viper verification infrastructure](https://viper.ethz.ch) to automatically discharge all proof obligations.
+Voila — [conference paper at FM'21](http://pm.inf.ethz.ch/publications/getpdf.php?bibname=Own&id=WolfSchwerhoffMueller21.pdf), an [extensive technical report](http://pm.inf.ethz.ch/publications/getpdf.php?bibname=Own&id=WolfSchwerhoffMueller20.pdf) is also available — is a *proof outline checker* for fine-grained concurrency verification. It supports a simple, Java-like programming language, with specifications based on a concurrent separation logic. Voila uses the [Viper verification infrastructure](https://viper.ethz.ch) to automatically discharge all proof obligations.
 
 See [TicketLock.vl](https://github.com/viperproject/voila/blob/master/src/test/resources/examples/Caper/TicketLock.vl) for an example, or browse all examples and regression tests in [src/test/resources](https://github.com/viperproject/voila/blob/master/src/test/resources).
 
@@ -29,6 +29,7 @@ Install the Scala build tool [sbt](https://www.scala-sbt.org/download.html), ver
 1. Download this repository into, e.g. `~/voila`
 1. ~~Download [Silver](https://github.com/viperproject/silver/) into `~/voila/silver`~~ No longer necessary, since Silicon includes Silver as a Git submodule
 1. Download [Silicon](https://github.com/viperproject/silicon/) into `~/voila/silicon`
+1. Create a symlink `~/voila/silver` pointing to `~/voila/silicon/silver` 
 1. Open a terminal, change directory to `~/voila`, and start `sbt`
    1. Compile with sbt command `compile`
    1. Generate fat jar `~/voila/target/scala-2.13/voila.jar` with sbt command `assembly`
