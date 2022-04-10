@@ -2389,6 +2389,8 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         vpr.LocalVar(id.name, translate(decl.typ))().withSource(id)
       case LocalVariableEntity(decl) =>
         vpr.LocalVar(id.name, translate(decl.typ))().withSource(id)
+      case other =>
+        sys.error(s"Unexpectedly got entity '$other' for use of id '$id'")
     }
   }
 
@@ -2410,6 +2412,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
       case PPointsTo(_, `binder`) => translateAsHeapAccess(id, binder)
       case PPredicateExp(_, args) if args.exists(_ eq binder) => translateAsHeapAccess(id, binder)
       case PInterferenceClause(`binder`, _, _) => translateAsHeapAccess(id, binder)
+
+      case other =>
+        sys.error(s"Unexpectedly got binder '$other' for use of id '$id' with binder '$binder'")
     }
   }
 
@@ -2426,6 +2431,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
             getAndTranslateRegionPredicateDetails(predicateExp)
 
           (vprInArgs, Some(vprInArgConstraints), Some(vprOutArgConstraints))
+
+        case other =>
+          sys.error(s"Unexpectedly got entity '$other' for use of predicate expression '$predicateExp'")
       }
 
     val vprPredicate =
@@ -2463,6 +2471,9 @@ trait MainTranslatorComponent { this: PProgramToViperTranslator =>
         val vprStateConstraint = vpr.And(vprInStateConstraint, vprOutStateConstraint)()
 
         (vprPredicateAccess, Some(vprStateConstraint))
+
+      case other =>
+        sys.error(s"Unexpectedly got entity '$other' for use of predicate expression '$predicateExp'")
     }
   }
 
