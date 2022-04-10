@@ -511,10 +511,10 @@ trait RuleTranslatorComponent { this: PProgramToViperTranslator =>
     val (region, vprInArgs, _, vprOutArgsConstraints) =
       getAndTranslateRegionPredicateDetails(updateRegion.regionPredicate)
 
-      assert(
-        vprOutArgsConstraints.isEmpty,
-         "Using-clauses expect region assertions without out-arguments, but got " +
-        s"${updateRegion.regionPredicate} at ${updateRegion.regionPredicate.position}")
+    assert(
+      vprOutArgsConstraints.isEmpty,
+       "Using-clauses expect region assertions without out-arguments, but got " +
+         s"${updateRegion.regionPredicate} at ${updateRegion.regionPredicate.position}")
 
     val regionType = semanticAnalyser.typ(region.state)
     val vprRegionId = vprInArgs.head
