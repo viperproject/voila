@@ -25,7 +25,7 @@ procedure makeBCounter(id r, int lvl) returns (memcell ret)
 }
 
 procedure incr(id r, int lvl, memcell x, frac p) returns (int ret)
-  requires BCounter(r, lvl, x, ?v0) && INCREMENT(p)@r && p >= 1/4;
+  requires BCounter(r, lvl, x, ?v0) && p >= 1/4 && INCREMENT(p)@r;
   ensures  BCounter(r, lvl, x, ?v1) && INCREMENT(p)@r;
   ensures  p == 1f ==> ret == v0 && (v0 < 2 ? v1 == v0 + 1 : v1 == 0);
 {
@@ -34,7 +34,7 @@ procedure incr(id r, int lvl, memcell x, frac p) returns (int ret)
   bool b;
 
   do
-    invariant BCounter(r, lvl, x, ?vi) && INCREMENT(p)@r && p >= 1/4;
+    invariant BCounter(r, lvl, x, ?vi) && INCREMENT(p)@r /*&& p >= 1/4*/;
     invariant p == 1f ==> b && v == v0 && (v0 < 2 ? vi == v0 + 1 : vi == 0);
   {
     open_region using BCounter(r, lvl, x) {
@@ -58,7 +58,7 @@ procedure incr(id r, int lvl, memcell x, frac p) returns (int ret)
 }
 
 procedure read(id r, int lvl, memcell x, frac p) returns (int ret)
-  requires BCounter(r, lvl, x, ?v0) && INCREMENT(p)@r;
+  requires BCounter(r, lvl, x, ?v0) && 0/1 < p && INCREMENT(p)@r;
   ensures  BCounter(r, lvl, x, ?v1) && INCREMENT(p)@r;
   ensures  p == 1f ==> ret == v0 && v0 == v1;
 {
