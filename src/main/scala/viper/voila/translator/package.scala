@@ -7,6 +7,7 @@
 package viper.voila
 
 import viper.silver
+import viper.silver.ast.utility.rewriter.Traverse
 import viper.voila.frontend.{DefaultPrettyPrinter, PAstNode, PrettyPrinter}
 import viper.voila.reporting.VerificationError
 import viper.silver.{ast => vpr}
@@ -40,6 +41,12 @@ package object translator {
       val newPos = vpr.TranslatedPosition(source.position)
 
       node.withMeta(newPos, newInfo, errT)
+    }
+
+    def withSourceDeep(source: PAstNode, overwrite: Boolean = false): N = {
+      node.transformForceCopy({
+        case n: vpr.Node => n.withSource(source, overwrite);
+      }, Traverse.BottomUp)
     }
   }
 
